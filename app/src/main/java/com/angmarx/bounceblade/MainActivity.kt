@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PointF
 import android.graphics.RectF
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -19,6 +20,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
+import kotlin.math.sin
 
 class MainActivity : Activity() {
     private lateinit var gameView: GameView
@@ -114,7 +116,11 @@ private class GameView(context: Context) : View(context) {
     private var slowMotion = false
     private var switchActivated = false
     private var bouncesLeft = 5
+    private var shotsUsed = 0
+    private var earnedStars = 0
+    private var animationTime = 0f
     private var slowMeter = 1f
+    private val bladeTrail = mutableListOf<PointF>()
     private var aimStartX = 0f
     private var aimStartY = 0f
     private var aimX = 0f
@@ -190,7 +196,7 @@ private class GameView(context: Context) : View(context) {
             }
             GameScreen.FAILED -> {
                 drawGame(canvas)
-                drawOverlay(canvas, "TRY AGAIN", "The arena won this round. Reset and try a new angle.")
+                drawOverlay(canvas, "TRY AGAIN", message.ifBlank { "Reset and try a different angle." })
                 drawButton(canvas, 0.22f, 0.51f, 0.78f, 0.60f, "RETRY", cyan)
                 drawButton(canvas, 0.22f, 0.63f, 0.78f, 0.71f, "LEVEL SELECT", gold)
             }
@@ -203,13 +209,16 @@ private class GameView(context: Context) : View(context) {
                 drawButton(canvas, 0.20f, 0.69f, 0.80f, 0.78f, "LEVEL SELECT", gold)
             }
         }
-        if (flying || particles.isNotEmpty()) postInvalidateDelayed(16L)
+        if (flying || particles.isNotEmpty() ||
+            (screen == GameScreen.PLAYING && level.hazards.any { it.type.contains("moving") })
+        ) postInvalidateDelayed(16L)
     }
 
     private fun advanceFrame() {
         val now = System.nanoTime()
         val rawDt = ((now - lastFrame) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.025f)
         lastFrame = now
+        animationTime += rawDt
         if (screen == GameScreen.PLAYING && flying) {
             val timeScale = if (slowMotion && slowMeter > 0f) 0.28f else 1f
             val dt = rawDt * timeScale
@@ -256,9 +265,10 @@ private class GameView(context: Context) : View(context) {
         var px = bladeX * viewW + velocityX * dt
         var py = bladeY * viewH + velocityY * dt
 
-        for (hazard in level.hazards) {
-            val hx = hazard.x * viewW
-            val hy = hazard.y * viewH
+        for ((hazardIndex, hazard) in level.hazards.withIndex()) {
+            val center = hazardCenter(hazard, hazardIndex)
+            val hx = center.x * viewW
+            val hy = center.y * viewH
             val hw = hazard.width * viewW
             val hh = max(hazard.height * viewH, minDim * 0.018f)
             if (px + radius > hx - hw / 2f && px - radius < hx + hw / 2f &&
@@ -290,6 +300,8 @@ private class GameView(context: Context) : View(context) {
         }
         bladeX = px / viewW
         bladeY = py / viewH
+        bladeTrail.add(PointF(px, py))
+        while (bladeTrail.size > 22) bladeTrail.removeAt(0)
         if (bounced) {
             useBounce()
             addBurst(px, py, cyan, 8)
@@ -386,7 +398,17 @@ private class GameView(context: Context) : View(context) {
         val nextId = levelId + 1
         val currentUnlocked = prefs.getInt("unlocked_level", 1)
         val newUnlocked = max(currentUnlocked, min(nextId, levels.size))
-        prefs.edit().putInt("unlocked_level", newUnlocked).apply()
+        earnedStars = GameRules.starsEarned(level.maxBounces, bouncesLeft, shotsUsed)
+        val starsKey = "best_stars_" + levelId
+        val previousBest = prefs.getInt(starsKey, 0)
+        val bestShotsKey = "best_shots_" + levelId
+        val previousBestShots = prefs.getInt(bestShotsKey, Int.MAX_VALUE)
+        prefs.edit()
+            .putInt("unlocked_level", newUnlocked)
+            .putInt(starsKey, max(previousBest, earnedStars))
+            .putInt(bestShotsKey, min(previousBestShots, shotsUsed))
+            .putInt("campaign_best_stars", totalBestStarsAfter(levelId, max(previousBest, earnedStars)))
+            .apply()
         screen = if (levelId >= levels.size) GameScreen.CAMPAIGN_COMPLETE else GameScreen.WON
         playTone(ToneGenerator.TONE_PROP_ACK)
         haptic()
@@ -400,6 +422,7 @@ private class GameView(context: Context) : View(context) {
         velocityY = 0f
         message = reason
         screen = GameScreen.FAILED
+        messageUntil = Long.MAX_VALUE
         playTone(ToneGenerator.TONE_PROP_NACK)
         haptic()
     }
@@ -421,10 +444,14 @@ private class GameView(context: Context) : View(context) {
         slowMotion = false
         switchActivated = false
         bouncesLeft = level.maxBounces
+        shotsUsed = 0
+        earnedStars = 0
         slowMeter = 1f
         flightTime = 0f
         particles.clear()
+        bladeTrail.clear()
         message = ""
+        messageUntil = 0L
         lastFrame = System.nanoTime()
     }
 
@@ -529,7 +556,10 @@ private class GameView(context: Context) : View(context) {
         drawButton(canvas, 0.18f, 0.53f, 0.82f, 0.615f, "PLAY CAMPAIGN", cyan)
         drawButton(canvas, 0.18f, 0.635f, 0.82f, 0.715f, "LEVEL SELECT", gold)
         drawButton(canvas, 0.18f, 0.735f, 0.82f, 0.815f, "SETTINGS", pink)
-        drawText(canvas, "20 HANDMADE PUZZLE ARENAS", 0.5f, 0.88f, 0.018f, muted, Paint.Align.CENTER)
+        val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
+        val stars = totalBestStarsAfter(0, 0)
+        drawText(canvas, "CAMPAIGN  " + unlocked + "/" + levels.size + "     BEST STARS  " + stars + "/" + (levels.size * 3),
+            0.5f, 0.88f, 0.019f, muted, Paint.Align.CENTER)
         drawText(canvas, "DRAG BACK TO LAUNCH  •  TWO FINGERS TO SLOW TIME", 0.5f, 0.925f, 0.014f, muted, Paint.Align.CENTER)
     }
 
@@ -545,8 +575,10 @@ private class GameView(context: Context) : View(context) {
             val top = 0.225f + row * 0.113f
             val available = id <= unlocked
             val col = if (available) cyan else muted
-            drawButton(canvas, left, top, left + 0.19f, top + 0.078f,
-                if (available) id.toString().padStart(2, '0') else "LOCKED", col, available)
+            val best = prefs.getInt("best_stars_" + id, 0)
+            val label = if (!available) "LOCKED" else id.toString().padStart(2, '0') +
+                if (best > 0) "  " + "★".repeat(best) else "  •"
+            drawButton(canvas, left, top, left + 0.19f, top + 0.078f, label, col, available)
         }
         drawButton(canvas, 0.22f, 0.84f, 0.78f, 0.91f, "BACK", gold)
     }
@@ -556,6 +588,7 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas, "ARENA " + levelId + " / " + levels.size, 0.5f, 0.047f, 0.024f, cyan, Paint.Align.CENTER)
         drawText(canvas, "BOUNCES " + bouncesLeft, 0.72f, 0.047f, 0.022f, gold, Paint.Align.RIGHT)
         drawButton(canvas, 0.81f, 0.065f, 0.94f, 0.115f, "Ⅱ", pink)
+        drawText(canvas, "SHOTS " + shotsUsed, 0.07f, 0.092f, 0.019f, muted)
         val rect = RectF(viewW * 0.05f, viewH * 0.13f, viewW * 0.95f, viewH * 0.94f)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(2f, density * 2f)
@@ -573,6 +606,7 @@ private class GameView(context: Context) : View(context) {
         drawExit(canvas)
         for (crate in crates) if (crate.alive) drawCrate(canvas, crate)
         for (enemy in enemies) if (enemy.alive) drawEnemy(canvas, enemy)
+        drawBladeTrail(canvas)
         drawParticles(canvas)
         if (aiming && !flying) drawAim(canvas)
         val bladePx = bladeX * viewW
@@ -597,9 +631,10 @@ private class GameView(context: Context) : View(context) {
     }
 
     private fun drawHazards(canvas: Canvas) {
-        for (hazard in level.hazards) {
-            val cx = hazard.x * viewW
-            val cy = hazard.y * viewH
+        for ((index, hazard) in level.hazards.withIndex()) {
+            val center = hazardCenter(hazard, index)
+            val cx = center.x * viewW
+            val cy = center.y * viewH
             val halfWidth = hazard.width * viewW / 2f
             val h = max(hazard.height * viewH, minDim * 0.018f)
             paint.style = Paint.Style.FILL
@@ -719,22 +754,76 @@ private class GameView(context: Context) : View(context) {
         val dy = aimStartY - aimY
         val magnitude = sqrt(dx * dx + dy * dy)
         if (magnitude < density * 5f) return
-        val ux = dx / magnitude
-        val uy = dy / magnitude
-        val x = bladeX * viewW
-        val y = bladeY * viewH
-        val length = minDim * 0.30f
-        val endX = x + ux * length
-        val endY = y + uy * length
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = max(1.5f, density * 2f)
-        paint.color = cyan
-        paint.setPathEffect(android.graphics.DashPathEffect(floatArrayOf(density * 7f, density * 5f), 0f))
-        canvas.drawLine(x, y, endX, endY, paint)
-        paint.setPathEffect(null)
-        canvas.drawCircle(endX, endY, density * 4f, paint)
+        drawTrajectoryPreview(canvas, bladeX * viewW, bladeY * viewH, dx / magnitude, dy / magnitude)
         drawText(canvas, "RELEASE TO LAUNCH", 0.5f, 0.19f, 0.019f, cyan, Paint.Align.CENTER)
+    }
+
+    /** Projects a launch with the same wall limits as the live simulation. */
+    private fun drawTrajectoryPreview(canvas: Canvas, startX: Float, startY: Float, ux: Float, uy: Float) {
+        val radius = minDim * 0.022f
+        val left = viewW * 0.075f + radius
+        val right = viewW * 0.925f - radius
+        val top = viewH * 0.145f + radius
+        val bottom = viewH * 0.925f - radius
+        val stride = minDim * 0.024f
+        var x = startX
+        var y = startY
+        var dirX = ux
+        var dirY = uy
+        var previousX = x
+        var previousY = y
+        paint.style = Paint.Style.STROKE
+        paint.strokeCap = Paint.Cap.ROUND
+        paint.strokeWidth = max(1.5f, density * 2f)
+        for (i in 0 until 48) {
+            x += dirX * stride
+            y += dirY * stride
+            var wallHit = false
+            if (x < left) { x = left; dirX = abs(dirX); wallHit = true }
+            else if (x > right) { x = right; dirX = -abs(dirX); wallHit = true }
+            if (y < top) { y = top; dirY = abs(dirY); wallHit = true }
+            else if (y > bottom) { y = bottom; dirY = -abs(dirY); wallHit = true }
+            val targetHit = enemies.any {
+                it.alive && distanceSquared(x, y, it.x * viewW, it.y * viewH) <
+                    (radius + minDim * 0.027f) * (radius + minDim * 0.027f)
+            } || crates.any {
+                it.alive && abs(x - it.x * viewW) < radius + minDim * 0.035f &&
+                    abs(y - it.y * viewH) < radius + minDim * 0.035f
+            }
+            val alpha = (140 - i * 2).coerceAtLeast(30)
+            paint.color = when {
+                targetHit -> Color.argb(alpha, 255, 65, 150)
+                wallHit -> Color.argb(alpha, 255, 199, 83)
+                else -> Color.argb(alpha, 45, 235, 255)
+            }
+            canvas.drawLine(previousX, previousY, x, y, paint)
+            if (i % 3 == 0) {
+                paint.style = Paint.Style.FILL
+                canvas.drawCircle(x, y, density * (if (targetHit) 3f else 2f), paint)
+                paint.style = Paint.Style.STROKE
+            }
+            previousX = x
+            previousY = y
+            if (targetHit) break
+        }
         paint.style = Paint.Style.FILL
+        paint.strokeCap = Paint.Cap.BUTT
+    }
+
+    private fun drawBladeTrail(canvas: Canvas) {
+        if (bladeTrail.size < 2) return
+        paint.style = Paint.Style.STROKE
+        paint.strokeCap = Paint.Cap.ROUND
+        for (i in 1 until bladeTrail.size) {
+            val alpha = (35 + 175 * i / bladeTrail.size).coerceIn(0, 210)
+            paint.color = Color.argb(alpha, Color.red(cyan), Color.green(cyan), Color.blue(cyan))
+            paint.strokeWidth = density * (1f + 4f * i / bladeTrail.size)
+            val a = bladeTrail[i - 1]
+            val b = bladeTrail[i]
+            canvas.drawLine(a.x, a.y, b.x, b.y, paint)
+        }
+        paint.style = Paint.Style.FILL
+        paint.strokeCap = Paint.Cap.BUTT
     }
 
     private fun drawMeter(canvas: Canvas) {
@@ -775,6 +864,12 @@ private class GameView(context: Context) : View(context) {
             density * 18f, density * 18f, paint)
         drawText(canvas, title, 0.5f, 0.365f, 0.046f, if (title.contains("CLEAR")) cyan else pink, Paint.Align.CENTER)
         drawText(canvas, subtitle, 0.5f, 0.405f, 0.018f, Color.WHITE, Paint.Align.CENTER)
+        if (screen == GameScreen.WON) {
+            drawText(canvas, "★".repeat(earnedStars) + "☆".repeat(3 - earnedStars),
+                0.5f, 0.462f, 0.055f, gold, Paint.Align.CENTER)
+            drawText(canvas, "BEST: " + prefs.getInt("best_stars_" + levelId, earnedStars) + "/3 stars",
+                0.5f, 0.485f, 0.017f, muted, Paint.Align.CENTER)
+        }
     }
 
     private fun drawSettings(canvas: Canvas) {
@@ -838,6 +933,19 @@ private class GameView(context: Context) : View(context) {
                 0.30f + (i % 4) * 0.07f, color, density * (2f + (i % 3))))
         }
     }
+
+    private fun hazardCenter(hazard: HazardState, index: Int): PointF {
+        if (!hazard.type.contains("moving")) return PointF(hazard.x, hazard.y)
+        val allowedMin = hazard.width / 2f + 0.06f
+        val allowedMax = 0.94f - hazard.width / 2f
+        val drift = sin(animationTime * 1.7f + index * 1.3f) * min(0.15f, hazard.width * 0.35f)
+        return PointF((hazard.x + drift).coerceIn(allowedMin, max(allowedMin, allowedMax)), hazard.y)
+    }
+
+    private fun totalBestStarsAfter(updatedLevelId: Int, updatedValue: Int): Int =
+        (1..levels.size).sumOf { id ->
+            if (id == updatedLevelId) updatedValue else prefs.getInt("best_stars_" + id, 0)
+        }
 
     private fun distanceSquared(x1: Float, y1: Float, x2: Float, y2: Float): Float {
         val dx = x1 - x2
@@ -1008,6 +1116,8 @@ private class GameView(context: Context) : View(context) {
                         val speed = minDim * (0.62f + power * 0.90f)
                         velocityX = ux * speed
                         velocityY = uy * speed
+                        shotsUsed += 1
+                        bladeTrail.clear()
                         flying = true
                         flightTime = 0f
                         lastFrame = System.nanoTime()
