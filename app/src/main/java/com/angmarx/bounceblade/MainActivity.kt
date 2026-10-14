@@ -558,7 +558,7 @@ private class GameView(context: Context) : View(context) {
         drawButton(canvas, 0.18f, 0.735f, 0.82f, 0.815f, "SETTINGS", pink)
         val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
         val stars = totalBestStarsAfter(0, 0)
-        drawText(canvas, " + "UNLOCKED  " + unlocked + "/" + levels.size + "     BEST STARS  " + stars + "/" + (levels.size * 3),
+        drawText(canvas, "UNLOCKED  " + unlocked + "/" + levels.size + "     BEST STARS  " + stars + "/" + (levels.size * 3),
             0.5f, 0.88f, 0.019f, muted, Paint.Align.CENTER)
         drawText(canvas, "DRAG BACK TO LAUNCH  •  TWO FINGERS TO SLOW TIME", 0.5f, 0.925f, 0.014f, muted, Paint.Align.CENTER)
     }
