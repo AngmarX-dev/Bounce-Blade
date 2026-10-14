@@ -51,6 +51,19 @@ jobs:
                   sys.exit(f"{path}: id {data['id']} does not match filename id {expected_id}")
               if not data["enemies"] or not data["crates"]:
                   sys.exit(f"{path}: each starter stage must contain enemies and crates")
+              if not isinstance(data["maxBounces"], int) or data["maxBounces"] < 1:
+                  sys.exit(f"{path}: maxBounces must be a positive integer")
+              for point_name in ("playerSpawn", "exit", "switch"):
+                  point = data[point_name]
+                  if not all(key in point and 0 <= float(point[key]) <= 1 for key in ("x", "y")):
+                      sys.exit(f"{path}: {point_name} must use normalized x/y coordinates")
+              supported_hazards = {"spikes", "laser", "moving_hazard"}
+              for hazard in data["hazards"]:
+                  if hazard.get("type") not in supported_hazards:
+                      sys.exit(f"{path}: unsupported hazard type {hazard.get('type')!r}")
+                  if not all(key in hazard and 0 <= float(hazard[key]) <= 1
+                             for key in ("x", "y", "width", "height")):
+                      sys.exit(f"{path}: hazard data must use normalized coordinates/sizes")
           print(f"Validated {len(files)} campaign level files.")
           PY
 
