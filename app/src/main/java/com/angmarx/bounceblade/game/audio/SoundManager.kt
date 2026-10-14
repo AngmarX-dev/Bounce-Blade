@@ -19,6 +19,11 @@ class SoundManager {
     fun loadResource(context: Context, resourceId: Int): Int =
         soundPool.load(context.applicationContext, resourceId, 1)
 
+    fun loadAsset(context: Context, assetPath: String): Int =
+        context.assets.openFd(assetPath).use { descriptor ->
+            soundPool.load(descriptor, 1)
+        }
+
     fun play(soundId: Int, volume: Float = 1f) {
         val safeVolume = volume.coerceIn(0f, 1f)
         soundPool.play(soundId, safeVolume, safeVolume, 1, 0, 1f)

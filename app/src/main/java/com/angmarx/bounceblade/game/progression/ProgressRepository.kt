@@ -5,7 +5,7 @@ import android.content.Context
 /** Local progress storage. Cloud backup/sync can be added later. */
 class ProgressRepository(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences(
-        "bounce_blade_progress",
+        "bounce_blade_save",
         Context.MODE_PRIVATE
     )
 
@@ -19,11 +19,16 @@ class ProgressRepository(context: Context) {
         }
     }
 
+    fun unlockThrough(level: Int, campaignSize: Int) {
+        val safeLevel = level.coerceIn(1, campaignSize.coerceAtLeast(1))
+        saveHighestUnlockedLevel(safeLevel)
+    }
+
     fun reset() {
         preferences.edit().clear().apply()
     }
 
     private companion object {
-        const val KEY_HIGHEST_LEVEL = "highest_unlocked_level"
+        const val KEY_HIGHEST_LEVEL = "unlocked_level"
     }
 }

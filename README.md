@@ -1,58 +1,76 @@
 # ⚔️ Bounce Blade
 
-A neon-on-dark 2D physics puzzle for Android. Aim a spinning blade, launch it, and use ricochets to clear each arena.
+**Bounce Blade** is an offline 2D physics-puzzle game for Android, built with Kotlin and a custom Canvas renderer. Aim a spinning energy blade, destroy every target, hit the gold switch, and reach the portal.
 
-## Included now
+## Playable features
 
-- Android/Kotlin project configured for JDK 17, Gradle 8.9, compile SDK 35.
-- Touch aiming, launch, bouncing, slow-time control, starter arena and HUD prototype.
-- Reusable starter modules for physics, normalized level data, touch gestures, progress storage, sound playback, rendering colors, and session state.
-- Editable JSON level template at `app/src/main/assets/levels/level_template.json`.
-- Asset folders for sprites, backgrounds, music, sound effects, and fonts.
-- GitHub Actions workflow that runs unit tests, builds a debug APK, and uploads it as an artifact when the build succeeds.
+- **20 JSON-driven campaign arenas** with local progress and locked/unlocked level selection.
+- **Touch aiming and launch:** drag backward to aim and release to fire.
+- **Ricochet physics:** arena-wall reflections and physical reactions to enemies and crates.
+- **Objective logic:** clear enemies and crates, activate the switch, then enter the unlocked exit.
+- **Hazards:** spike zones fail the current attempt.
+- **Bounce budget:** levels have different limits and a retry flow.
+- **Slow motion:** use a second finger while the blade is moving; the meter drains and recharges.
+- **Menus:** campaign start/continue, level select, pause, retry, victory, settings, and campaign-complete screens.
+- **Local settings and progress:** sound toggle, haptic toggle, and unlocked levels persist on the device.
+- **Neon visuals:** blade, enemy, crate, switch, portal, particles, arena grid, and launcher icon are drawn/provided in the project; the core game does not require downloaded assets.
+- **Build checks:** GitHub Actions runs unit tests and builds a debug APK, then publishes the APK as a workflow artifact if the build succeeds.
 
-## Repository map
+## Controls
+
+1. Touch anywhere in the arena and drag backward to set the launch direction.
+2. Release to launch. Aim to hit enemies and crates, while avoiding the spike strip.
+3. Hit the gold switch. The portal opens only when all enemies and crates are cleared and the switch is active.
+4. If the blade runs out of allowed bounces or hits a hazard, retry the level.
+5. During flight, place a second finger on the screen to slow time.
+
+## Project layout
 
 ```text
 app/src/main/
   java/com/angmarx/bounceblade/
-    MainActivity.kt
-    core/                     shared game configuration
-    game/model/               level and point models
-    game/physics/             reusable blade physics
-    game/input/               aim gesture state
-    game/level/               JSON asset loading
-    game/progression/         local progress persistence
-    game/audio/               sound playback manager
-    game/render/              shared color palette
-    game/editor/              level draft model
-    game/daily/               daily challenge data model
-    game/leaderboard/         leaderboard interface
-    game/session/             session state model
-  assets/
-    levels/                   level JSON files and template
-    art/sprites/              add game sprites here
-    art/backgrounds/          add arena backgrounds here
-    audio/music/              add music here
-    audio/sfx/                add sound effects here
-    fonts/                    add licensed fonts here
-  res/values/                 app strings, colors and theme
+    MainActivity.kt               game screen, renderer, input, and campaign flow
+    core/GameConfig.kt            shared game defaults
+    game/model/                   normalized level data models
+    game/physics/                 reusable tested wall-physics helpers
+    game/input/                   aim gesture helper
+    game/level/                   level asset access
+    game/session/                 game state and pure gameplay rules
+    game/progression/             local progress storage
+    game/audio/                   SoundPool helper
+    game/render/                  shared palette
+    game/editor/                  level draft model
+    game/daily/                   daily challenge data model
+    game/leaderboard/             leaderboard contract
+  assets/levels/
+    level_001.json ... level_020.json
+    level_template.json
+  res/
+    drawable/ic_launcher.xml
+    values/                        theme, strings, colors
+  test/                            local unit tests
 ```
 
-## Build locally
+## Build the APK
 
-Open the project in Android Studio with JDK 17, or install Gradle 8.9 and run:
+Use JDK 17 and Gradle 8.9. From the repository root:
 
 ```bash
 gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
 ```
 
-APK output: `app/build/outputs/apk/debug/app-debug.apk`.
+The APK will be written to:
 
-## Important status
+`app/build/outputs/apk/debug/app-debug.apk`
 
-The project is a working-in-progress scaffold, not the finished game. The current `MainActivity.kt` prototype still uses hard-coded starter layouts; the JSON level repository and the separated game modules are ready to be connected during the next refactor. The online leaderboard, daily challenge service, level editor UI, 100+ level campaign, ad/reward flows, and in-app purchases are not implemented. No ad or billing SDK is included.
+GitHub Actions artifact: [open the workflow runs](https://github.com/AngmarX-dev/Bounce-Blade/actions).
 
-## Adding assets
+## Assets and customization
 
-Drop your files into the documented `app/src/main/assets/` folders. Check the asset licensing before including third-party artwork, fonts, or music. Large binary assets should be committed only when they are ready to use in the game.
+Edit level JSON files in `app/src/main/assets/levels/`. Each level defines a spawn point, exit, switch, enemies, crates, hazards, and bounce budget. Coordinates are normalized from 0.0 to 1.0 so the layout scales to different screen sizes.
+
+The playable campaign uses Canvas-drawn graphics and short device-generated tone feedback, so missing external images, music, or sound files will not prevent the game from starting.
+
+## Not included in this offline release
+
+Online leaderboards, cloud saves, daily-challenge services, ghost replays, a full in-game level-editor interface, advertising, and in-app purchases require additional UI/backend configuration and are not claimed as implemented.
