@@ -1,7 +1,7 @@
 {
   "id": 2,
   "name": "First Ricochet",
-  "maxBounces": 5,
+  "maxBounces": 8,
   "playerSpawn": {
     "x": 0.14,
     "y": 0.8
