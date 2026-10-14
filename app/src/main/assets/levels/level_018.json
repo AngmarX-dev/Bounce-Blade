@@ -1,7 +1,7 @@
 {
   "id": 18,
   "name": "Last Switch",
-  "maxBounces": 9,
+  "maxBounces": 13,
   "playerSpawn": {
     "x": 0.14,
     "y": 0.8
