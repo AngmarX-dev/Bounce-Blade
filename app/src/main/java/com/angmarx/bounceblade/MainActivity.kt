@@ -412,7 +412,7 @@ private class GameView(context: Context) : View(context) {
         val nextId = levelId + 1
         val currentUnlocked = prefs.getInt("unlocked_level", 1)
         val newUnlocked = max(currentUnlocked, min(nextId, levels.size))
-        earnedStars = GameRules.starsEarned(level.maxBounces, bouncesLeft, shotsUsed)
+        earnedStars = GameRules.starsEarned(level.maxBounces, bouncesLeft, shotsUsed, enemies.size + crates.size)
         val starsKey = "best_stars_" + levelId
         val previousBest = prefs.getInt(starsKey, 0)
         val bestShotsKey = "best_shots_" + levelId
@@ -599,7 +599,7 @@ private class GameView(context: Context) : View(context) {
 
     private fun drawGame(canvas: Canvas) {
         drawText(canvas, "BOUNCE BLADE", 0.07f, 0.047f, 0.028f, Color.WHITE)
-        drawText(canvas, "ARENA " + levelId + " / " + levels.size, 0.5f, 0.047f, 0.024f, cyan, Paint.Align.CENTER)
+        drawText(canvas, level.name.uppercase() + "  " + levelId + "/" + levels.size, 0.5f, 0.047f, 0.024f, cyan, Paint.Align.CENTER)
         drawText(canvas, "BOUNCES " + bouncesLeft, 0.72f, 0.047f, 0.022f, gold, Paint.Align.RIGHT)
         drawButton(canvas, 0.81f, 0.065f, 0.94f, 0.115f, "Ⅱ", pink)
         drawText(canvas, "SHOTS " + shotsUsed, 0.07f, 0.092f, 0.019f, muted)
@@ -638,6 +638,10 @@ private class GameView(context: Context) : View(context) {
         }
         drawText(canvas, objective, 0.5f, 0.112f, 0.019f,
             if (switchActivated && targetsLeft == 0) cyan else muted, Paint.Align.CENTER)
+        if (!flying && !aiming) {
+            drawText(canvas, if (shotsUsed == 0) "DRAG BACK THEN RELEASE TO LAUNCH" else "DRAG TO PLAN YOUR NEXT SHOT",
+                0.5f, 0.19f, 0.018f, cyan, Paint.Align.CENTER)
+        }
         drawMeter(canvas)
         if (System.nanoTime() < messageUntil && message.isNotBlank()) {
             drawText(canvas, message, 0.5f, 0.855f, 0.019f, gold, Paint.Align.CENTER)
@@ -899,8 +903,10 @@ private class GameView(context: Context) : View(context) {
         if (screen == GameScreen.WON) {
             drawText(canvas, "★".repeat(earnedStars) + "☆".repeat(3 - earnedStars),
                 0.5f, 0.462f, 0.055f, gold, Paint.Align.CENTER)
-            drawText(canvas, "BEST: " + prefs.getInt("best_stars_" + levelId, earnedStars) + "/3 stars",
-                0.5f, 0.485f, 0.017f, muted, Paint.Align.CENTER)
+            val bestShots = prefs.getInt("best_shots_" + levelId, shotsUsed)
+            drawText(canvas, "BEST: " + prefs.getInt("best_stars_" + levelId, earnedStars) +
+                "/3 STARS  •  FEWEST SHOTS: " + bestShots,
+                0.5f, 0.485f, 0.015f, muted, Paint.Align.CENTER)
         }
     }
 
