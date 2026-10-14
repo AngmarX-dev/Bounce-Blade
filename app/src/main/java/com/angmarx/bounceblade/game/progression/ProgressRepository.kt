@@ -19,7 +19,12 @@ class ProgressRepository(context: Context) {
         }
     }
 
-    fun unlockThrough(level: Int, campaignSize: Int) {\n        val safeLevel = level.coerceIn(1, campaignSize.coerceAtLeast(1))\n        saveHighestUnlockedLevel(safeLevel)\n    }\n\n    fun reset() {
+    fun unlockThrough(level: Int, campaignSize: Int) {
+        val safeLevel = level.coerceIn(1, campaignSize.coerceAtLeast(1))
+        saveHighestUnlockedLevel(safeLevel)
+    }
+
+    fun reset() {
         preferences.edit().clear().apply()
     }
 
