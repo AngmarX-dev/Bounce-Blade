@@ -1,40 +1,75 @@
 package com.angmarx.bounceblade.game.physics
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class BladePhysicsTest {
+
+    private val bounds = ArenaBounds(
+        left = 0f,
+        top = 0f,
+        right = 100f,
+        bottom = 100f
+    )
+
     @Test
-    fun advanceReflectsAtRightBoundary() {
-        val position = MutableVector2(0.91f, 0.5f)
-        val velocity = MutableVector2(1f, 0f)
+    fun step_movesBladeWhenItDoesNotHitAWall() {
+        val blade = BladeMotion(
+            position = PhysicsPoint(50f, 50f),
+            velocity = PhysicsPoint(10f, -5f),
+            radius = 5f
+        )
 
-        val bounced = BladePhysics.advance(position, velocity, 0.2f)
+        val result = BladePhysics.step(blade, bounds, 1f)
 
-        assertTrue(bounced)
-        assertEquals(0.92f, position.x, 0.0001f)
-        assertEquals(-1f, velocity.x, 0.0001f)
+        assertEquals(60f, result.motion.position.x, 0.001f)
+        assertEquals(45f, result.motion.position.y, 0.001f)
+        assertEquals(0, result.wallBounces)
     }
 
     @Test
-    fun nonPositiveDeltaDoesNotMoveBlade() {
-        val position = MutableVector2(0.4f, 0.6f)
-        val velocity = MutableVector2(1f, -1f)
+    fun step_reflectsBladeFromRightWall() {
+        val blade = BladeMotion(
+            position = PhysicsPoint(90f, 50f),
+            velocity = PhysicsPoint(10f, 0f),
+            radius = 5f
+        )
 
-        val bounced = BladePhysics.advance(position, velocity, 0f)
+        val result = BladePhysics.step(blade, bounds, 1f)
 
-        assertFalse(bounced)
-        assertEquals(0.4f, position.x, 0.0001f)
-        assertEquals(0.6f, position.y, 0.0001f)
+        assertEquals(90f, result.motion.position.x, 0.001f)
+        assertEquals(-10f, result.motion.velocity.x, 0.001f)
+        assertEquals(1, result.wallBounces)
     }
 
     @Test
-    fun distanceSquaredAvoidsSquareRoot() {
-        val a = MutableVector2(0f, 0f)
-        val b = MutableVector2(3f, 4f)
+    fun step_countsTwoBouncesAtCorner() {
+        val blade = BladeMotion(
+            position = PhysicsPoint(90f, 90f),
+            velocity = PhysicsPoint(10f, 10f),
+            radius = 5f
+        )
 
-        assertEquals(25f, BladePhysics.distanceSquared(a, b), 0.0001f)
+        val result = BladePhysics.step(blade, bounds, 1f)
+
+        assertEquals(90f, result.motion.position.x, 0.001f)
+        assertEquals(90f, result.motion.position.y, 0.001f)
+        assertEquals(-10f, result.motion.velocity.x, 0.001f)
+        assertEquals(-10f, result.motion.velocity.y, 0.001f)
+        assertEquals(2, result.wallBounces)
+    }
+
+    @Test
+    fun step_rejectsNegativeDeltaTime() {
+        val blade = BladeMotion(
+            position = PhysicsPoint(50f, 50f),
+            velocity = PhysicsPoint(1f, 1f),
+            radius = 5f
+        )
+
+        assertThrows(IllegalArgumentException::class.java) {
+            BladePhysics.step(blade, bounds, -0.1f)
+        }
     }
 }
