@@ -835,7 +835,7 @@ private class GameView(context: Context) : View(context) {
             canvas.drawLine(previousX, previousY, x, y, paint)
             if (i % 3 == 0) {
                 paint.style = Paint.Style.FILL
-                canvas.drawCircle(x, y, density * (if (targetHit) 3f else 2f), paint)
+                canvas.drawCircle(x, y, density * (if (collision) 3f else 2f), paint)
                 paint.style = Paint.Style.STROKE
             }
             previousX = x
