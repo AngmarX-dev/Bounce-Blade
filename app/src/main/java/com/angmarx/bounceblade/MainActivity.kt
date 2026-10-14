@@ -440,82 +440,25 @@ private class GameView(context: Context) : View(context) {
         invalidate()
     }
 
-    private fun readLevel(json: String): GameLevel {
-        val root = JSONObject(json)
-        val enemiesJson = root.optJSONArray("enemies")
-        val cratesJson = root.optJSONArray("crates")
-        val hazardsJson = root.optJSONArray("hazards")
-        return GameLevel(
-            id = root.optInt("id", 1),
-            name = root.optString("name", "Arena"),
-            maxBounces = root.optInt("maxBounces", 5).coerceAtLeast(1),
-            spawn = readPoint(root.optJSONObject("playerSpawn"), PointN(0.14f, 0.80f)),
-            exit = readPoint(root.optJSONObject("exit"), PointN(0.88f, 0.18f)),
-            switch = readPoint(root.optJSONObject("switch"), PointN(0.78f, 0.76f)),
-            enemies = readPoints(enemiesJson),
-            crates = readPoints(cratesJson),
-            hazards = readHazards(hazardsJson)
-        )
-    }
-
-    private fun readPoint(obj: JSONObject?, fallback: PointN): PointN {
-        if (obj == null) return fallback
-        return PointN(
-            obj.optDouble("x", fallback.x.toDouble()).toFloat().coerceIn(0.06f, 0.94f),
-            obj.optDouble("y", fallback.y.toDouble()).toFloat().coerceIn(0.15f, 0.94f)
-        )
-    }
-
-    private fun readPoints(array: JSONArray?): List<PointN> {
-        if (array == null) return emptyList()
-        val result = mutableListOf<PointN>()
-        for (i in 0 until array.length()) {
-            val item = array.optJSONObject(i) ?: continue
-            result.add(
-                PointN(
-                    item.optDouble("x", 0.5).toFloat().coerceIn(0.08f, 0.92f),
-                    item.optDouble("y", 0.5).toFloat().coerceIn(0.17f, 0.86f)
-                )
-            )
-        }
-        return result
-    }
-
-    private fun readHazards(array: JSONArray?): List<HazardState> {
-        if (array == null) return emptyList()
-        val result = mutableListOf<HazardState>()
-        for (i in 0 until array.length()) {
-            val item = array.optJSONObject(i) ?: continue
-            result.add(
-                HazardState(
-                    item.optString("type", "spikes").lowercase(),
-                    item.optDouble("x", 0.5).toFloat().coerceIn(0.1f, 0.9f),
-                    item.optDouble("y", 0.9).toFloat().coerceIn(0.2f, 0.94f),
-                    item.optDouble("width", 0.56).toFloat().coerceIn(0.05f, 0.9f),
-                    item.optDouble("height", 0.025).toFloat().coerceIn(0.01f, 0.12f)
-                )
-            )
-        }
-        return result
-    }
-
     private fun loadLevels(ctx: Context): List<GameLevel> {
-        val loaded = mutableListOf<GameLevel>()
-        try {
-            val names = ctx.assets.list("levels").orEmpty()
-                .filter { it.matches(Regex("level_[0-9]{3}\\.json")) }
-                .sorted()
-            for (name in names) {
-                try {
-                    val text = ctx.assets.open("levels/" + name)
-                        .bufferedReader(Charsets.UTF_8).use { it.readText() }
-                    loaded.add(readLevel(text))
-                } catch (_: Exception) {
-                    // One malformed user-edited level should not stop the game from starting.
-                }
+        val loaded = try {
+            LevelRepository().loadAll(ctx).map { definition ->
+                GameLevel(
+                    definition.id,
+                    definition.name,
+                    definition.maxBounces,
+                    PointN(definition.playerSpawn.x, definition.playerSpawn.y),
+                    PointN(definition.exit.x, definition.exit.y),
+                    PointN(definition.switch.x, definition.switch.y),
+                    definition.enemies.map { PointN(it.x, it.y) },
+                    definition.crates.map { PointN(it.x, it.y) },
+                    definition.hazards.map {
+                        HazardState(it.type.name.lowercase(), it.position.x, it.position.y, it.width, it.height)
+                    }
+                )
             }
         } catch (_: Exception) {
-            // Fall through to the built-in safe levels.
+            emptyList()
         }
         val byId = loaded.associateBy { it.id }
         return (1..20).map { id -> byId[id] ?: fallbackLevel(id) }
