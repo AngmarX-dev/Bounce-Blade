@@ -71,8 +71,22 @@
       "type": "spikes",
       "x": 0.5,
       "y": 0.9,
-      "width": 0.66,
+      "width": 0.56,
       "height": 0.025
+    },
+    {
+      "type": "laser",
+      "x": 0.5,
+      "y": 0.47,
+      "width": 0.66,
+      "height": 0.014
+    },
+    {
+      "type": "laser",
+      "x": 0.5,
+      "y": 0.34,
+      "width": 0.42,
+      "height": 0.012
     }
   ]
 }
