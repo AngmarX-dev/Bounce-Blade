@@ -1,7 +1,7 @@
 {
   "id": 8,
   "name": "Hot Floor",
-  "maxBounces": 6,
+  "maxBounces": 10,
   "playerSpawn": {
     "x": 0.14,
     "y": 0.8
