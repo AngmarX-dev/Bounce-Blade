@@ -1,7 +1,7 @@
 {
   "id": 14,
   "name": "Ricochet Lab",
-  "maxBounces": 8,
+  "maxBounces": 12,
   "playerSpawn": {
     "x": 0.14,
     "y": 0.8
