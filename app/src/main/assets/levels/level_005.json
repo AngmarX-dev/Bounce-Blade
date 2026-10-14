@@ -1,7 +1,7 @@
 {
   "id": 5,
   "name": "Thin Passage",
-  "maxBounces": 6,
+  "maxBounces": 9,
   "playerSpawn": {
     "x": 0.14,
     "y": 0.8
