@@ -558,7 +558,7 @@ private class GameView(context: Context) : View(context) {
         drawButton(canvas, 0.18f, 0.735f, 0.82f, 0.815f, "SETTINGS", pink)
         val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
         val stars = totalBestStarsAfter(0, 0)
-        drawText(canvas, "CAMPAIGN  " + unlocked + "/" + levels.size + "     BEST STARS  " + stars + "/" + (levels.size * 3),
+        drawText(canvas, " + "UNLOCKED  " + unlocked + "/" + levels.size + "     BEST STARS  " + stars + "/" + (levels.size * 3),
             0.5f, 0.88f, 0.019f, muted, Paint.Align.CENTER)
         drawText(canvas, "DRAG BACK TO LAUNCH  •  TWO FINGERS TO SLOW TIME", 0.5f, 0.925f, 0.014f, muted, Paint.Align.CENTER)
     }
@@ -654,9 +654,16 @@ private class GameView(context: Context) : View(context) {
                     canvas.drawPath(path, paint)
                 }
             } else {
-                paint.color = pink
-                paint.strokeWidth = density * 3f
+                paint.color = if (hazard.type.contains("moving")) gold else pink
+                paint.strokeWidth = density * (if (hazard.type.contains("laser")) 3.5f else 3f)
+                paint.setShadowLayer(density * 7f, 0f, 0f, paint.color)
                 canvas.drawLine(cx - halfWidth, cy, cx + halfWidth, cy, paint)
+                paint.clearShadowLayer()
+                if (hazard.type.contains("moving")) {
+                    paint.style = Paint.Style.FILL
+                    canvas.drawCircle(cx, cy, density * 5f, paint)
+                    paint.style = Paint.Style.STROKE
+                }
             }
         }
     }
@@ -783,17 +790,28 @@ private class GameView(context: Context) : View(context) {
             else if (x > right) { x = right; dirX = -abs(dirX); wallHit = true }
             if (y < top) { y = top; dirY = abs(dirY); wallHit = true }
             else if (y > bottom) { y = bottom; dirY = -abs(dirY); wallHit = true }
-            val targetHit = enemies.any {
+            val enemyHit = enemies.any {
                 it.alive && distanceSquared(x, y, it.x * viewW, it.y * viewH) <
                     (radius + minDim * 0.027f) * (radius + minDim * 0.027f)
-            } || crates.any {
+            }
+            val crateHit = crates.any {
                 it.alive && abs(x - it.x * viewW) < radius + minDim * 0.035f &&
                     abs(y - it.y * viewH) < radius + minDim * 0.035f
             }
+            val hazardHit = level.hazards.withIndex().any { (hazardIndex, hazard) ->
+                val center = hazardCenter(hazard, hazardIndex)
+                val hx = center.x * viewW
+                val hy = center.y * viewH
+                val halfWidth = hazard.width * viewW / 2f
+                val halfHeight = max(hazard.height * viewH, minDim * 0.018f) / 2f
+                x + radius > hx - halfWidth && x - radius < hx + halfWidth &&
+                    y + radius > hy - halfHeight && y - radius < hy + halfHeight
+            }
+            val collision = enemyHit || crateHit || hazardHit
             val alpha = (140 - i * 2).coerceAtLeast(30)
             paint.color = when {
-                targetHit -> Color.argb(alpha, 255, 65, 150)
-                wallHit -> Color.argb(alpha, 255, 199, 83)
+                hazardHit || enemyHit -> Color.argb(alpha, 255, 65, 150)
+                crateHit || wallHit -> Color.argb(alpha, 255, 199, 83)
                 else -> Color.argb(alpha, 45, 235, 255)
             }
             canvas.drawLine(previousX, previousY, x, y, paint)
@@ -804,7 +822,7 @@ private class GameView(context: Context) : View(context) {
             }
             previousX = x
             previousY = y
-            if (targetHit) break
+            if (collision) break
         }
         paint.style = Paint.Style.FILL
         paint.strokeCap = Paint.Cap.BUTT
