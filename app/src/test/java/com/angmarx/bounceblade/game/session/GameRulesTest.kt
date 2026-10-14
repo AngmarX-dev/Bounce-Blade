@@ -23,7 +23,12 @@ class GameRulesTest {
 
     @Test
     fun efficientClearAwardsThreeStars() {
-        assertEquals(3, GameRules.starsEarned(10, 8, 2))
+        assertEquals(3, GameRules.starsEarned(10, 8, 2, 0))
+    }
+
+    @Test
+    fun requiredTargetHitsAreAccountedForInThreeStarScore() {
+        assertEquals(3, GameRules.starsEarned(8, 3, 2, 5))
     }
 
     @Test
