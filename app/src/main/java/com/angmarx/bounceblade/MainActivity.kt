@@ -282,20 +282,20 @@ private class GameView(context: Context) : View(context) {
         var bounced = false
         if (px < left) {
             px = left
-            velocityX = abs(velocityX)
+            velocityX = abs(velocityX) * 0.96f
             bounced = true
         } else if (px > right) {
             px = right
-            velocityX = -abs(velocityX)
+            velocityX = -abs(velocityX) * 0.96f
             bounced = true
         }
         if (py < top) {
             py = top
-            velocityY = abs(velocityY)
+            velocityY = abs(velocityY) * 0.96f
             bounced = true
         } else if (py > bottom) {
             py = bottom
-            velocityY = -abs(velocityY)
+            velocityY = -abs(velocityY) * 0.96f
             bounced = true
         }
         bladeX = px / viewW
@@ -319,6 +319,8 @@ private class GameView(context: Context) : View(context) {
             if (dx * dx + dy * dy <= hitRadius * hitRadius) {
                 enemy.alive = false
                 reflectFrom(dx, dy)
+                velocityX *= 0.90f
+                velocityY *= 0.90f
                 useBounce()
                 addBurst(ex, ey, pink, 14)
                 playTone(ToneGenerator.TONE_PROP_ACK)
@@ -334,7 +336,13 @@ private class GameView(context: Context) : View(context) {
             val half = minDim * 0.035f
             if (abs(px - cx) < half + radius && abs(py - cy) < half + radius) {
                 crate.alive = false
-                if (abs(px - cx) > abs(py - cy)) velocityX = -velocityX else velocityY = -velocityY
+                if (abs(px - cx) > abs(py - cy)) {
+                    velocityX = -velocityX * 0.86f
+                    velocityY *= 0.94f
+                } else {
+                    velocityY = -velocityY * 0.86f
+                    velocityX *= 0.94f
+                }
                 useBounce()
                 addBurst(cx, cy, gold, 12)
                 playTone(ToneGenerator.TONE_PROP_ACK)
@@ -349,6 +357,8 @@ private class GameView(context: Context) : View(context) {
         if (!switchActivated && distanceSquared(px, py, sx, sy) < (radius + switchRadius) * (radius + switchRadius)) {
             switchActivated = true
             addBurst(sx, sy, gold, 18)
+            velocityX *= 0.96f
+            velocityY *= 0.96f
             showMessage("SWITCH ACTIVATED")
             playTone(ToneGenerator.TONE_PROP_ACK)
             haptic()
@@ -365,7 +375,11 @@ private class GameView(context: Context) : View(context) {
             } else {
                 val dx = px - ex
                 val dy = py - ey
-                if (velocityX * dx + velocityY * dy < 0f) reflectFrom(dx, dy)
+                if (velocityX * dx + velocityY * dy < 0f) {
+                    reflectFrom(dx, dy)
+                    velocityX *= 0.92f
+                    velocityY *= 0.92f
+                }
                 showMessage("EXIT LOCKED: CLEAR TARGETS AND HIT SWITCH")
             }
         }
@@ -1136,6 +1150,7 @@ private class GameView(context: Context) : View(context) {
                         velocityY = uy * speed
                         shotsUsed += 1
                         bladeTrail.clear()
+                        addBurst(bladeX * viewW, bladeY * viewH, cyan, 7)
                         flying = true
                         flightTime = 0f
                         lastFrame = System.nanoTime()
