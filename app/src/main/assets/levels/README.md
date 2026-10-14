@@ -1,5 +1,11 @@
-# Level files
+# Campaign levels
 
-Create one UTF-8 JSON file per level using `level_template.json`. Keep coordinates normalized from 0.0 to 1.0 so levels can scale to different screen sizes.
+The offline campaign includes `level_001.json` through `level_020.json`. Each file is loaded at runtime by the game view. Keep the numeric ID consistent with the three-digit filename.
 
-Suggested naming: `level_001.json`, `level_002.json`, and so on. Validate JSON before committing.
+Each JSON level supports:
+- `id`, `name`, and `maxBounces`
+- `playerSpawn`, `exit`, and `switch` points
+- `enemies` and `crates` arrays with normalized `x` and `y`
+- a `hazards` array with `type`, `x`, `y`, `width`, and `height`
+
+Coordinates are normalized from 0.0 to 1.0. Keep the player spawn outside the spike hazard and avoid placing targets directly on top of the switch or exit. The loader falls back to a safe generated layout if a level file cannot be parsed.
