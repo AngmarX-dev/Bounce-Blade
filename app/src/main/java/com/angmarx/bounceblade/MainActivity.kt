@@ -353,7 +353,7 @@ private class GameView(context: Context) : View(context) {
             } else {
                 val dx = px - ex
                 val dy = py - ey
-                reflectFrom(dx, dy)
+                if (velocityX * dx + velocityY * dy < 0f) reflectFrom(dx, dy)
                 showMessage("EXIT LOCKED: CLEAR TARGETS AND HIT SWITCH")
             }
         }
@@ -375,7 +375,7 @@ private class GameView(context: Context) : View(context) {
 
     private fun useBounce() {
         bouncesLeft -= 1
-        if (bouncesLeft <= 0 && screen == GameScreen.PLAYING) fail("Out of bounces.")
+        if (bouncesLeft < 0 && screen == GameScreen.PLAYING) fail("Out of bounces.")
     }
 
     private fun completeLevel() {
