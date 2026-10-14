@@ -1,7 +1,7 @@
 {
   "id": 9,
   "name": "Overload",
-  "maxBounces": 7,
+  "maxBounces": 10,
   "playerSpawn": {
     "x": 0.14,
     "y": 0.8
