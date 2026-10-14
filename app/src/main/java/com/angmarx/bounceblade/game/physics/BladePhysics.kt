@@ -1,7 +1,6 @@
 package com.angmarx.bounceblade.game.physics
 
 import kotlin.math.max
-import kotlin.math.min
 
 data class MutableVector2(var x: Float, var y: Float)
 
@@ -36,7 +35,7 @@ object BladePhysics {
             bounced = true
         } else if (position.x > bounds.maxX) {
             position.x = bounds.maxX
-            velocity.x = -min(0f, -kotlin.math.abs(velocity.x))
+            velocity.x = -kotlin.math.abs(velocity.x)
             bounced = true
         }
 
