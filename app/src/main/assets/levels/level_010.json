@@ -1,7 +1,7 @@
 {
   "id": 10,
   "name": "Corner Shot",
-  "maxBounces": 7,
+  "maxBounces": 11,
   "playerSpawn": {
     "x": 0.14,
     "y": 0.8
