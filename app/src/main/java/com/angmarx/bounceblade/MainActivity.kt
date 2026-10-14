@@ -13,6 +13,7 @@ import android.os.Bundle
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
+import com.angmarx.bounceblade.game.session.GameRules
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.abs
@@ -342,7 +343,7 @@ private class GameView(context: Context) : View(context) {
             haptic()
         }
 
-        val exitReady = switchActivated && enemies.none { it.alive } && crates.none { it.alive }
+        val exitReady = GameRules.exitIsUnlocked(enemies.count { it.alive }, crates.count { it.alive }, switchActivated)
         val ex = level.exit.x * viewW
         val ey = level.exit.y * viewH
         val exitRadius = minDim * 0.034f
@@ -375,7 +376,7 @@ private class GameView(context: Context) : View(context) {
 
     private fun useBounce() {
         bouncesLeft -= 1
-        if (bouncesLeft < 0 && screen == GameScreen.PLAYING) fail("Out of bounces.")
+        if (GameRules.bounceBudgetExceeded(bouncesLeft) && screen == GameScreen.PLAYING) fail("Out of bounces.")
     }
 
     private fun completeLevel() {
@@ -529,7 +530,7 @@ private class GameView(context: Context) : View(context) {
         val crates = listOf(PointN(0.45f, 0.55f), PointN(0.60f, 0.43f), PointN(0.34f, 0.66f))
         val count = (2 + id / 3).coerceAtMost(enemyPositions.size)
         return GameLevel(
-            id, "Arena " + id, 5 + (id - 1) / 4,
+            id, "Arena " + id, 8 + (id - 1) / 4,
             PointN(0.14f, 0.80f),
             PointN(0.87f, 0.18f),
             if (id % 2 == 0) PointN(0.78f, 0.75f) else PointN(0.21f, 0.75f),
@@ -704,7 +705,7 @@ private class GameView(context: Context) : View(context) {
     private fun drawExit(canvas: Canvas) {
         val x = level.exit.x * viewW
         val y = level.exit.y * viewH
-        val ready = switchActivated && enemies.none { it.alive } && crates.none { it.alive }
+        val ready = GameRules.exitIsUnlocked(enemies.count { it.alive }, crates.count { it.alive }, switchActivated)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(2f, density * 3f)
         paint.color = if (ready) cyan else muted
@@ -1097,8 +1098,7 @@ private class GameView(context: Context) : View(context) {
 
         private fun loadLevels(context: Context): List<GameLevel> {
             val loaded = mutableListOf<GameLevel>()
-            val view = GameViewLevelParser
-            try {
+                        try {
                 val names = context.assets.list("levels").orEmpty()
                     .filter { it.matches(Regex("level_[0-9]{3}\\.json")) }
                     .sorted()
