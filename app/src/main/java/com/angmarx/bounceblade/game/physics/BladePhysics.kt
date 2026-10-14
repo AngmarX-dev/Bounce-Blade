@@ -1,60 +1,101 @@
 package com.angmarx.bounceblade.game.physics
 
-import kotlin.math.max
+import kotlin.math.abs
 
-data class MutableVector2(var x: Float, var y: Float)
-
-data class PhysicsBounds(
-    val minX: Float = 0.08f,
-    val maxX: Float = 0.92f,
-    val minY: Float = 0.085f,
-    val maxY: Float = 0.87f
+data class PhysicsPoint(
+    val x: Float,
+    val y: Float
 )
 
-/** Small reusable physics helpers; connect these to the game loop when refactoring it. */
-object BladePhysics {
-    /**
-     * Advances the point and reflects its velocity at the rectangular bounds.
-     * Returns true if at least one boundary was hit.
-     */
-    fun advance(
-        position: MutableVector2,
-        velocity: MutableVector2,
-        deltaSeconds: Float,
-        bounds: PhysicsBounds = PhysicsBounds()
-    ): Boolean {
-        if (deltaSeconds <= 0f) return false
-
-        position.x += velocity.x * deltaSeconds
-        position.y += velocity.y * deltaSeconds
-        var bounced = false
-
-        if (position.x < bounds.minX) {
-            position.x = bounds.minX
-            velocity.x = max(0f, kotlin.math.abs(velocity.x))
-            bounced = true
-        } else if (position.x > bounds.maxX) {
-            position.x = bounds.maxX
-            velocity.x = -kotlin.math.abs(velocity.x)
-            bounced = true
+data class ArenaBounds(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float
+) {
+    init {
+        require(right > left) {
+            "Arena right edge must be greater than left edge"
         }
-
-        if (position.y < bounds.minY) {
-            position.y = bounds.minY
-            velocity.y = kotlin.math.abs(velocity.y)
-            bounced = true
-        } else if (position.y > bounds.maxY) {
-            position.y = bounds.maxY
-            velocity.y = -kotlin.math.abs(velocity.y)
-            bounced = true
+        require(bottom > top) {
+            "Arena bottom edge must be greater than top edge"
         }
-
-        return bounced
     }
+}
 
-    fun distanceSquared(a: MutableVector2, b: MutableVector2): Float {
-        val dx = a.x - b.x
-        val dy = a.y - b.y
-        return dx * dx + dy * dy
+data class BladeMotion(
+    val position: PhysicsPoint,
+    val velocity: PhysicsPoint,
+    val radius: Float
+)
+
+data class PhysicsStep(
+    val motion: BladeMotion,
+    val wallBounces: Int
+)
+
+object BladePhysics {
+
+    /**
+     * Advances the blade by deltaSeconds and reflects it from the arena walls.
+     *
+     * Position is measured in the same coordinate units as ArenaBounds.
+     * Velocity is measured in coordinate units per second.
+     */
+    fun step(
+        blade: BladeMotion,
+        bounds: ArenaBounds,
+        deltaSeconds: Float
+    ): PhysicsStep {
+        require(deltaSeconds >= 0f) {
+            "deltaSeconds must not be negative"
+        }
+        require(blade.radius >= 0f) {
+            "Blade radius must not be negative"
+        }
+
+        val minX = bounds.left + blade.radius
+        val maxX = bounds.right - blade.radius
+        val minY = bounds.top + blade.radius
+        val maxY = bounds.bottom - blade.radius
+
+        require(minX <= maxX && minY <= maxY) {
+            "Blade does not fit inside the arena"
+        }
+
+        var x = blade.position.x + blade.velocity.x * deltaSeconds
+        var y = blade.position.y + blade.velocity.y * deltaSeconds
+        var velocityX = blade.velocity.x
+        var velocityY = blade.velocity.y
+        var bounces = 0
+
+        if (x < minX) {
+            x = minX + (minX - x)
+            velocityX = abs(velocityX)
+            bounces++
+        } else if (x > maxX) {
+            x = maxX - (x - maxX)
+            velocityX = -abs(velocityX)
+            bounces++
+        }
+
+        if (y < minY) {
+            y = minY + (minY - y)
+            velocityY = abs(velocityY)
+            bounces++
+        } else if (y > maxY) {
+            y = maxY - (y - maxY)
+            velocityY = -abs(velocityY)
+            bounces++
+        }
+
+        return PhysicsStep(
+            motion = BladeMotion(
+                position = PhysicsPoint(x, y),
+                velocity = PhysicsPoint(velocityX, velocityY),
+                radius = blade.radius
+            ),
+            wallBounces = bounces
+        )
     }
 }
