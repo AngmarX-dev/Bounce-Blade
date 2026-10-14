@@ -29,6 +29,31 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      - name: Validate campaign level JSON
+        run: |
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          folder = pathlib.Path("app/src/main/assets/levels")
+          files = sorted(folder.glob("level_[0-9][0-9][0-9].json"))
+          if len(files) < 20:
+              sys.exit(f"Expected at least 20 level files, found {len(files)}")
+          required = {"id", "name", "maxBounces", "playerSpawn", "exit", "switch", "enemies", "crates", "hazards"}
+          for path in files:
+              data = json.loads(path.read_text(encoding="utf-8"))
+              expected_id = int(path.stem[-3:])
+              missing = required - data.keys()
+              if missing:
+                  sys.exit(f"{path}: missing keys {sorted(missing)}")
+              if data["id"] != expected_id:
+                  sys.exit(f"{path}: id {data['id']} does not match filename id {expected_id}")
+              if not data["enemies"] or not data["crates"]:
+                  sys.exit(f"{path}: each starter stage must contain enemies and crates")
+          print(f"Validated {len(files)} campaign level files.")
+          PY
+
       - name: Run unit tests and build debug APK
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug
 
