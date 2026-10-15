@@ -946,22 +946,6 @@ private class GameView(context: Context) : View(context) {
             0.5f, 0.88f, 0.019f, muted, Paint.Align.CENTER)
         drawText(canvas, "DRAG BACK TO LAUNCH  •  TWO FINGERS TO SLOW TIME", 0.5f, 0.925f, 0.014f, muted, Paint.Align.CENTER)
     }
-    private fun drawMenu(canvas: Canvas) {
-        drawMenuBackdrop(canvas)
-        drawText(canvas, "BOUNCE", 0.5f, 0.35f, 0.095f, Color.WHITE, Paint.Align.CENTER)
-        drawText(canvas, "BLADE", 0.5f, 0.43f, 0.095f, cyan, Paint.Align.CENTER)
-        drawText(canvas, "AIM  •  RICOCHET  •  ESCAPE", 0.5f, 0.475f, 0.022f, muted, Paint.Align.CENTER)
-        drawButton(canvas, 0.18f, 0.52f, 0.82f, 0.585f, "PLAY CAMPAIGN", cyan)
-        drawButton(canvas, 0.18f, 0.595f, 0.82f, 0.66f, "LEVEL SELECT", gold)
-        drawButton(canvas, 0.18f, 0.67f, 0.82f, 0.735f, "HELP", pink)
-        drawButton(canvas, 0.18f, 0.745f, 0.82f, 0.81f, "SETTINGS", cyan)
-        val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
-        val bestTotal = totalBestStarsAfter(0, 0)
-        drawText(canvas, "UNLOCKED  " + unlocked + "/" + levels.size + "     BEST STARS  " + bestTotal + "/" + (levels.size * 3),
-            0.5f, 0.88f, 0.019f, muted, Paint.Align.CENTER)
-        drawText(canvas, "DRAG BACK TO LAUNCH  •  TWO FINGERS TO SLOW TIME", 0.5f, 0.925f, 0.014f, muted, Paint.Align.CENTER)
-    }
-
     private fun drawWorldSelect(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         drawText(canvas,"CHOOSE YOUR WORLD",0.5f,0.285f,0.058f,Color.WHITE,Paint.Align.CENTER)
