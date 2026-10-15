@@ -81,7 +81,7 @@ private data class Particle(
     val color: Int,
     val radius: Float
 )
-private enum class GameScreen { MENU, LEVELS, PLAYING, PAUSED, SETTINGS, WON, FAILED, CAMPAIGN_COMPLETE }
+private enum class GameScreen { MENU, LEVELS, PLAYING, PAUSED, SETTINGS, HELP, DIFFICULTY, WON, FAILED, CAMPAIGN_COMPLETE }
 
 private class GameView(context: Context) : View(context) {
     private val prefs = context.getSharedPreferences("bounce_blade_save", Context.MODE_PRIVATE)
@@ -89,18 +89,20 @@ private class GameView(context: Context) : View(context) {
     private val minDim get() = min(viewW, viewH)
     private var viewW = 1f
     private var viewH = 1f
-    private val cyan = Color.rgb(45, 235, 255)
-    private val pink = Color.rgb(255, 65, 150)
-    private val gold = Color.rgb(255, 199, 83)
-    private val dark = Color.rgb(7, 10, 22)
-    private val muted = Color.rgb(94, 120, 150)
-    private val grid = Color.rgb(22, 35, 58)
+    private var themeId = prefs.getInt("theme_id", 0).coerceIn(0, 2)
+    private var cyan = Color.rgb(45, 235, 255)
+    private var pink = Color.rgb(255, 65, 150)
+    private var gold = Color.rgb(255, 199, 83)
+    private var dark = Color.rgb(7, 10, 22)
+    private var muted = Color.rgb(94, 120, 150)
+    private var grid = Color.rgb(22, 35, 58)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 28)
     private val stars = (0 until 54).map { i ->
         PointN(((i * 73 + 19) % 997) / 997f, ((i * 151 + 41) % 991) / 991f)
     }
     private val levels: List<GameLevel> = loadLevels(context)
+    private var difficulty = prefs.getInt("difficulty_stars", 2).coerceIn(1, 3)
     private var screen = GameScreen.MENU
     private var levelId = 1
     private var level = levels.first()
@@ -116,6 +118,7 @@ private class GameView(context: Context) : View(context) {
     private var slowMotion = false
     private var switchActivated = false
     private var bouncesLeft = 5
+    private var runMaxBounces = 5
     private var shotsUsed = 0
     private var earnedStars = 0
     private var animationTime = 0f
@@ -134,6 +137,7 @@ private class GameView(context: Context) : View(context) {
     private val particles = mutableListOf<Particle>()
 
     init {
+        applyTheme()
         loadLevel(1)
         screen = GameScreen.MENU
         isFocusable = true
@@ -143,7 +147,7 @@ private class GameView(context: Context) : View(context) {
     fun handleBack(): Boolean {
         when (screen) {
             GameScreen.PLAYING -> screen = GameScreen.PAUSED
-            GameScreen.PAUSED, GameScreen.SETTINGS -> screen = GameScreen.MENU
+            GameScreen.PAUSED, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY -> screen = GameScreen.MENU
             GameScreen.LEVELS -> screen = GameScreen.MENU
             GameScreen.WON, GameScreen.FAILED, GameScreen.CAMPAIGN_COMPLETE -> screen = GameScreen.LEVELS
             GameScreen.MENU -> return false
@@ -188,6 +192,8 @@ private class GameView(context: Context) : View(context) {
                 drawButton(canvas, 0.24f, 0.65f, 0.76f, 0.73f, "MAIN MENU", pink)
             }
             GameScreen.SETTINGS -> drawSettings(canvas)
+            GameScreen.HELP -> drawHelp(canvas)
+            GameScreen.DIFFICULTY -> drawDifficulty(canvas)
             GameScreen.WON -> {
                 drawGame(canvas)
                 drawOverlay(canvas, "LEVEL CLEARED", "Nice shot! The exit is open.")
@@ -412,16 +418,17 @@ private class GameView(context: Context) : View(context) {
         val nextId = levelId + 1
         val currentUnlocked = prefs.getInt("unlocked_level", 1)
         val newUnlocked = max(currentUnlocked, min(nextId, levels.size))
-        earnedStars = GameRules.starsEarned(level.maxBounces, bouncesLeft, shotsUsed, enemies.size + crates.size)
-        val starsKey = "best_stars_" + levelId
+        earnedStars = GameRules.starsEarned(runMaxBounces, bouncesLeft, shotsUsed, enemies.size + crates.size)
+        val starsKey = bestStarsKey(levelId)
         val previousBest = prefs.getInt(starsKey, 0)
-        val bestShotsKey = "best_shots_" + levelId
+        val bestShotsKey = bestShotsKey(levelId)
         val previousBestShots = prefs.getInt(bestShotsKey, Int.MAX_VALUE)
         prefs.edit()
             .putInt("unlocked_level", newUnlocked)
             .putInt(starsKey, max(previousBest, earnedStars))
             .putInt(bestShotsKey, min(previousBestShots, shotsUsed))
-            .putInt("campaign_best_stars", totalBestStarsAfter(levelId, max(previousBest, earnedStars)))
+            .putInt("campaign_best_stars_difficulty_" + difficulty,
+                totalBestStarsAfter(levelId, max(previousBest, earnedStars)))
             .apply()
         screen = if (levelId >= levels.size) GameScreen.CAMPAIGN_COMPLETE else GameScreen.WON
         playTone(ToneGenerator.TONE_PROP_ACK)
@@ -457,7 +464,8 @@ private class GameView(context: Context) : View(context) {
         aiming = false
         slowMotion = false
         switchActivated = false
-        bouncesLeft = level.maxBounces
+        runMaxBounces = GameRules.bouncesForDifficulty(level.maxBounces, difficulty)
+        bouncesLeft = runMaxBounces
         shotsUsed = 0
         earnedStars = 0
         slowMeter = 1f
@@ -523,6 +531,49 @@ private class GameView(context: Context) : View(context) {
         )
     }
 
+    private fun applyTheme() {
+        when (themeId.coerceIn(0, 2)) {
+            1 -> {
+                cyan = Color.rgb(75, 255, 150)
+                pink = Color.rgb(255, 105, 75)
+                gold = Color.rgb(220, 255, 90)
+                dark = Color.rgb(5, 18, 18)
+                muted = Color.rgb(90, 146, 128)
+                grid = Color.rgb(17, 50, 47)
+            }
+            2 -> {
+                cyan = Color.rgb(180, 130, 255)
+                pink = Color.rgb(255, 90, 190)
+                gold = Color.rgb(255, 190, 100)
+                dark = Color.rgb(13, 7, 25)
+                muted = Color.rgb(132, 112, 165)
+                grid = Color.rgb(41, 25, 63)
+            }
+            else -> {
+                cyan = Color.rgb(45, 235, 255)
+                pink = Color.rgb(255, 65, 150)
+                gold = Color.rgb(255, 199, 83)
+                dark = Color.rgb(7, 10, 22)
+                muted = Color.rgb(94, 120, 150)
+                grid = Color.rgb(22, 35, 58)
+            }
+        }
+    }
+
+    private fun themeName(): String = when (themeId) {
+        1 -> "GREEN"
+        2 -> "VIOLET"
+        else -> "CYAN"
+    }
+
+    private fun bestStarsKey(id: Int, forDifficulty: Int = difficulty): String =
+        if (forDifficulty == 2) "best_stars_" + id
+        else "best_stars_" + id + "_difficulty_" + forDifficulty
+
+    private fun bestShotsKey(id: Int, forDifficulty: Int = difficulty): String =
+        if (forDifficulty == 2) "best_shots_" + id
+        else "best_shots_" + id + "_difficulty_" + forDifficulty
+
     private fun drawBackground(canvas: Canvas) {
         canvas.drawColor(dark)
         paint.style = Paint.Style.FILL
@@ -567,39 +618,52 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas, "BOUNCE", 0.5f, 0.35f, 0.095f, Color.WHITE, Paint.Align.CENTER)
         drawText(canvas, "BLADE", 0.5f, 0.43f, 0.095f, cyan, Paint.Align.CENTER)
         drawText(canvas, "AIM  •  RICOCHET  •  ESCAPE", 0.5f, 0.475f, 0.022f, muted, Paint.Align.CENTER)
-        drawButton(canvas, 0.18f, 0.53f, 0.82f, 0.615f, "PLAY CAMPAIGN", cyan)
-        drawButton(canvas, 0.18f, 0.635f, 0.82f, 0.715f, "LEVEL SELECT", gold)
-        drawButton(canvas, 0.18f, 0.735f, 0.82f, 0.815f, "SETTINGS", pink)
+        drawButton(canvas, 0.18f, 0.52f, 0.82f, 0.585f, "PLAY CAMPAIGN", cyan)
+        drawButton(canvas, 0.18f, 0.595f, 0.82f, 0.66f, "LEVEL SELECT", gold)
+        drawButton(canvas, 0.18f, 0.67f, 0.82f, 0.735f, "HELP", pink)
+        drawButton(canvas, 0.18f, 0.745f, 0.82f, 0.81f, "SETTINGS", cyan)
         val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
-        val stars = totalBestStarsAfter(0, 0)
-        drawText(canvas, "UNLOCKED  " + unlocked + "/" + levels.size + "     BEST STARS  " + stars + "/" + (levels.size * 3),
+        val bestTotal = totalBestStarsAfter(0, 0)
+        drawText(canvas, "UNLOCKED  " + unlocked + "/" + levels.size + "     BEST STARS  " + bestTotal + "/" + (levels.size * 3),
             0.5f, 0.88f, 0.019f, muted, Paint.Align.CENTER)
         drawText(canvas, "DRAG BACK TO LAUNCH  •  TWO FINGERS TO SLOW TIME", 0.5f, 0.925f, 0.014f, muted, Paint.Align.CENTER)
     }
 
     private fun drawLevelSelect(canvas: Canvas) {
-        drawText(canvas, "SELECT ARENA", 0.5f, 0.13f, 0.062f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "SELECT ARENA", 0.5f, 0.115f, 0.058f, Color.WHITE, Paint.Align.CENTER)
         drawText(canvas, "Unlocked: " + prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size) + " / " + levels.size,
-            0.5f, 0.175f, 0.024f, cyan, Paint.Align.CENTER)
+            0.5f, 0.16f, 0.022f, cyan, Paint.Align.CENTER)
+        for (mode in 1..3) {
+            val left = 0.055f + (mode - 1) * 0.31f
+            val label = (if (difficulty == mode) "✓ " else "") + when (mode) {
+                1 -> "★☆☆ EASY"
+                2 -> "★★☆ NORMAL"
+                else -> "★★★ HARD"
+            }
+            drawButton(canvas, left, 0.195f, left + 0.28f, 0.245f, label,
+                if (difficulty == mode) gold else cyan)
+        }
         val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
         for (id in 1..levels.size) {
             val column = (id - 1) % 4
             val row = (id - 1) / 4
             val left = 0.055f + column * 0.23f
-            val top = 0.225f + row * 0.113f
+            val top = 0.268f + row * 0.102f
             val available = id <= unlocked
             val col = if (available) cyan else muted
-            val best = prefs.getInt("best_stars_" + id, 0)
-            val label = if (!available) "LOCKED" else id.toString().padStart(2, '0') +
-                if (best > 0) "  " + "★".repeat(best) else "  •"
+            val best = prefs.getInt(bestStarsKey(id), 0).coerceIn(0, 3)
+            val label = id.toString().padStart(2, '0') + " " + "★".repeat(best) + "☆".repeat(3 - best)
             drawButton(canvas, left, top, left + 0.19f, top + 0.078f, label, col, available)
         }
-        drawButton(canvas, 0.22f, 0.84f, 0.78f, 0.91f, "BACK", gold)
+        drawText(canvas, "STARS SHOW YOUR BEST CLEAR ON THIS DIFFICULTY", 0.5f, 0.795f,
+            0.014f, muted, Paint.Align.CENTER)
+        drawButton(canvas, 0.22f, 0.83f, 0.78f, 0.90f, "BACK", gold)
     }
 
     private fun drawGame(canvas: Canvas) {
         drawText(canvas, "BOUNCE BLADE", 0.07f, 0.047f, 0.028f, Color.WHITE)
-        drawText(canvas, level.name.uppercase() + "  " + levelId + "/" + levels.size, 0.5f, 0.047f, 0.024f, cyan, Paint.Align.CENTER)
+        drawText(canvas, level.name.uppercase() + "  " + levelId + "/" + levels.size +
+            "  •  " + "★".repeat(difficulty), 0.5f, 0.047f, 0.022f, cyan, Paint.Align.CENTER)
         drawText(canvas, "BOUNCES " + bouncesLeft, 0.72f, 0.047f, 0.022f, gold, Paint.Align.RIGHT)
         drawButton(canvas, 0.81f, 0.065f, 0.94f, 0.115f, "Ⅱ", pink)
         drawText(canvas, "SHOTS " + shotsUsed, 0.07f, 0.092f, 0.019f, muted)
@@ -903,8 +967,8 @@ private class GameView(context: Context) : View(context) {
         if (screen == GameScreen.WON) {
             drawText(canvas, "★".repeat(earnedStars) + "☆".repeat(3 - earnedStars),
                 0.5f, 0.462f, 0.055f, gold, Paint.Align.CENTER)
-            val bestShots = prefs.getInt("best_shots_" + levelId, shotsUsed)
-            drawText(canvas, "BEST: " + prefs.getInt("best_stars_" + levelId, earnedStars) +
+            val bestShots = prefs.getInt(bestShotsKey(levelId), shotsUsed)
+            drawText(canvas, "BEST: " + prefs.getInt(bestStarsKey(levelId), earnedStars) +
                 "/3 STARS  •  FEWEST SHOTS: " + bestShots,
                 0.5f, 0.485f, 0.015f, muted, Paint.Align.CENTER)
         }
@@ -913,10 +977,39 @@ private class GameView(context: Context) : View(context) {
     private fun drawSettings(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         drawText(canvas, "SETTINGS", 0.5f, 0.29f, 0.07f, Color.WHITE, Paint.Align.CENTER)
-        drawButton(canvas, 0.15f, 0.43f, 0.85f, 0.52f, "SOUND: " + if (soundEnabled) "ON" else "OFF", cyan)
-        drawButton(canvas, 0.15f, 0.55f, 0.85f, 0.64f, "VIBRATION: " + if (vibrationEnabled) "ON" else "OFF", gold)
-        drawButton(canvas, 0.15f, 0.69f, 0.85f, 0.78f, "BACK", pink)
-        drawText(canvas, "Settings are saved on this device.", 0.5f, 0.84f, 0.020f, muted, Paint.Align.CENTER)
+        drawButton(canvas, 0.15f, 0.39f, 0.85f, 0.46f, "SOUND: " + if (soundEnabled) "ON" else "OFF", cyan)
+        drawButton(canvas, 0.15f, 0.48f, 0.85f, 0.55f, "VIBRATION: " + if (vibrationEnabled) "ON" else "OFF", gold)
+        drawButton(canvas, 0.15f, 0.57f, 0.85f, 0.64f, "THEME: " + themeName(), pink)
+        drawButton(canvas, 0.15f, 0.69f, 0.85f, 0.76f, "BACK", cyan)
+        drawText(canvas, "Tap THEME to cycle through Cyan, Green and Violet.", 0.5f, 0.83f, 0.018f, muted, Paint.Align.CENTER)
+        drawText(canvas, "Settings are saved on this device.", 0.5f, 0.87f, 0.018f, muted, Paint.Align.CENTER)
+    }
+
+    private fun drawDifficulty(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "CHOOSE DIFFICULTY", 0.5f, 0.30f, 0.055f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "Higher star ratings give you fewer bounces.", 0.5f, 0.36f, 0.020f, muted, Paint.Align.CENTER)
+        val labels = arrayOf("★☆☆  EASY  •  MORE BOUNCES", "★★☆  NORMAL", "★★★  HARD  •  FEWER BOUNCES")
+        val accents = intArrayOf(cyan, gold, pink)
+        for (mode in 1..3) {
+            val top = 0.405f + (mode - 1) * 0.11f
+            val label = (if (difficulty == mode) "✓  " else "") + labels[mode - 1]
+            drawButton(canvas, 0.13f, top, 0.87f, top + 0.078f, label, accents[mode - 1])
+        }
+        drawButton(canvas, 0.22f, 0.755f, 0.78f, 0.83f, "BACK", gold)
+    }
+
+    private fun drawHelp(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "HELP & CONTROLS", 0.5f, 0.29f, 0.055f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "1. Drag backwards, then release to launch.", 0.12f, 0.385f, 0.019f, cyan)
+        drawText(canvas, "2. Bounce into every enemy and crate.", 0.12f, 0.445f, 0.019f, Color.WHITE)
+        drawText(canvas, "3. Activate the gold switch, then reach the exit.", 0.12f, 0.505f, 0.017f, Color.WHITE)
+        drawText(canvas, "4. Avoid spikes, moving hazards and lasers.", 0.12f, 0.565f, 0.018f, pink)
+        drawText(canvas, "5. Two fingers slow time while the blade flies.", 0.12f, 0.625f, 0.018f, Color.WHITE)
+        drawText(canvas, "6. Earn stars with efficient shots and spare bounces.", 0.12f, 0.685f, 0.017f, gold)
+        drawText(canvas, "Easy gives more bounces; Hard gives fewer.", 0.5f, 0.735f, 0.017f, muted, Paint.Align.CENTER)
+        drawButton(canvas, 0.22f, 0.79f, 0.78f, 0.86f, "BACK", cyan)
     }
 
     private fun drawText(
@@ -982,7 +1075,7 @@ private class GameView(context: Context) : View(context) {
 
     private fun totalBestStarsAfter(updatedLevelId: Int, updatedValue: Int): Int =
         (1..levels.size).sumOf { id ->
-            if (id == updatedLevelId) updatedValue else prefs.getInt("best_stars_" + id, 0)
+            if (id == updatedLevelId) updatedValue else prefs.getInt(bestStarsKey(id), 0)
         }
 
     private fun distanceSquared(x1: Float, y1: Float, x2: Float, y2: Float): Float {
@@ -1028,28 +1121,39 @@ private class GameView(context: Context) : View(context) {
                 when (screen) {
                     GameScreen.MENU -> {
                         when {
-                            inRect(nx, ny, 0.18f, 0.53f, 0.82f, 0.615f) -> {
-                                startLevel(prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size))
-                            }
-                            inRect(nx, ny, 0.18f, 0.635f, 0.82f, 0.715f) -> screen = GameScreen.LEVELS
-                            inRect(nx, ny, 0.18f, 0.735f, 0.82f, 0.815f) -> screen = GameScreen.SETTINGS
+                            inRect(nx, ny, 0.18f, 0.52f, 0.82f, 0.585f) -> screen = GameScreen.DIFFICULTY
+                            inRect(nx, ny, 0.18f, 0.595f, 0.82f, 0.66f) -> screen = GameScreen.LEVELS
+                            inRect(nx, ny, 0.18f, 0.67f, 0.82f, 0.735f) -> screen = GameScreen.HELP
+                            inRect(nx, ny, 0.18f, 0.745f, 0.82f, 0.81f) -> screen = GameScreen.SETTINGS
                         }
                         invalidate()
                         return true
                     }
                     GameScreen.LEVELS -> {
-                        if (inRect(nx, ny, 0.22f, 0.84f, 0.78f, 0.91f)) {
+                        if (inRect(nx, ny, 0.22f, 0.83f, 0.78f, 0.90f)) {
                             screen = GameScreen.MENU
                         } else {
-                            for (id in 1..levels.size) {
-                                val column = (id - 1) % 4
-                                val row = (id - 1) / 4
-                                val left = 0.055f + column * 0.23f
-                                val top = 0.225f + row * 0.113f
-                                if (inRect(nx, ny, left, top, left + 0.19f, top + 0.078f)) {
-                                    val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
-                                    if (id <= unlocked) startLevel(id) else showMessage("LOCKED")
+                            var modeChanged = false
+                            for (mode in 1..3) {
+                                val left = 0.055f + (mode - 1) * 0.31f
+                                if (inRect(nx, ny, left, 0.195f, left + 0.28f, 0.245f)) {
+                                    difficulty = mode
+                                    prefs.edit().putInt("difficulty_stars", difficulty).apply()
+                                    modeChanged = true
                                     break
+                                }
+                            }
+                            if (!modeChanged) {
+                                for (id in 1..levels.size) {
+                                    val column = (id - 1) % 4
+                                    val row = (id - 1) / 4
+                                    val left = 0.055f + column * 0.23f
+                                    val top = 0.268f + row * 0.102f
+                                    if (inRect(nx, ny, left, top, left + 0.19f, top + 0.078f)) {
+                                        val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
+                                        if (id <= unlocked) startLevel(id) else showMessage("LOCKED")
+                                        break
+                                    }
                                 }
                             }
                         }
@@ -1058,16 +1162,48 @@ private class GameView(context: Context) : View(context) {
                     }
                     GameScreen.SETTINGS -> {
                         when {
-                            inRect(nx, ny, 0.15f, 0.43f, 0.85f, 0.52f) -> {
+                            inRect(nx, ny, 0.15f, 0.39f, 0.85f, 0.46f) -> {
                                 soundEnabled = !soundEnabled
                                 prefs.edit().putBoolean("sound_enabled", soundEnabled).apply()
                             }
-                            inRect(nx, ny, 0.15f, 0.55f, 0.85f, 0.64f) -> {
+                            inRect(nx, ny, 0.15f, 0.48f, 0.85f, 0.55f) -> {
                                 vibrationEnabled = !vibrationEnabled
                                 prefs.edit().putBoolean("vibration_enabled", vibrationEnabled).apply()
                             }
-                            inRect(nx, ny, 0.15f, 0.69f, 0.85f, 0.78f) -> screen = GameScreen.MENU
+                            inRect(nx, ny, 0.15f, 0.57f, 0.85f, 0.64f) -> {
+                                themeId = (themeId + 1) % 3
+                                prefs.edit().putInt("theme_id", themeId).apply()
+                                applyTheme()
+                            }
+                            inRect(nx, ny, 0.15f, 0.69f, 0.85f, 0.76f) -> screen = GameScreen.MENU
                         }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.DIFFICULTY -> {
+                        when {
+                            inRect(nx, ny, 0.13f, 0.405f, 0.87f, 0.483f) -> {
+                                difficulty = 1
+                                prefs.edit().putInt("difficulty_stars", difficulty).apply()
+                                startLevel(prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size))
+                            }
+                            inRect(nx, ny, 0.13f, 0.515f, 0.87f, 0.593f) -> {
+                                difficulty = 2
+                                prefs.edit().putInt("difficulty_stars", difficulty).apply()
+                                startLevel(prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size))
+                            }
+                            inRect(nx, ny, 0.13f, 0.625f, 0.87f, 0.703f) -> {
+                                difficulty = 3
+                                prefs.edit().putInt("difficulty_stars", difficulty).apply()
+                                startLevel(prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size))
+                            }
+                            inRect(nx, ny, 0.22f, 0.755f, 0.78f, 0.83f) -> screen = GameScreen.MENU
+                        }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.HELP -> {
+                        if (inRect(nx, ny, 0.22f, 0.79f, 0.78f, 0.86f)) screen = GameScreen.MENU
                         invalidate()
                         return true
                     }
