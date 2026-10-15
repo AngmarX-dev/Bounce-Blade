@@ -16,11 +16,13 @@ import android.view.MotionEvent
 import android.view.View
 import com.angmarx.bounceblade.game.session.GameRules
 import com.angmarx.bounceblade.game.level.LevelRepository
+import com.angmarx.bounceblade.game.level.CampaignWorlds
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 import kotlin.math.sin
+import kotlin.math.cos
 
 class MainActivity : Activity() {
     private lateinit var gameView: GameView
