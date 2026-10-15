@@ -7,12 +7,16 @@
 - **20 editable campaign levels** loaded from JSON, with unlock progression and local save data.
 - **Trajectory preview with ricochet prediction** while aiming; forecast segments highlight likely target, crate, and hazard collisions.
 - **Blade trail and hit particles** for clearer feedback on each impact.
-- **Three-star completion ratings** based on remaining bounce budget and launch efficiency; best rating is saved for each level.
+- **Three-star difficulty selection:** Easy gives 50% more bounces, Normal uses the level's default budget, and Hard gives 70% of that budget.
+- **Three-star level cards:** all three stars stay visible; earned stars are filled in and saved independently for each difficulty.
+- **Three-star completion ratings** based on remaining bounce budget and launch efficiency; best rating is saved for each level and difficulty.
+- **Help screen** with controls, objectives and hazard tips.
+- **Three selectable color themes** (Cyan, Green, Violet), saved between launches.
 - **Animated moving hazards** in addition to spike strips and laser beams.
 - **Real objective gating:** clear every enemy and crate, activate the gold switch, then reach the portal.
 - **Bounce budget, retry flow, pause menu, victory/failure screens, and level selection.**
 - **Two-finger slow motion** with a rechargeable meter.
-- **Persistent settings** for sound and vibration plus campaign progress and best stars.
+- **Persistent settings** for sound, vibration, color theme, selected difficulty, campaign progress and best stars.
 - **No external art or audio is required to start:** the game draws its core art and provides device-generated sound feedback.
 - **GitHub Actions** validates level files, runs unit tests, builds the debug APK, and uploads it as an artifact.
 
