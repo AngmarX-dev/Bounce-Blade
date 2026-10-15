@@ -1,6 +1,6 @@
 {
   "id": 12,
-  "name": "Crossed Wires",
+  "name": "Crate Corridor",
   "maxBounces": 11,
   "playerSpawn": {
     "x": 0.14,
@@ -80,5 +80,8 @@
       "width": 0.42,
       "height": 0.012
     }
-  ]
+  ],
+  "world": "Crimson Circuit",
+  "requiresAllTargets": true,
+  "requiresSwitch": true
 }

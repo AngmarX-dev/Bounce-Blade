@@ -1,6 +1,6 @@
 {
   "id": 20,
-  "name": "Last Arena",
+  "name": "Crimson Core",
   "maxBounces": 14,
   "playerSpawn": {
     "x": 0.14,
@@ -88,5 +88,8 @@
       "width": 0.66,
       "height": 0.014
     }
-  ]
+  ],
+  "world": "Crimson Circuit",
+  "requiresAllTargets": true,
+  "requiresSwitch": true
 }

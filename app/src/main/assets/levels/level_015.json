@@ -1,6 +1,6 @@
 {
   "id": 15,
-  "name": "Final Circuit",
+  "name": "Crossfire",
   "maxBounces": 12,
   "playerSpawn": {
     "x": 0.14,
@@ -88,5 +88,8 @@
       "width": 0.42,
       "height": 0.012
     }
-  ]
+  ],
+  "world": "Crimson Circuit",
+  "requiresAllTargets": true,
+  "requiresSwitch": true
 }

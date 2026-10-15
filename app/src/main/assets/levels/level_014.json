@@ -1,6 +1,6 @@
 {
   "id": 14,
-  "name": "Ricochet Lab",
+  "name": "Moving Laser",
   "maxBounces": 12,
   "playerSpawn": {
     "x": 0.14,
@@ -69,5 +69,8 @@
       "width": 0.26,
       "height": 0.03
     }
-  ]
+  ],
+  "world": "Crimson Circuit",
+  "requiresAllTargets": false,
+  "requiresSwitch": true
 }
