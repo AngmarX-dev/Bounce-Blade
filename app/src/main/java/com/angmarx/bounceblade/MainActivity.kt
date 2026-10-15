@@ -1418,16 +1418,6 @@ private class GameView(context: Context) : View(context) {
         messageUntil = System.nanoTime() + 1_800_000_000L
     }
 
-    private fun playTone(toneType: Int) {
-        if (soundEnabled) {
-            try {
-                tone.startTone(toneType, 65)
-            } catch (_: RuntimeException) {
-                // Audio feedback is optional on devices without an available tone stream.
-            }
-        }
-    }
-
     private fun haptic() {
         if (vibrationEnabled) performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
     }
