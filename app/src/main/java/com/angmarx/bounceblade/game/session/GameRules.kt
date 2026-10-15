@@ -8,6 +8,16 @@ object GameRules {
     /** Zero means the final permitted bounce was used; failure begins on the next bounce. */
     fun bounceBudgetExceeded(bouncesLeft: Int): Boolean = bouncesLeft < 0
 
+    /** Adjusts the bounce budget for the one-to-three-star difficulty modes. */
+    fun bouncesForDifficulty(baseBounces: Int, difficultyStars: Int): Int {
+        val safeBase = baseBounces.coerceAtLeast(1)
+        return when (difficultyStars.coerceIn(1, 3)) {
+            1 -> (safeBase * 3 + 1) / 2 // Easy: 50% more bounces, rounded up.
+            2 -> safeBase
+            else -> (safeBase * 7 / 10).coerceAtLeast(1) // Hard: 70% of the normal budget.
+        }
+    }
+
     /**
      * Rates a successful run while accounting for the unavoidable collisions needed
      * to clear the targets. Extra wall rebounds and repeated launches reduce the rating.
