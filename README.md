@@ -6,7 +6,8 @@
 
 - **50 levels across five worlds:** Neon Grid, Crimson Circuit, Azure Vault, Magenta Maze and Golden Core, with linear unlocking and local saves.
 - **Trajectory preview with ricochet prediction** while aiming; forecast segments highlight likely target, crate, and hazard collisions.
-- **Blade trail and hit particles** for clearer feedback on each impact.
+- **Bundled game art and UI:** menu and gameplay backgrounds, title/logo, animated blade sprites, drone/turret/slime sprites, portal/switch/crate art, button icons, banners and impact/combo effects.
+- **Soundtrack and SFX:** looping menu/gameplay/victory/game-over music plus sampled blade, ricochet, enemy, crate, switch, portal, combo, timer, power-up and UI sounds. The Sound setting controls music and effects.
 - **Three-star difficulty selection:** Easy gives 50% more bounces, Normal uses the level's default budget, and Hard gives 70% of that budget.
 - **Three-star level cards:** all three stars stay visible; earned stars are filled in and saved independently for each difficulty.
 - **Performance stars, timer, score and combos:** beat the star time target and clear every target or chain three hits for the top rating; a longer deadline still lets slower runs finish.
@@ -42,6 +43,10 @@ APK output:
 `app/build/outputs/apk/debug/app-debug.apk`
 
 The [GitHub Actions page](https://github.com/AngmarX-dev/Bounce-Blade/actions) contains the latest build runs and the downloadable debug APK artifact.
+
+## Art and audio assets
+
+The build includes the original repository-level `Images/` and `SoundTrack/` folders through the Android asset source sets. Do not rename these folders or the filenames referenced by `MainActivity.kt`. The provided `Images/App Icon & Logo/App Icon.png` is copied to generated `mipmap-nodpi/ic_launcher.png` during the Gradle build and is used as the installed app icon.
 
 ## Editing levels
 

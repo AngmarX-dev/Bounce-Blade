@@ -2,13 +2,18 @@ package com.angmarx.bounceblade
 
 import android.app.Activity
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PointF
 import android.graphics.RectF
+import android.media.AudioAttributes
 import android.media.AudioManager
+import android.media.MediaPlayer
+import android.media.SoundPool
 import android.media.ToneGenerator
 import android.os.Bundle
 import android.view.HapticFeedbackConstants
@@ -48,8 +53,16 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
-        if (::gameView.isInitialized) gameView.pauseIfPlaying()
+        if (::gameView.isInitialized) {
+            gameView.pauseIfPlaying()
+            gameView.pauseAudioForLifecycle()
+        }
         super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::gameView.isInitialized) gameView.resumeAudioForLifecycle()
     }
 }
 
@@ -105,7 +118,55 @@ private class GameView(context: Context) : View(context) {
     private var muted = Color.rgb(94, 120, 150)
     private var grid = Color.rgb(22, 35, 58)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 28)
+    private val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 20)
+    private val soundPool = SoundPool.Builder()
+        .setMaxStreams(10)
+        .setAudioAttributes(AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_GAME)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build())
+        .build()
+    private val soundIds = mutableMapOf<String, Int>()
+    private val loadedSoundIds = mutableSetOf<Int>()
+    private val bitmapAssets = mutableMapOf<String, Bitmap>()
+    private val failedBitmapAssets = mutableSetOf<String>()
+    private var currentMusicPath: String? = null
+    private var musicPlayer: MediaPlayer? = null
+    private var musicPrepared = false
+    private var audioLifecyclePaused = false
+    private var musicPausedBySetting = false
+    private var ricochetVariant = 0
+    private var timerWarningPlayed = false
+    private var lastImpactX = 0f
+    private var lastImpactY = 0f
+    private var impactUntil = 0L
+    private val bladeSpinAsset = "Core Gameplay SFX/Blade Idle Spin.wav"
+    private var bladeLoopStreamId = 0
+    private val soundAssets = listOf(
+        bladeSpinAsset,
+        "Core Gameplay SFX/Blade Launch.wav",
+        "Core Gameplay SFX/Crate Break.wav",
+        "Core Gameplay SFX/Enemy Slice (Variation 1).wav",
+        "Core Gameplay SFX/Enemy Slice (Variation 2).wav",
+        "Core Gameplay SFX/Level Complete.wav",
+        "Core Gameplay SFX/Level Fail - Death.wav",
+        "Core Gameplay SFX/Portal Enter.wav",
+        "Core Gameplay SFX/Switch Activation.wav",
+        "Core Gameplay SFX/Wall Ricochet (Variation 1).wav",
+        "Core Gameplay SFX/Wall Ricochet (Variation 2).wav",
+        "Core Gameplay SFX/Wall Ricochet (Variation 3).wav",
+        "Optional - Extra Sounds/Blade Stuck.wav",
+        "Optional - Extra Sounds/Power-Up Collect.wav",
+        "Optional - Extra Sounds/Shield Break.wav",
+        "Optional - Extra Sounds/Teleport - Warp.wav",
+        "UI & Feedback SFX/Button Back.wav",
+        "UI & Feedback SFX/Button Click.wav",
+        "UI & Feedback SFX/Combo - Streak.wav",
+        "UI & Feedback SFX/Pause.wav",
+        "UI & Feedback SFX/Star - Score Earned.wav",
+        "UI & Feedback SFX/Timer Warning.wav",
+        "UI & Feedback SFX/Unpause.wav"
+    )
     private val stars = (0 until 54).map { i ->
         PointN(((i * 73 + 19) % 997) / 997f, ((i * 151 + 41) % 991) / 991f)
     }
@@ -154,6 +215,10 @@ private class GameView(context: Context) : View(context) {
     private val particles = mutableListOf<Particle>()
 
     init {
+        soundPool.setOnLoadCompleteListener { _, sampleId, status ->
+            if (status == 0) loadedSoundIds.add(sampleId)
+        }
+        loadSoundAssets()
         applyTheme()
         loadLevel(1)
         screen = GameScreen.MENU
@@ -162,6 +227,7 @@ private class GameView(context: Context) : View(context) {
     }
 
     fun handleBack(): Boolean {
+        playSfx("UI & Feedback SFX/Button Back.wav")
         when (screen) {
             GameScreen.PLAYING -> screen = GameScreen.PAUSED
             GameScreen.PAUSED, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY -> screen = GameScreen.MENU
@@ -191,7 +257,13 @@ private class GameView(context: Context) : View(context) {
     }
 
     override fun onDetachedFromWindow() {
+        stopBladeIdleLoop()
+        musicPlayer?.release()
+        musicPlayer = null
+        soundPool.release()
         tone.release()
+        bitmapAssets.values.forEach { bitmap -> if (!bitmap.isRecycled) bitmap.recycle() }
+        bitmapAssets.clear()
         super.onDetachedFromWindow()
     }
 
@@ -200,6 +272,8 @@ private class GameView(context: Context) : View(context) {
         viewW = width.toFloat().coerceAtLeast(1f)
         viewH = height.toFloat().coerceAtLeast(1f)
         advanceFrame()
+        updateMusicForScreen()
+        updateBladeIdleLoop()
         drawBackground(canvas)
         when (screen) {
             GameScreen.MENU -> drawMenu(canvas)
@@ -230,9 +304,9 @@ private class GameView(context: Context) : View(context) {
             }
             GameScreen.CAMPAIGN_COMPLETE -> {
                 drawMenuBackdrop(canvas)
-                drawText(canvas, "CAMPAIGN", 0.5f, 0.31f, 0.075f, cyan, Paint.Align.CENTER)
-                drawText(canvas, "COMPLETE", 0.5f, 0.40f, 0.075f, gold, Paint.Align.CENTER)
-                drawText(canvas, "You conquered all five worlds.", 0.5f, 0.46f, 0.024f, Color.WHITE, Paint.Align.CENTER)
+                drawAsset(canvas, "Backgrounds & Environments/Victory Background.png", RectF(0f, 0f, viewW, viewH), 238)
+                drawAsset(canvas, "Banners & Text/Victory Banner.png", RectF(viewW * 0.12f, viewH * 0.27f, viewW * 0.88f, viewH * 0.43f), 255)
+                drawText(canvas, "You conquered all five worlds.", 0.5f, 0.48f, 0.024f, Color.WHITE, Paint.Align.CENTER)
                 drawButton(canvas, 0.20f, 0.57f, 0.80f, 0.66f, "PLAY AGAIN", cyan)
                 drawButton(canvas, 0.20f, 0.69f, 0.80f, 0.78f, "LEVEL SELECT", gold)
             }
@@ -250,6 +324,11 @@ private class GameView(context: Context) : View(context) {
             comboWindow = (comboWindow - rawDt).coerceAtLeast(0f)
             if (comboWindow <= 0f) comboCount = 0
             teleportCooldown = (teleportCooldown - rawDt).coerceAtLeast(0f)
+            val timeLeft = GameRules.timeLimitSeconds(levelId, difficulty) - levelElapsedSeconds
+            if (timeLeft <= 5f && timeLeft > 0f && !timerWarningPlayed) {
+                timerWarningPlayed = true
+                playSfx("UI & Feedback SFX/Timer Warning.wav", ToneGenerator.TONE_PROP_BEEP)
+            }
             if (levelElapsedSeconds > GameRules.timeLimitSeconds(levelId, difficulty)) { fail("TIME UP"); return }
             updateTurrets(rawDt)
             updateTurretProjectiles(rawDt)
@@ -316,8 +395,9 @@ private class GameView(context: Context) : View(context) {
         comboCount = if (comboWindow > 0f) comboCount + 1 else 1
         comboWindow = 2.25f; bestCombo = max(bestCombo, comboCount)
         score += points * comboCount
+        lastImpactX = x; lastImpactY = y; impactUntil = System.nanoTime() + 320_000_000L
         addBurst(x, y, color, if (comboCount >= 3) 20 else 13)
-        if (comboCount >= 2) showMessage("COMBO x" + comboCount)
+        if (comboCount >= 2) { showMessage("COMBO x" + comboCount); playSfx("UI & Feedback SFX/Combo - Streak.wav") }
     }
 
     private fun enemyKindForLevel(id: Int): Int = when (id) {
@@ -371,13 +451,13 @@ private class GameView(context: Context) : View(context) {
                         val dest = level.hazards.withIndex().firstOrNull { it.index != hazardIndex && it.value.type == "teleporter" }
                         if (dest != null) {
                             px = dest.value.x * viewW; py = dest.value.y * viewH; teleportCooldown = 0.85f
-                            addBurst(px, py, cyan, 16); showMessage("WARP!"); playTone(ToneGenerator.TONE_PROP_ACK); break
+                            addBurst(px, py, cyan, 16); showMessage("WARP!"); playSfx("Optional - Extra Sounds/Teleport - Warp.wav"); break
                         }
                     }
                 }
                 "power_up" -> if (collectedPowerUps.add(hazardIndex)) {
                     bouncesLeft += 2; score += 250; addBurst(hx, hy, gold, 18)
-                    showMessage("POWER-UP +2 BOUNCES"); playTone(ToneGenerator.TONE_PROP_ACK)
+                    showMessage("POWER-UP +2 BOUNCES"); playSfx("Optional - Extra Sounds/Power-Up Collect.wav")
                 }
                 else -> { fail("You hit a hazard."); return }
             }
@@ -409,7 +489,7 @@ private class GameView(context: Context) : View(context) {
         if (bounced) {
             useBounce()
             addBurst(px, py, cyan, 8)
-            playTone(ToneGenerator.TONE_PROP_BEEP)
+            playNextRicochet()
             if (screen != GameScreen.PLAYING) return
         }
 
@@ -429,13 +509,14 @@ private class GameView(context: Context) : View(context) {
                         showMessage("SLIME SPLIT")
                     }
                     registerTargetHit(if (enemy.kind == 3) 160 else 100, ex, ey, pink)
+                    playSfx(if (index % 2 == 0) "Core Gameplay SFX/Enemy Slice (Variation 1).wav" else "Core Gameplay SFX/Enemy Slice (Variation 2).wav")
                 } else {
                     score += 50; addBurst(ex, ey, gold, 10)
                     showMessage(if (levelId == 50 && index == 0) "BOSS SHIELD DAMAGED" else "SHIELD BREAK")
-                    playTone(ToneGenerator.TONE_PROP_ACK)
+                    playSfx("Optional - Extra Sounds/Shield Break.wav")
                 }
                 reflectFrom(dx, dy); velocityX *= 0.90f; velocityY *= 0.90f
-                useBounce(); playTone(ToneGenerator.TONE_PROP_ACK); haptic()
+                useBounce(); haptic()
                 if (screen != GameScreen.PLAYING) return
             }
         }
@@ -447,7 +528,7 @@ private class GameView(context: Context) : View(context) {
                 crate.alive=false
                 if (abs(px-cx)>abs(py-cy)) { velocityX=-velocityX*0.86f; velocityY*=0.94f }
                 else { velocityY=-velocityY*0.86f; velocityX*=0.94f }
-                registerTargetHit(75,cx,cy,gold); useBounce(); playTone(ToneGenerator.TONE_PROP_ACK); haptic()
+                registerTargetHit(75,cx,cy,gold); useBounce(); playSfx("Core Gameplay SFX/Crate Break.wav"); haptic()
                 if (screen != GameScreen.PLAYING) return
             }
         }
@@ -461,7 +542,7 @@ private class GameView(context: Context) : View(context) {
             velocityX *= 0.96f
             velocityY *= 0.96f
             showMessage("SWITCH ACTIVATED")
-            playTone(ToneGenerator.TONE_PROP_ACK)
+            playSfx("Core Gameplay SFX/Switch Activation.wav")
             haptic()
         }
 
@@ -471,6 +552,7 @@ private class GameView(context: Context) : View(context) {
         val exitRadius = minDim * 0.034f
         if (distanceSquared(px, py, ex, ey) < (radius + exitRadius) * (radius + exitRadius)) {
             if (exitReady) {
+                playSfx("Core Gameplay SFX/Portal Enter.wav")
                 completeLevel()
                 return
             } else {
@@ -528,7 +610,8 @@ private class GameView(context: Context) : View(context) {
                 totalBestStarsAfter(levelId, max(previousBest, earnedStars)))
             .apply()
         screen = if (levelId >= levels.size) GameScreen.CAMPAIGN_COMPLETE else GameScreen.WON
-        playTone(ToneGenerator.TONE_PROP_ACK)
+        playSfx("Core Gameplay SFX/Level Complete.wav")
+        if (earnedStars > previousBest) playSfx("UI & Feedback SFX/Star - Score Earned.wav")
         haptic()
     }
 
@@ -541,7 +624,7 @@ private class GameView(context: Context) : View(context) {
         message = reason
         screen = GameScreen.FAILED
         messageUntil = Long.MAX_VALUE
-        playTone(ToneGenerator.TONE_PROP_NACK)
+        playSfx(if (reason.contains("STUCK")) "Optional - Extra Sounds/Blade Stuck.wav" else "Core Gameplay SFX/Level Fail - Death.wav", ToneGenerator.TONE_PROP_NACK)
         haptic()
     }
 
@@ -573,6 +656,8 @@ private class GameView(context: Context) : View(context) {
         teleportCooldown = 0f
         collectedPowerUps.clear()
         turretProjectiles.clear()
+        timerWarningPlayed = false
+        impactUntil = 0L
         slowMeter = 1f
         flightTime = 0f
         particles.clear()
@@ -674,6 +759,154 @@ private class GameView(context: Context) : View(context) {
         if (forDifficulty == 2) "best_shots_" + id
         else "best_shots_" + id + "_difficulty_" + forDifficulty
 
+    private fun loadSoundAssets() {
+        for (path in soundAssets) {
+            try {
+                context.assets.openFd(path).use { descriptor -> soundIds[path] = soundPool.load(descriptor, 1) }
+            } catch (_: Exception) {
+                // A missing optional sample should never prevent the game from starting.
+            }
+        }
+    }
+
+    private fun bitmapAsset(path: String): Bitmap? {
+        bitmapAssets[path]?.let { return it }
+        if (path in failedBitmapAssets) return null
+        return try {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.assets.open(path).use { BitmapFactory.decodeStream(it, null, bounds) }
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) error("Invalid image: $path")
+            var sample = 1
+            while (max(bounds.outWidth, bounds.outHeight) / sample > 768) sample *= 2
+            val options = BitmapFactory.Options().apply {
+                inSampleSize = sample
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+            val bitmap = context.assets.open(path).use { BitmapFactory.decodeStream(it, null, options) }
+                ?: error("Could not decode image: $path")
+            bitmapAssets[path] = bitmap
+            bitmap
+        } catch (_: Exception) {
+            failedBitmapAssets.add(path)
+            null
+        }
+    }
+
+    private fun drawAsset(canvas: Canvas, path: String, rect: RectF, alpha: Int = 255) {
+        val bitmap = bitmapAsset(path) ?: return
+        val oldAlpha = paint.alpha
+        val oldFilter = paint.isFilterBitmap
+        val oldStyle = paint.style
+        paint.alpha = alpha.coerceIn(0, 255)
+        paint.isFilterBitmap = true
+        paint.style = Paint.Style.FILL
+        canvas.drawBitmap(bitmap, null, rect, paint)
+        paint.alpha = oldAlpha
+        paint.isFilterBitmap = oldFilter
+        paint.style = oldStyle
+    }
+
+    private fun drawAssetCentered(canvas: Canvas, path: String, x: Float, y: Float, size: Float, alpha: Int = 255) {
+        drawAsset(canvas, path, RectF(x - size / 2f, y - size / 2f, x + size / 2f, y + size / 2f), alpha)
+    }
+
+    private fun playTone(toneType: Int) {
+        if (soundEnabled) try { tone.startTone(toneType, 65) } catch (_: RuntimeException) { }
+    }
+
+    private fun playSfx(path: String, fallbackTone: Int = ToneGenerator.TONE_PROP_ACK) {
+        if (!soundEnabled || audioLifecyclePaused) return
+        val sampleId = soundIds[path]
+        if (sampleId == null || sampleId !in loadedSoundIds) {
+            playTone(fallbackTone)
+            return
+        }
+        if (soundPool.play(sampleId, 0.92f, 0.92f, 1, 0, 1f) == 0) playTone(fallbackTone)
+    }
+
+    private fun playNextRicochet() {
+        ricochetVariant = (ricochetVariant % 3) + 1
+        playSfx("Core Gameplay SFX/Wall Ricochet (Variation $ricochetVariant).wav", ToneGenerator.TONE_PROP_BEEP)
+    }
+
+    fun pauseAudioForLifecycle() {
+        audioLifecyclePaused = true
+        musicPausedBySetting = true
+        if (musicPrepared) try { musicPlayer?.pause() } catch (_: IllegalStateException) { }
+        stopBladeIdleLoop()
+    }
+
+    fun resumeAudioForLifecycle() {
+        audioLifecyclePaused = false
+        invalidate()
+    }
+
+    private fun updateMusicForScreen() {
+        val target = when (screen) {
+            GameScreen.MENU, GameScreen.WORLDS, GameScreen.LEVELS, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY ->
+                "Music & Ambience/Main Menu Theme.wav"
+            GameScreen.PLAYING, GameScreen.PAUSED -> "Music & Ambience/Gameplay Background.wav"
+            GameScreen.WON, GameScreen.CAMPAIGN_COMPLETE -> "Music & Ambience/Victory Theme.wav"
+            GameScreen.FAILED -> "Music & Ambience/Game Over Theme.wav"
+        }
+        if (!soundEnabled || audioLifecyclePaused) {
+            if (musicPrepared) try { musicPlayer?.pause() } catch (_: IllegalStateException) { }
+            musicPausedBySetting = true
+            return
+        }
+        if (target == currentMusicPath) {
+            if (musicPrepared && musicPausedBySetting) {
+                try { musicPlayer?.start(); musicPausedBySetting = false } catch (_: IllegalStateException) { }
+            }
+            return
+        }
+        musicPlayer?.release()
+        musicPlayer = null
+        currentMusicPath = target
+        musicPrepared = false
+        musicPausedBySetting = false
+        try {
+            val player = MediaPlayer()
+            musicPlayer = player
+            context.assets.openFd(target).use { descriptor ->
+                player.setDataSource(descriptor.fileDescriptor, descriptor.startOffset, descriptor.length)
+            }
+            player.isLooping = true
+            player.setVolume(0.34f, 0.34f)
+            player.setOnPreparedListener { prepared ->
+                if (currentMusicPath == target) {
+                    musicPrepared = true
+                    if (soundEnabled && !audioLifecyclePaused) prepared.start() else musicPausedBySetting = true
+                }
+            }
+            player.setOnErrorListener { failed, _, _ ->
+                if (currentMusicPath == target) {
+                    failed.release(); musicPlayer = null; currentMusicPath = null; musicPrepared = false
+                }
+                true
+            }
+            player.prepareAsync()
+        } catch (_: Exception) {
+            musicPlayer?.release(); musicPlayer = null; currentMusicPath = null; musicPrepared = false
+        }
+    }
+
+    private fun updateBladeIdleLoop() {
+        val shouldLoop = screen == GameScreen.PLAYING && !flying && soundEnabled && !audioLifecyclePaused
+        if (!shouldLoop) { stopBladeIdleLoop(); return }
+        if (bladeLoopStreamId != 0) return
+        val sampleId = soundIds[bladeSpinAsset] ?: return
+        if (sampleId !in loadedSoundIds) return
+        bladeLoopStreamId = soundPool.play(sampleId, 0.16f, 0.16f, 0, -1, 1f)
+    }
+
+    private fun stopBladeIdleLoop() {
+        if (bladeLoopStreamId != 0) {
+            try { soundPool.stop(bladeLoopStreamId) } catch (_: RuntimeException) { }
+            bladeLoopStreamId = 0
+        }
+    }
+
     private fun drawBackground(canvas: Canvas) {
         canvas.drawColor(dark)
         paint.style = Paint.Style.FILL
@@ -684,40 +917,25 @@ private class GameView(context: Context) : View(context) {
         paint.color = grid
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(1f, density * 0.6f)
-        for (i in 1..5) {
-            val x = viewW * i / 6f
-            canvas.drawLine(x, viewH * 0.02f, x, viewH * 0.98f, paint)
-        }
-        for (i in 1..12) {
-            val y = viewH * i / 13f
-            canvas.drawLine(viewW * 0.02f, y, viewW * 0.98f, y, paint)
-        }
+        for (i in 1..5) canvas.drawLine(viewW * i / 6f, viewH * 0.02f, viewW * i / 6f, viewH * 0.98f, paint)
+        for (i in 1..12) canvas.drawLine(viewW * 0.02f, viewH * i / 13f, viewW * 0.98f, viewH * i / 13f, paint)
         paint.style = Paint.Style.FILL
     }
 
     private fun drawMenuBackdrop(canvas: Canvas) {
         drawBackground(canvas)
-        val cx = viewW * 0.5f
-        val cy = viewH * 0.21f
-        val r = minDim * 0.09f
-        paint.color = cyan
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = max(2f, density * 2f)
-        paint.setShadowLayer(density * 22f, 0f, 0f, cyan)
-        canvas.drawCircle(cx, cy, r, paint)
-        paint.clearShadowLayer()
-        canvas.save()
-        canvas.rotate(-35f, cx, cy)
-        drawBladeAt(canvas, cx, cy, r * 1.45f)
-        canvas.restore()
+        val image = if (screen == GameScreen.MENU) "UI Elements/Main Menu Background.png"
+            else "Backgrounds & Environments/Menu Background.png"
+        drawAsset(canvas, image, RectF(0f, 0f, viewW, viewH), 235)
         paint.style = Paint.Style.FILL
+        paint.color = Color.argb(62, 3, 6, 18)
+        canvas.drawRect(0f, 0f, viewW, viewH, paint)
     }
 
     private fun drawMenu(canvas: Canvas) {
         drawMenuBackdrop(canvas)
-        drawText(canvas, "BOUNCE", 0.5f, 0.35f, 0.095f, Color.WHITE, Paint.Align.CENTER)
-        drawText(canvas, "BLADE", 0.5f, 0.43f, 0.095f, cyan, Paint.Align.CENTER)
-        drawText(canvas, "AIM  •  RICOCHET  •  ESCAPE", 0.5f, 0.475f, 0.022f, muted, Paint.Align.CENTER)
+        drawAsset(canvas, "App Icon & Logo/Game Logo.png", RectF(viewW * 0.16f, viewH * 0.13f, viewW * 0.84f, viewH * 0.29f), 255)
+        drawText(canvas, "AIM  •  RICOCHET  •  ESCAPE", 0.5f, 0.465f, 0.022f, muted, Paint.Align.CENTER)
         drawButton(canvas, 0.18f, 0.52f, 0.82f, 0.585f, "PLAY CAMPAIGN", cyan)
         drawButton(canvas, 0.18f, 0.595f, 0.82f, 0.66f, "LEVEL SELECT", gold)
         drawButton(canvas, 0.18f, 0.67f, 0.82f, 0.735f, "HELP", pink)
@@ -728,7 +946,6 @@ private class GameView(context: Context) : View(context) {
             0.5f, 0.88f, 0.019f, muted, Paint.Align.CENTER)
         drawText(canvas, "DRAG BACK TO LAUNCH  •  TWO FINGERS TO SLOW TIME", 0.5f, 0.925f, 0.014f, muted, Paint.Align.CENTER)
     }
-
     private fun drawWorldSelect(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         drawText(canvas,"CHOOSE YOUR WORLD",0.5f,0.285f,0.058f,Color.WHITE,Paint.Align.CENTER)
@@ -772,8 +989,12 @@ private class GameView(context: Context) : View(context) {
         val timeLeft=GameRules.timeLimitSeconds(levelId,difficulty)-levelElapsedSeconds
         drawText(canvas,"SCORE "+score,0.07f,0.092f,0.018f,gold)
         drawText(canvas,"TIME "+formatTime(timeLeft),0.47f,0.092f,0.018f,if(levelElapsedSeconds<=GameRules.targetTimeSeconds(levelId,difficulty)) cyan else pink,Paint.Align.CENTER)
+        drawAsset(canvas, "UI Elements/Timer Icon.png", RectF(viewW * 0.365f, viewH * 0.077f, viewW * 0.405f, viewH * 0.11f), 240)
         drawText(canvas,"COMBO x"+comboCount,0.80f,0.092f,0.018f,pink,Paint.Align.RIGHT)
+        drawAsset(canvas, "UI Elements/Combo Icon.png", RectF(viewW * 0.815f, viewH * 0.077f, viewW * 0.855f, viewH * 0.11f), 240)
         val rect = RectF(viewW * 0.05f, viewH * 0.13f, viewW * 0.95f, viewH * 0.94f)
+        drawAsset(canvas, "Backgrounds & Environments/Gameplay Background.png", rect, 220)
+        drawAsset(canvas, "UI Elements/UI Panel.png", RectF(viewW * 0.03f, viewH * 0.012f, viewW * 0.97f, viewH * 0.125f), 105)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(2f, density * 2f)
         paint.color = cyan
@@ -793,12 +1014,22 @@ private class GameView(context: Context) : View(context) {
         for((index,enemy) in enemies.withIndex()) if(enemy.alive) drawEnemy(canvas,enemy,index)
         drawBladeTrail(canvas)
         drawParticles(canvas)
+        val nowNanos = System.nanoTime()
+        if (nowNanos < impactUntil) {
+            val alpha = ((impactUntil - nowNanos) * 255L / 320_000_000L).toInt().coerceIn(0, 255)
+            drawAssetCentered(canvas, "Effects & Particles/Explosion.png", lastImpactX, lastImpactY, minDim * 0.11f, alpha)
+        }
+        if (comboCount >= 2 && comboWindow > 0f) {
+            drawAsset(canvas, "Effects & Particles/Combo Text.png", RectF(viewW * 0.34f, viewH * 0.82f, viewW * 0.66f, viewH * 0.89f), 240)
+        }
         if (aiming && !flying) drawAim(canvas)
         val bladePx = bladeX * viewW
         val bladePy = bladeY * viewH
         canvas.save()
         canvas.rotate(angle, bladePx, bladePy)
-        drawBladeAt(canvas, bladePx, bladePy, minDim * 0.033f)
+        val bladeSize = minDim * 0.078f
+        drawAsset(canvas, if (flying) "Gameplay Sprites/Blade.png" else "Gameplay Sprites/Blade Idle.png",
+            RectF(bladePx - bladeSize / 2f, bladePy - bladeSize / 2f, bladePx + bladeSize / 2f, bladePy + bladeSize / 2f), 255)
         canvas.restore()
 
         val targetsLeft = enemies.count { it.alive } + crates.count { it.alive }
@@ -825,8 +1056,8 @@ private class GameView(context: Context) : View(context) {
             val c=hazardCenter(hazard,index);val x=c.x*viewW;val y=c.y*viewH
             val hw=hazard.width*viewW/2f;val h=max(hazard.height*viewH,minDim*0.018f)
             when(hazard.type){
-                "teleporter"->{paint.style=Paint.Style.STROKE;paint.strokeWidth=max(2f,density*2f);paint.color=cyan;paint.setShadowLayer(density*10f,0f,0f,cyan);canvas.drawCircle(x,y,max(minDim*0.025f,hw),paint);canvas.drawCircle(x,y,max(minDim*0.014f,hw*0.55f),paint);paint.clearShadowLayer()}
-                "power_up"->{paint.style=Paint.Style.FILL;paint.color=gold;paint.setShadowLayer(density*9f,0f,0f,gold);val p=Path();p.moveTo(x,y-h);p.lineTo(x+hw,y);p.lineTo(x,y+h);p.lineTo(x-hw,y);p.close();canvas.drawPath(p,paint);paint.clearShadowLayer();paint.color=dark;paint.textSize=minDim*0.018f;paint.textAlign=Paint.Align.CENTER;canvas.drawText("+",x,y+paint.textSize*0.35f,paint)}
+                "teleporter"->{paint.style=Paint.Style.STROKE;paint.strokeWidth=max(2f,density*2f);paint.color=cyan;paint.setShadowLayer(density*10f,0f,0f,cyan);canvas.drawCircle(x,y,max(minDim*0.025f,hw),paint);canvas.drawCircle(x,y,max(minDim*0.014f,hw*0.55f),paint);paint.clearShadowLayer();drawAssetCentered(canvas,"Gameplay Sprites/Portal.png",x,y,max(minDim*0.075f,hw*2.0f))}
+                "power_up"->{paint.style=Paint.Style.FILL;paint.color=gold;paint.setShadowLayer(density*9f,0f,0f,gold);canvas.drawCircle(x,y,max(h,hw)*1.18f,paint);paint.clearShadowLayer();drawAssetCentered(canvas,"UI Elements/Star Icon.png",x,y,max(h,hw)*2.2f)}
                 else->{paint.style=Paint.Style.FILL;paint.color=when(hazard.type){"sticky_wall"->Color.rgb(95,48,145);"moving_hazard"->Color.rgb(80,65,22);else->Color.rgb(80,22,51)};canvas.drawRoundRect(x-hw,y-h/2f,x+hw,y+h/2f,density*4f,density*4f,paint);paint.style=Paint.Style.STROKE;paint.color=when(hazard.type){"sticky_wall"->Color.rgb(190,105,255);"moving_hazard"->gold;else->pink};paint.strokeWidth=density*when(hazard.type){"laser"->3.5f;"sticky_wall"->4f;else->3f};paint.setShadowLayer(density*7f,0f,0f,paint.color);canvas.drawLine(x-hw,y,x+hw,y,paint);paint.clearShadowLayer();if(hazard.type.contains("spike")){paint.style=Paint.Style.FILL;paint.color=pink;val count=max(4,(hazard.width*22f).toInt());for(i in 0 until count){val sx=x-hw+2f*hw*i/count;val nx=min(x+hw,sx+max(density*6f,2f*hw/count));val p=Path();p.moveTo(sx,y+h/2f);p.lineTo((sx+nx)/2f,y-h/2f);p.lineTo(nx,y+h/2f);p.close();canvas.drawPath(p,paint)}}else if(hazard.type=="moving_hazard"){paint.style=Paint.Style.FILL;paint.color=gold;canvas.drawCircle(x,y,density*5f,paint)}}
             }
         }
@@ -842,13 +1073,11 @@ private class GameView(context: Context) : View(context) {
         paint.color = if (switchActivated) cyan else gold
         paint.setShadowLayer(density * 10f, 0f, 0f, paint.color)
         canvas.drawCircle(x, y, radius, paint)
-        canvas.drawCircle(x, y, radius * 0.56f, paint)
         paint.clearShadowLayer()
-        paint.style = Paint.Style.FILL
-        paint.color = if (switchActivated) cyan else gold
-        canvas.drawCircle(x, y, radius * 0.18f, paint)
+        drawAssetCentered(canvas, "Gameplay Sprites/Switch.png", x, y, radius * 2.25f)
         drawText(canvas, if (switchActivated) "ON" else "SWITCH", x / viewW, (y + radius + density * 15f) / viewH,
-            0.015f, paint.color, Paint.Align.CENTER)
+            0.015f, if (switchActivated) cyan else gold, Paint.Align.CENTER)
+        paint.style = Paint.Style.FILL
     }
 
     private fun drawExit(canvas: Canvas) {
@@ -860,43 +1089,40 @@ private class GameView(context: Context) : View(context) {
         paint.color = if (ready) cyan else muted
         paint.setShadowLayer(if (ready) density * 15f else density * 3f, 0f, 0f, paint.color)
         canvas.drawOval(x - minDim * 0.038f, y - minDim * 0.052f, x + minDim * 0.038f, y + minDim * 0.052f, paint)
-        canvas.drawOval(x - minDim * 0.020f, y - minDim * 0.036f, x + minDim * 0.020f, y + minDim * 0.036f, paint)
         paint.clearShadowLayer()
+        drawAssetCentered(canvas, "Gameplay Sprites/Portal.png", x, y, minDim * 0.12f, if (ready) 255 else 150)
         drawText(canvas, if (ready) "EXIT" else "LOCKED", x / viewW, (y + minDim * 0.065f) / viewH, 0.014f,
             if (ready) cyan else muted, Paint.Align.CENTER)
         paint.style = Paint.Style.FILL
     }
 
     private fun drawEnemy(canvas: Canvas, enemy: EnemyState, index: Int) {
-        val c=enemyCenter(enemy,index);val x=c.x*viewW;val y=c.y*viewH
-        val r=minDim*when(enemy.kind){1->0.031f;2->if(enemy.canSplit)0.030f else 0.018f;3->0.047f;else->0.026f}
-        val col=if(enemy.kind==3&&enemy.health>1)gold else pink
-        paint.style=Paint.Style.FILL;paint.color=col;paint.setShadowLayer(density*10f,0f,0f,col)
-        when(enemy.kind){
-            1->{canvas.drawRoundRect(x-r*0.9f,y-r*0.75f,x+r*0.9f,y+r*0.75f,density*4f,density*4f,paint);canvas.save();canvas.rotate(sin(animationTime*1.4f+index)*25f,x,y);canvas.drawRoundRect(x-r*0.12f,y-r*1.65f,x+r*0.12f,y-r*0.30f,density*3f,density*3f,paint);canvas.restore()}
-            2->{canvas.drawCircle(x-r*0.45f,y+r*0.1f,r*0.6f,paint);canvas.drawCircle(x+r*0.43f,y+r*0.1f,r*0.62f,paint);canvas.drawCircle(x,y-r*0.06f,r*0.91f,paint)}
-            else->canvas.drawCircle(x,y,r,paint)
+        val c = enemyCenter(enemy, index)
+        val x = c.x * viewW; val y = c.y * viewH
+        val r = minDim * when (enemy.kind) { 1 -> 0.033f; 2 -> if (enemy.canSplit) 0.031f else 0.020f; 3 -> 0.052f; else -> 0.030f }
+        val path = when (enemy.kind) {
+            1 -> "Gameplay Sprites/Enemy Turret.png"
+            2 -> "Gameplay Sprites/Enemy Slime.png"
+            3 -> "Gameplay Sprites/Enemy Turret.png"
+            else -> "Gameplay Sprites/Enemy Drone.png"
         }
-        paint.clearShadowLayer();paint.color=dark;canvas.drawCircle(x-r*0.30f,y-r*0.12f,max(2f,r*0.14f),paint);canvas.drawCircle(x+r*0.30f,y-r*0.12f,max(2f,r*0.14f),paint)
-        if(enemy.kind==3){paint.style=Paint.Style.STROKE;paint.strokeWidth=max(2f,density*2f);paint.color=cyan;canvas.drawCircle(x,y,r*1.18f,paint);paint.style=Paint.Style.FILL;if(enemy.health>1)drawText(canvas,enemy.health.toString(),x/viewW,(y+r*1.6f)/viewH,0.016f,gold,Paint.Align.CENTER)}
-        paint.style=Paint.Style.FILL
+        val drawSize = if (enemy.kind == 3) r * 3.2f else r * 2.35f
+        if (enemy.kind == 3) {
+            paint.style = Paint.Style.STROKE; paint.strokeWidth = max(2f, density * 2f); paint.color = if (enemy.health > 1) gold else cyan
+            paint.setShadowLayer(density * 9f, 0f, 0f, paint.color)
+            canvas.drawCircle(x, y, drawSize * 0.61f, paint)
+            paint.clearShadowLayer()
+        }
+        drawAssetCentered(canvas, path, x, y, drawSize)
+        if (enemy.kind == 3 && enemy.health > 1) drawText(canvas, enemy.health.toString(), x / viewW,
+            (y + drawSize * 0.63f) / viewH, 0.017f, gold, Paint.Align.CENTER)
+        paint.style = Paint.Style.FILL
     }
 
     private fun drawCrate(canvas: Canvas, crate: CrateState) {
-        val x = crate.x * viewW
-        val y = crate.y * viewH
+        val x = crate.x * viewW; val y = crate.y * viewH
         val r = minDim * 0.034f
-        val rect = RectF(x - r, y - r, x + r, y + r)
-        paint.style = Paint.Style.FILL
-        paint.color = Color.rgb(48, 37, 25)
-        canvas.drawRoundRect(rect, density * 3f, density * 3f, paint)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = max(2f, density * 2f)
-        paint.color = gold
-        canvas.drawRoundRect(rect, density * 3f, density * 3f, paint)
-        canvas.drawLine(rect.left + r * 0.25f, rect.top + r * 0.25f, rect.right - r * 0.25f, rect.bottom - r * 0.25f, paint)
-        canvas.drawLine(rect.right - r * 0.25f, rect.top + r * 0.25f, rect.left + r * 0.25f, rect.bottom - r * 0.25f, paint)
-        paint.style = Paint.Style.FILL
+        drawAsset(canvas, "Gameplay Sprites/Crate.png", RectF(x - r * 1.18f, y - r * 1.18f, x + r * 1.18f, y + r * 1.18f), 255)
     }
 
     private fun drawBladeAt(canvas: Canvas, x: Float, y: Float, radius: Float) {
@@ -1041,17 +1267,23 @@ private class GameView(context: Context) : View(context) {
     }
 
     private fun drawOverlay(canvas: Canvas, title: String, subtitle: String) {
+        if (screen == GameScreen.WON) drawAsset(canvas, "Backgrounds & Environments/Victory Background.png", RectF(0f, 0f, viewW, viewH), 238)
+        else if (screen == GameScreen.FAILED) drawAsset(canvas, "Backgrounds & Environments/Game Over Background.png", RectF(0f, 0f, viewW, viewH), 238)
         paint.style = Paint.Style.FILL
         paint.color = Color.argb(228, 3, 6, 18)
-        canvas.drawRoundRect(viewW * 0.08f, viewH * 0.30f, viewW * 0.92f, viewH * 0.75f,
-            density * 18f, density * 18f, paint)
-        drawText(canvas, title, 0.5f, 0.365f, 0.046f, if (title.contains("CLEAR")) cyan else pink, Paint.Align.CENTER)
-        drawText(canvas, subtitle, 0.5f, 0.405f, 0.018f, Color.WHITE, Paint.Align.CENTER)
+        canvas.drawRoundRect(viewW * 0.08f, viewH * 0.30f, viewW * 0.92f, viewH * 0.75f, density * 18f, density * 18f, paint)
+        when (screen) {
+            GameScreen.WON -> drawAsset(canvas, "Banners & Text/Level Complete Banner.png", RectF(viewW * 0.20f, viewH * 0.315f, viewW * 0.80f, viewH * 0.395f), 255)
+            GameScreen.FAILED -> drawAsset(canvas, "Banners & Text/Game Over Banner.png", RectF(viewW * 0.20f, viewH * 0.315f, viewW * 0.80f, viewH * 0.395f), 255)
+            else -> drawText(canvas, title, 0.5f, 0.365f, 0.046f, if (title.contains("CLEAR")) cyan else pink, Paint.Align.CENTER)
+        }
+        drawText(canvas, subtitle, 0.5f, 0.415f, 0.018f, Color.WHITE, Paint.Align.CENTER)
         if (screen == GameScreen.WON) {
-            drawText(canvas,"★".repeat(earnedStars)+"☆".repeat(3-earnedStars),0.5f,0.455f,0.050f,gold,Paint.Align.CENTER)
-            drawText(canvas,"SCORE "+score+" • TIME "+formatTime(levelElapsedSeconds)+" • BEST COMBO x"+bestCombo,0.5f,0.482f,0.014f,muted,Paint.Align.CENTER)
-            val bestShots=prefs.getInt(bestShotsKey(levelId),shotsUsed)
-            drawText(canvas,"BEST: "+prefs.getInt(bestStarsKey(levelId),earnedStars)+"/3 STARS • FEWEST SHOTS: "+bestShots,0.5f,0.502f,0.013f,muted,Paint.Align.CENTER)
+            drawAssetCentered(canvas, "UI Elements/Star Icon.png", viewW * 0.35f, viewH * 0.465f, minDim * 0.04f)
+            drawText(canvas, "★".repeat(earnedStars) + "☆".repeat(3 - earnedStars), 0.5f, 0.465f, 0.050f, gold, Paint.Align.CENTER)
+            drawText(canvas, "SCORE " + score + " • TIME " + formatTime(levelElapsedSeconds) + " • BEST COMBO x" + bestCombo, 0.5f, 0.490f, 0.014f, muted, Paint.Align.CENTER)
+            val bestShots = prefs.getInt(bestShotsKey(levelId), shotsUsed)
+            drawText(canvas, "BEST: " + prefs.getInt(bestStarsKey(levelId), earnedStars) + "/3 STARS • FEWEST SHOTS: " + bestShots, 0.5f, 0.510f, 0.013f, muted, Paint.Align.CENTER)
         }
     }
 
@@ -1123,8 +1355,9 @@ private class GameView(context: Context) : View(context) {
     ) {
         val rect = RectF(left * viewW, top * viewH, right * viewW, bottom * viewH)
         paint.style = Paint.Style.FILL
-        paint.color = if (enabled) Color.argb(218, 12, 23, 42) else Color.argb(145, 15, 21, 34)
+        paint.color = if (enabled) Color.argb(142, 12, 23, 42) else Color.argb(100, 15, 21, 34)
         canvas.drawRoundRect(rect, density * 11f, density * 11f, paint)
+        drawAsset(canvas, "UI Elements/Button.png", rect, if (enabled) 155 else 90)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(1.5f, density * 1.5f)
         paint.color = if (enabled) color else muted
@@ -1132,7 +1365,22 @@ private class GameView(context: Context) : View(context) {
         canvas.drawRoundRect(rect, density * 11f, density * 11f, paint)
         paint.clearShadowLayer()
         paint.style = Paint.Style.FILL
-        drawText(canvas, label, (left + right) / 2f, (top + bottom) / 2f + 0.010f,
+        val iconPath = when {
+            label == "Ⅱ" -> "UI Elements/Pause Icon.png"
+            label.contains("BACK") -> "UI Elements/Back Icon.png"
+            label.startsWith("PLAY") || label == "RESUME" || label.startsWith("NEXT LEVEL") -> "UI Elements/Play Icon.png"
+            label.startsWith("RESTART") || label == "RETRY" -> "UI Elements/Restart Icon.png"
+            label.contains("LEVEL SELECT") || label == "MAIN MENU" -> "UI Elements/Home Icon.png"
+            else -> null
+        }
+        if (iconPath != null) {
+            val iconSize = min(rect.height() * 0.56f, minDim * 0.042f)
+            val iconX = if (label == "Ⅱ") rect.centerX() else rect.left + iconSize * 0.82f
+            drawAssetCentered(canvas, iconPath, iconX, rect.centerY(), iconSize, if (enabled) 255 else 120)
+            if (label == "Ⅱ") return
+        }
+        val shift = if (iconPath == null) 0f else minDim * 0.018f
+        drawText(canvas, label, (left + right) / 2f + shift / viewW, (top + bottom) / 2f + 0.010f,
             if (label.length > 18) 0.019f else 0.024f, if (enabled) color else muted, Paint.Align.CENTER)
     }
 
@@ -1170,16 +1418,6 @@ private class GameView(context: Context) : View(context) {
         messageUntil = System.nanoTime() + 1_800_000_000L
     }
 
-    private fun playTone(toneType: Int) {
-        if (soundEnabled) {
-            try {
-                tone.startTone(toneType, 65)
-            } catch (_: RuntimeException) {
-                // Audio feedback is optional on devices without an available tone stream.
-            }
-        }
-    }
-
     private fun haptic() {
         if (vibrationEnabled) performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
     }
@@ -1199,6 +1437,7 @@ private class GameView(context: Context) : View(context) {
                 return true
             }
             MotionEvent.ACTION_DOWN -> {
+                if (screen != GameScreen.PLAYING) playSfx("UI & Feedback SFX/Button Click.wav")
                 when (screen) {
                     GameScreen.MENU -> {
                         when {
@@ -1274,6 +1513,7 @@ private class GameView(context: Context) : View(context) {
                         when {
                             inRect(nx, ny, 0.24f, 0.43f, 0.76f, 0.51f) -> {
                                 screen = GameScreen.PLAYING
+                                playSfx("UI & Feedback SFX/Unpause.wav")
                                 lastFrame = System.nanoTime()
                             }
                             inRect(nx, ny, 0.24f, 0.54f, 0.76f, 0.62f) -> {
@@ -1316,6 +1556,7 @@ private class GameView(context: Context) : View(context) {
                         if (inRect(nx, ny, 0.81f, 0.065f, 0.94f, 0.115f)) {
                             screen = GameScreen.PAUSED
                             slowMotion = false
+                            playSfx("UI & Feedback SFX/Pause.wav")
                             invalidate()
                             return true
                         }
@@ -1359,7 +1600,7 @@ private class GameView(context: Context) : View(context) {
                         flying = true
                         flightTime = 0f
                         lastFrame = System.nanoTime()
-                        playTone(ToneGenerator.TONE_PROP_BEEP)
+                        playSfx("Core Gameplay SFX/Blade Launch.wav", ToneGenerator.TONE_PROP_BEEP)
                         haptic()
                     }
                     invalidate()

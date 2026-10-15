@@ -29,6 +29,40 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      - name: Verify image, icon, and soundtrack assets
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          required = [
+              "Images/App Icon & Logo/App Icon.png",
+              "Images/App Icon & Logo/Game Logo.png",
+              "Images/Backgrounds & Environments/Gameplay Background.png",
+              "Images/Backgrounds & Environments/Menu Background.png",
+              "Images/Backgrounds & Environments/Victory Background.png",
+              "Images/Backgrounds & Environments/Game Over Background.png",
+              "Images/Gameplay Sprites/Blade.png",
+              "Images/Gameplay Sprites/Enemy Drone.png",
+              "Images/Gameplay Sprites/Enemy Slime.png",
+              "Images/Gameplay Sprites/Enemy Turret.png",
+              "Images/Gameplay Sprites/Portal.png",
+              "Images/UI Elements/Button.png",
+              "SoundTrack/Music & Ambience/Main Menu Theme.wav",
+              "SoundTrack/Music & Ambience/Gameplay Background.wav",
+              "SoundTrack/Music & Ambience/Victory Theme.wav",
+              "SoundTrack/Music & Ambience/Game Over Theme.wav",
+              "SoundTrack/Core Gameplay SFX/Blade Launch.wav",
+              "SoundTrack/Core Gameplay SFX/Level Complete.wav",
+              "SoundTrack/Core Gameplay SFX/Level Fail - Death.wav",
+              "SoundTrack/UI & Feedback SFX/Button Click.wav",
+              "SoundTrack/Optional - Extra Sounds/Power-Up Collect.wav",
+          ]
+          missing = [path for path in required if not Path(path).is_file() or Path(path).stat().st_size == 0]
+          if missing:
+              sys.exit("Missing required game assets: " + ", ".join(missing))
+          print(f"Verified {len(required)} artwork/audio files.")
+          PY
+
       - name: Validate campaign level JSON
         run: |
           python3 - <<'PY'
