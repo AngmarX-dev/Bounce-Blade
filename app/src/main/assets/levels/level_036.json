@@ -1,0 +1,81 @@
+{
+  "id": 36,
+  "name": "Sticky Spiral",
+  "world": "Magenta Maze",
+  "maxBounces": 13,
+  "playerSpawn": {
+    "x": 0.14,
+    "y": 0.8
+  },
+  "exit": {
+    "x": 0.87,
+    "y": 0.18
+  },
+  "switch": {
+    "x": 0.78,
+    "y": 0.75
+  },
+  "enemies": [
+    {
+      "x": 0.29,
+      "y": 0.27
+    },
+    {
+      "x": 0.53,
+      "y": 0.25
+    },
+    {
+      "x": 0.72,
+      "y": 0.31
+    }
+  ],
+  "crates": [
+    {
+      "x": 0.44,
+      "y": 0.55
+    },
+    {
+      "x": 0.61,
+      "y": 0.41
+    }
+  ],
+  "hazards": [
+    {
+      "type": "spikes",
+      "x": 0.5,
+      "y": 0.9,
+      "width": 0.56,
+      "height": 0.025
+    },
+    {
+      "type": "sticky_wall",
+      "x": 0.51,
+      "y": 0.48,
+      "width": 0.18,
+      "height": 0.055
+    },
+    {
+      "type": "teleporter",
+      "x": 0.22,
+      "y": 0.37,
+      "width": 0.075,
+      "height": 0.075
+    },
+    {
+      "type": "teleporter",
+      "x": 0.77,
+      "y": 0.63,
+      "width": 0.075,
+      "height": 0.075
+    },
+    {
+      "type": "moving_hazard",
+      "x": 0.5,
+      "y": 0.58,
+      "width": 0.24,
+      "height": 0.026
+    }
+  ],
+  "requiresAllTargets": false,
+  "requiresSwitch": true
+}
