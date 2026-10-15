@@ -7,7 +7,7 @@ data class NormalizedPoint(val x: Float, val y: Float) {
     }
 }
 
-enum class HazardType { SPIKES, LASER, MOVING_HAZARD }
+enum class HazardType { SPIKES, LASER, MOVING_HAZARD, STICKY_WALL, TELEPORTER, POWER_UP }
 
 data class HazardDefinition(
     val type: HazardType,
@@ -25,7 +25,9 @@ data class LevelDefinition(
     val switch: NormalizedPoint,
     val enemies: List<NormalizedPoint> = emptyList(),
     val crates: List<NormalizedPoint> = emptyList(),
-    val hazards: List<HazardDefinition> = emptyList()
+    val hazards: List<HazardDefinition> = emptyList(),
+    val requiresAllTargets: Boolean = true,
+    val requiresSwitch: Boolean = true
 ) {
     init {
         require(id > 0) { "Level id must be positive" }

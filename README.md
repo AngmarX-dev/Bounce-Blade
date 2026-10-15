@@ -4,15 +4,15 @@
 
 ## Gameplay features
 
-- **20 editable campaign levels** loaded from JSON, with unlock progression and local save data.
+- **50 levels across five worlds:** Neon Grid, Crimson Circuit, Azure Vault, Magenta Maze and Golden Core, with linear unlocking and local saves.
 - **Trajectory preview with ricochet prediction** while aiming; forecast segments highlight likely target, crate, and hazard collisions.
 - **Blade trail and hit particles** for clearer feedback on each impact.
 - **Three-star difficulty selection:** Easy gives 50% more bounces, Normal uses the level's default budget, and Hard gives 70% of that budget.
 - **Three-star level cards:** all three stars stay visible; earned stars are filled in and saved independently for each difficulty.
-- **Three-star completion ratings** based on remaining bounce budget and launch efficiency; best rating is saved for each level and difficulty.
+- **Performance stars, timer, score and combos:** beat the star time target and clear every target or chain three hits for the top rating; a longer deadline still lets slower runs finish.
 - **Help screen** with controls, objectives and hazard tips.
 - **Three selectable color themes** (Cyan, Green, Violet), saved between launches.
-- **Animated moving hazards** in addition to spike strips and laser beams.
+- **New enemies and objects:** moving drones, firing turrets, splitting slimes, shielded drones and a multi-hit final boss, plus sticky walls, teleporters and collectible +2-bounce power-ups.
 - **Real objective gating:** clear every enemy and crate, activate the gold switch, then reach the portal.
 - **Bounce budget, retry flow, pause menu, victory/failure screens, and level selection.**
 - **Two-finger slow motion** with a rechargeable meter.
@@ -45,7 +45,7 @@ The [GitHub Actions page](https://github.com/AngmarX-dev/Bounce-Blade/actions) c
 
 ## Editing levels
 
-Edit `app/src/main/assets/levels/level_001.json` through `level_020.json`. Coordinates are normalized from 0.0 to 1.0. Supported hazard types are `spikes`, `laser`, and `moving_hazard`. Keep each file's numeric `id` consistent with its three-digit filename.
+Edit `app/src/main/assets/levels/level_001.json` through `level_050.json`. Coordinates are normalized from 0.0 to 1.0. Supported hazards are `spikes`, `laser`, `moving_hazard`, `sticky_wall`, `teleporter`, and `power_up`. Each level declares its world and target/switch requirements; teleporters need a pair.
 
 ## Project layout
 
@@ -65,7 +65,7 @@ app/src/main/
     game/editor/                    future level-editor data model
     game/daily/                     daily challenge data model
     game/leaderboard/               online leaderboard contract
-  assets/levels/                    20 campaign files plus template
+  assets/levels/                    50 campaign files plus template
   res/                              Android theme, colors and launcher icon
   test/                             unit tests
 ```

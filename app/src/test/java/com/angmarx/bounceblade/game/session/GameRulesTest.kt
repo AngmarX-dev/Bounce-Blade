@@ -42,6 +42,15 @@ class GameRulesTest {
     }
 
     @Test
+    fun performanceStarsRewardFastClearAndCombo() {
+        assertEquals(3,GameRules.starsEarnedByPerformance(18f,24f,true,0))
+        assertEquals(3,GameRules.starsEarnedByPerformance(18f,24f,false,3))
+        assertEquals(2,GameRules.starsEarnedByPerformance(18f,24f,false,1))
+        assertEquals(1,GameRules.starsEarnedByPerformance(30f,24f,true,5))
+    }
+    @Test fun deadlineIsLongerThanStarTarget(){assertTrue(GameRules.timeLimitSeconds(25,2)>GameRules.targetTimeSeconds(25,2))}
+
+    @Test
     fun invalidMaximumDoesNotCrashScoring() {
         assertEquals(1, GameRules.starsEarned(0, 0, 1))
     }
