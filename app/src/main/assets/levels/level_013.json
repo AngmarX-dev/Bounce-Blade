@@ -1,6 +1,6 @@
 {
   "id": 13,
-  "name": "Hard Reset",
+  "name": "Circuit Split",
   "maxBounces": 12,
   "playerSpawn": {
     "x": 0.14,
@@ -62,5 +62,8 @@
       "width": 0.56,
       "height": 0.025
     }
-  ]
+  ],
+  "world": "Crimson Circuit",
+  "requiresAllTargets": true,
+  "requiresSwitch": true
 }

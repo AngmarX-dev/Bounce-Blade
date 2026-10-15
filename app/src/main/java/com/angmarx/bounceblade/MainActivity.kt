@@ -16,11 +16,13 @@ import android.view.MotionEvent
 import android.view.View
 import com.angmarx.bounceblade.game.session.GameRules
 import com.angmarx.bounceblade.game.level.LevelRepository
+import com.angmarx.bounceblade.game.level.CampaignWorlds
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 import kotlin.math.sin
+import kotlin.math.cos
 
 class MainActivity : Activity() {
     private lateinit var gameView: GameView
@@ -52,7 +54,11 @@ class MainActivity : Activity() {
 }
 
 private data class PointN(val x: Float, val y: Float)
-private data class EnemyState(val x: Float, val y: Float, var alive: Boolean = true, val kind: Int = 0)
+private data class EnemyState(
+    val x: Float, val y: Float, var alive: Boolean = true, val kind: Int = 0,
+    var health: Int = 1, var fireCooldown: Float = 1.6f, val canSplit: Boolean = true
+)
+private data class TurretProjectile(var x: Float, var y: Float, var vx: Float, var vy: Float, var life: Float)
 private data class CrateState(val x: Float, val y: Float, var alive: Boolean = true)
 private data class HazardState(
     val type: String,
@@ -70,7 +76,9 @@ private data class GameLevel(
     val switch: PointN,
     val enemies: List<PointN>,
     val crates: List<PointN>,
-    val hazards: List<HazardState>
+    val hazards: List<HazardState>,
+    val requiresAllTargets: Boolean = true,
+    val requiresSwitch: Boolean = true
 )
 private data class Particle(
     var x: Float,
@@ -81,7 +89,7 @@ private data class Particle(
     val color: Int,
     val radius: Float
 )
-private enum class GameScreen { MENU, LEVELS, PLAYING, PAUSED, SETTINGS, HELP, DIFFICULTY, WON, FAILED, CAMPAIGN_COMPLETE }
+private enum class GameScreen { MENU, WORLDS, LEVELS, PLAYING, PAUSED, SETTINGS, HELP, DIFFICULTY, WON, FAILED, CAMPAIGN_COMPLETE }
 
 private class GameView(context: Context) : View(context) {
     private val prefs = context.getSharedPreferences("bounce_blade_save", Context.MODE_PRIVATE)
@@ -104,6 +112,7 @@ private class GameView(context: Context) : View(context) {
     private val levels: List<GameLevel> = loadLevels(context)
     private var difficulty = prefs.getInt("difficulty_stars", 2).coerceIn(1, 3)
     private var screen = GameScreen.MENU
+    private var selectedWorld = ((prefs.getInt("unlocked_level", 1).coerceAtLeast(1) - 1) / CampaignWorlds.LEVELS_PER_WORLD).coerceIn(0, CampaignWorlds.WORLD_COUNT - 1)
     private var levelId = 1
     private var level = levels.first()
     private var enemies = mutableListOf<EnemyState>()
@@ -121,6 +130,14 @@ private class GameView(context: Context) : View(context) {
     private var runMaxBounces = 5
     private var shotsUsed = 0
     private var earnedStars = 0
+    private var score = 0
+    private var levelElapsedSeconds = 0f
+    private var comboCount = 0
+    private var bestCombo = 0
+    private var comboWindow = 0f
+    private var teleportCooldown = 0f
+    private val collectedPowerUps = mutableSetOf<Int>()
+    private val turretProjectiles = mutableListOf<TurretProjectile>()
     private var animationTime = 0f
     private var slowMeter = 1f
     private val bladeTrail = mutableListOf<PointF>()
@@ -148,8 +165,12 @@ private class GameView(context: Context) : View(context) {
         when (screen) {
             GameScreen.PLAYING -> screen = GameScreen.PAUSED
             GameScreen.PAUSED, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY -> screen = GameScreen.MENU
-            GameScreen.LEVELS -> screen = GameScreen.MENU
-            GameScreen.WON, GameScreen.FAILED, GameScreen.CAMPAIGN_COMPLETE -> screen = GameScreen.LEVELS
+            GameScreen.WORLDS -> screen = GameScreen.MENU
+            GameScreen.LEVELS -> screen = GameScreen.WORLDS
+            GameScreen.WON, GameScreen.FAILED, GameScreen.CAMPAIGN_COMPLETE -> {
+                selectedWorld = CampaignWorlds.indexForLevel(levelId)
+                screen = GameScreen.LEVELS
+            }
             GameScreen.MENU -> return false
         }
         slowMotion = false
@@ -182,6 +203,7 @@ private class GameView(context: Context) : View(context) {
         drawBackground(canvas)
         when (screen) {
             GameScreen.MENU -> drawMenu(canvas)
+            GameScreen.WORLDS -> drawWorldSelect(canvas)
             GameScreen.LEVELS -> drawLevelSelect(canvas)
             GameScreen.PLAYING -> drawGame(canvas)
             GameScreen.PAUSED -> {
@@ -210,14 +232,12 @@ private class GameView(context: Context) : View(context) {
                 drawMenuBackdrop(canvas)
                 drawText(canvas, "CAMPAIGN", 0.5f, 0.31f, 0.075f, cyan, Paint.Align.CENTER)
                 drawText(canvas, "COMPLETE", 0.5f, 0.40f, 0.075f, gold, Paint.Align.CENTER)
-                drawText(canvas, "You cleared every included level.", 0.5f, 0.46f, 0.024f, Color.WHITE, Paint.Align.CENTER)
+                drawText(canvas, "You conquered all five worlds.", 0.5f, 0.46f, 0.024f, Color.WHITE, Paint.Align.CENTER)
                 drawButton(canvas, 0.20f, 0.57f, 0.80f, 0.66f, "PLAY AGAIN", cyan)
                 drawButton(canvas, 0.20f, 0.69f, 0.80f, 0.78f, "LEVEL SELECT", gold)
             }
         }
-        if (flying || particles.isNotEmpty() ||
-            (screen == GameScreen.PLAYING && level.hazards.any { it.type.contains("moving") })
-        ) postInvalidateDelayed(16L)
+        if (screen == GameScreen.PLAYING || flying || particles.isNotEmpty() || turretProjectiles.isNotEmpty()) postInvalidateDelayed(16L)
     }
 
     private fun advanceFrame() {
@@ -225,41 +245,107 @@ private class GameView(context: Context) : View(context) {
         val rawDt = ((now - lastFrame) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.025f)
         lastFrame = now
         animationTime += rawDt
+        if (screen == GameScreen.PLAYING) {
+            levelElapsedSeconds += rawDt
+            comboWindow = (comboWindow - rawDt).coerceAtLeast(0f)
+            if (comboWindow <= 0f) comboCount = 0
+            teleportCooldown = (teleportCooldown - rawDt).coerceAtLeast(0f)
+            if (levelElapsedSeconds > GameRules.timeLimitSeconds(levelId, difficulty)) { fail("TIME UP"); return }
+            updateTurrets(rawDt)
+            updateTurretProjectiles(rawDt)
+        }
         if (screen == GameScreen.PLAYING && flying) {
             val timeScale = if (slowMotion && slowMeter > 0f) 0.28f else 1f
             val dt = rawDt * timeScale
-            if (slowMotion && slowMeter > 0f) {
-                slowMeter = (slowMeter - rawDt * 0.20f).coerceAtLeast(0f)
-            } else {
-                slowMeter = (slowMeter + rawDt * 0.075f).coerceAtMost(1f)
-            }
+            if (slowMotion && slowMeter > 0f) slowMeter = (slowMeter - rawDt * 0.20f).coerceAtLeast(0f)
+            else slowMeter = (slowMeter + rawDt * 0.075f).coerceAtMost(1f)
             flightTime += dt
             angle = (angle + 1080f * dt) % 360f
-            val substeps = 3
-            val step = dt / substeps
-            repeat(substeps) {
-                if (screen == GameScreen.PLAYING && flying) simulateStep(step)
-            }
+            repeat(3) { if (screen == GameScreen.PLAYING && flying) simulateStep(dt / 3f) }
             if (flying && (sqrt(velocityX * velocityX + velocityY * velocityY) < minDim * 0.055f || flightTime > 12f)) {
-                flying = false
-                velocityX = 0f
-                velocityY = 0f
+                flying = false; velocityX = 0f; velocityY = 0f
             }
         } else {
             if (!slowMotion) slowMeter = (slowMeter + rawDt * 0.04f).coerceAtMost(1f)
             if (screen != GameScreen.PLAYING) slowMotion = false
         }
-        val particleDt = rawDt
         val iterator = particles.iterator()
         while (iterator.hasNext()) {
-            val particle = iterator.next()
-            particle.life -= particleDt
-            particle.x += particle.vx * particleDt
-            particle.y += particle.vy * particleDt
-            particle.vx *= 0.985f
-            particle.vy *= 0.985f
-            if (particle.life <= 0f) iterator.remove()
+            val p = iterator.next()
+            p.life -= rawDt; p.x += p.vx * rawDt; p.y += p.vy * rawDt
+            p.vx *= 0.985f; p.vy *= 0.985f
+            if (p.life <= 0f) iterator.remove()
         }
+    }
+
+    private fun updateTurrets(dt: Float) {
+        if (!flying || screen != GameScreen.PLAYING) return
+        enemies.forEachIndexed { index, enemy ->
+            if (!enemy.alive || enemy.kind != 1) return@forEachIndexed
+            enemy.fireCooldown -= dt
+            if (enemy.fireCooldown <= 0f) {
+                val c = enemyCenter(enemy, index)
+                val sx = c.x * viewW; val sy = c.y * viewH
+                val dx = bladeX * viewW - sx; val dy = bladeY * viewH - sy
+                val len = sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
+                val speed = minDim * 0.22f
+                turretProjectiles.add(TurretProjectile(sx, sy, dx / len * speed, dy / len * speed, 4.5f))
+                enemy.fireCooldown = 2.4f + (index % 3) * 0.35f
+            }
+        }
+    }
+
+    private fun updateTurretProjectiles(dt: Float) {
+        val iterator = turretProjectiles.iterator()
+        while (iterator.hasNext()) {
+            val shot = iterator.next()
+            shot.x += shot.vx * dt; shot.y += shot.vy * dt; shot.life -= dt
+            if (shot.life <= 0f || shot.x < 0f || shot.x > viewW || shot.y < 0f || shot.y > viewH) {
+                iterator.remove(); continue
+            }
+            if (flying && screen == GameScreen.PLAYING && distanceSquared(shot.x, shot.y, bladeX * viewW, bladeY * viewH) < (minDim * 0.028f) * (minDim * 0.028f)) {
+                reflectFrom(bladeX * viewW - shot.x, bladeY * viewH - shot.y)
+                velocityX *= 0.9f; velocityY *= 0.9f
+                useBounce(); addBurst(shot.x, shot.y, pink, 8); showMessage("TURRET SHOT DEFLECTED")
+                iterator.remove()
+            }
+        }
+    }
+
+    private fun registerTargetHit(points: Int, x: Float, y: Float, color: Int) {
+        comboCount = if (comboWindow > 0f) comboCount + 1 else 1
+        comboWindow = 2.25f; bestCombo = max(bestCombo, comboCount)
+        score += points * comboCount
+        addBurst(x, y, color, if (comboCount >= 3) 20 else 13)
+        if (comboCount >= 2) showMessage("COMBO x" + comboCount)
+    }
+
+    private fun enemyKindForLevel(id: Int): Int = when (id) {
+        in 1..20 -> 0
+        in 21..30 -> 1
+        in 31..40 -> 2
+        else -> 3
+    }
+
+    private fun enemyHealthForLevel(id: Int, index: Int): Int = when {
+        id == 50 && index == 0 -> 5
+        id >= 41 -> 2
+        else -> 1
+    }
+
+    private fun enemyCenter(enemy: EnemyState, index: Int): PointF {
+        val d = when (enemy.kind) {
+            0 -> PointF(sin(animationTime * 1.7f + index * 1.2f) * 0.014f, cos(animationTime * 1.3f + index) * 0.012f)
+            2 -> PointF(sin(animationTime * 1.25f + index * 1.4f) * if (enemy.canSplit) 0.035f else 0.02f, cos(animationTime * 1.8f + index) * 0.02f)
+            3 -> PointF(sin(animationTime * 0.75f + index) * 0.009f, 0f)
+            else -> PointF(0f, 0f)
+        }
+        return PointF((enemy.x + d.x).coerceIn(0.1f, 0.9f), (enemy.y + d.y).coerceIn(0.17f, 0.84f))
+    }
+
+    private fun formatTime(seconds: Float): String {
+        val value = seconds.coerceAtLeast(0f).toInt()
+        return "%02d:%02d".format(value / 60, value % 60)
     }
 
     private fun simulateStep(dt: Float) {
@@ -272,16 +358,28 @@ private class GameView(context: Context) : View(context) {
         var py = bladeY * viewH + velocityY * dt
 
         for ((hazardIndex, hazard) in level.hazards.withIndex()) {
-            val center = hazardCenter(hazard, hazardIndex)
-            val hx = center.x * viewW
-            val hy = center.y * viewH
-            val hw = hazard.width * viewW
-            val hh = max(hazard.height * viewH, minDim * 0.018f)
-            if (px + radius > hx - hw / 2f && px - radius < hx + hw / 2f &&
-                py + radius > hy - hh / 2f && py - radius < hy + hh / 2f
-            ) {
-                fail("You hit a hazard.")
-                return
+            if (hazard.type == "power_up" && hazardIndex in collectedPowerUps) continue
+            val c = hazardCenter(hazard, hazardIndex)
+            val hx = c.x * viewW; val hy = c.y * viewH
+            val hw = hazard.width * viewW; val hh = max(hazard.height * viewH, minDim * 0.018f)
+            val hit = px + radius > hx - hw / 2f && px - radius < hx + hw / 2f && py + radius > hy - hh / 2f && py - radius < hy + hh / 2f
+            if (!hit) continue
+            when (hazard.type) {
+                "sticky_wall" -> { fail("STICKY WALL: BLADE STUCK"); return }
+                "teleporter" -> {
+                    if (teleportCooldown <= 0f) {
+                        val dest = level.hazards.withIndex().firstOrNull { it.index != hazardIndex && it.value.type == "teleporter" }
+                        if (dest != null) {
+                            px = dest.value.x * viewW; py = dest.value.y * viewH; teleportCooldown = 0.85f
+                            addBurst(px, py, cyan, 16); showMessage("WARP!"); playTone(ToneGenerator.TONE_PROP_ACK); break
+                        }
+                    }
+                }
+                "power_up" -> if (collectedPowerUps.add(hazardIndex)) {
+                    bouncesLeft += 2; score += 250; addBurst(hx, hy, gold, 18)
+                    showMessage("POWER-UP +2 BOUNCES"); playTone(ToneGenerator.TONE_PROP_ACK)
+                }
+                else -> { fail("You hit a hazard."); return }
             }
         }
 
@@ -315,44 +413,41 @@ private class GameView(context: Context) : View(context) {
             if (screen != GameScreen.PLAYING) return
         }
 
-        for (enemy in enemies) {
+        val pendingSlimes = mutableListOf<EnemyState>()
+        for ((index, enemy) in enemies.toList().withIndex()) {
             if (!enemy.alive) continue
-            val ex = enemy.x * viewW
-            val ey = enemy.y * viewH
-            val dx = px - ex
-            val dy = py - ey
-            val hitRadius = radius + minDim * 0.027f
+            val c = enemyCenter(enemy, index); val ex = c.x * viewW; val ey = c.y * viewH
+            val dx = px - ex; val dy = py - ey
+            val hitRadius = radius + minDim * (if (enemy.kind == 3 && enemy.health > 1) 0.04f else 0.027f)
             if (dx * dx + dy * dy <= hitRadius * hitRadius) {
-                enemy.alive = false
-                reflectFrom(dx, dy)
-                velocityX *= 0.90f
-                velocityY *= 0.90f
-                useBounce()
-                addBurst(ex, ey, pink, 14)
-                playTone(ToneGenerator.TONE_PROP_ACK)
-                haptic()
+                enemy.health -= 1
+                if (enemy.health <= 0) {
+                    enemy.alive = false
+                    if (enemy.kind == 2 && enemy.canSplit) {
+                        pendingSlimes.add(EnemyState((enemy.x - 0.035f).coerceIn(0.1f,0.9f),(enemy.y+0.024f).coerceIn(0.2f,0.82f),true,2,1,8f,false))
+                        pendingSlimes.add(EnemyState((enemy.x + 0.035f).coerceIn(0.1f,0.9f),(enemy.y+0.024f).coerceIn(0.2f,0.82f),true,2,1,8f,false))
+                        showMessage("SLIME SPLIT")
+                    }
+                    registerTargetHit(if (enemy.kind == 3) 160 else 100, ex, ey, pink)
+                } else {
+                    score += 50; addBurst(ex, ey, gold, 10)
+                    showMessage(if (levelId == 50 && index == 0) "BOSS SHIELD DAMAGED" else "SHIELD BREAK")
+                    playTone(ToneGenerator.TONE_PROP_ACK)
+                }
+                reflectFrom(dx, dy); velocityX *= 0.90f; velocityY *= 0.90f
+                useBounce(); playTone(ToneGenerator.TONE_PROP_ACK); haptic()
                 if (screen != GameScreen.PLAYING) return
             }
         }
-
+        enemies.addAll(pendingSlimes)
         for (crate in crates) {
             if (!crate.alive) continue
-            val cx = crate.x * viewW
-            val cy = crate.y * viewH
-            val half = minDim * 0.035f
-            if (abs(px - cx) < half + radius && abs(py - cy) < half + radius) {
-                crate.alive = false
-                if (abs(px - cx) > abs(py - cy)) {
-                    velocityX = -velocityX * 0.86f
-                    velocityY *= 0.94f
-                } else {
-                    velocityY = -velocityY * 0.86f
-                    velocityX *= 0.94f
-                }
-                useBounce()
-                addBurst(cx, cy, gold, 12)
-                playTone(ToneGenerator.TONE_PROP_ACK)
-                haptic()
+            val cx=crate.x*viewW; val cy=crate.y*viewH; val half=minDim*0.035f
+            if (abs(px-cx)<half+radius && abs(py-cy)<half+radius) {
+                crate.alive=false
+                if (abs(px-cx)>abs(py-cy)) { velocityX=-velocityX*0.86f; velocityY*=0.94f }
+                else { velocityY=-velocityY*0.86f; velocityX*=0.94f }
+                registerTargetHit(75,cx,cy,gold); useBounce(); playTone(ToneGenerator.TONE_PROP_ACK); haptic()
                 if (screen != GameScreen.PLAYING) return
             }
         }
@@ -360,7 +455,7 @@ private class GameView(context: Context) : View(context) {
         val sx = level.switch.x * viewW
         val sy = level.switch.y * viewH
         val switchRadius = minDim * 0.032f
-        if (!switchActivated && distanceSquared(px, py, sx, sy) < (radius + switchRadius) * (radius + switchRadius)) {
+        if (level.requiresSwitch && !switchActivated && distanceSquared(px, py, sx, sy) < (radius + switchRadius) * (radius + switchRadius)) {
             switchActivated = true
             addBurst(sx, sy, gold, 18)
             velocityX *= 0.96f
@@ -370,7 +465,7 @@ private class GameView(context: Context) : View(context) {
             haptic()
         }
 
-        val exitReady = GameRules.exitIsUnlocked(enemies.count { it.alive }, crates.count { it.alive }, switchActivated)
+        val exitReady = GameRules.exitIsUnlocked(enemies.count { it.alive }, crates.count { it.alive }, switchActivated, level.requiresAllTargets, level.requiresSwitch)
         val ex = level.exit.x * viewW
         val ey = level.exit.y * viewH
         val exitRadius = minDim * 0.034f
@@ -418,7 +513,8 @@ private class GameView(context: Context) : View(context) {
         val nextId = levelId + 1
         val currentUnlocked = prefs.getInt("unlocked_level", 1)
         val newUnlocked = max(currentUnlocked, min(nextId, levels.size))
-        earnedStars = GameRules.starsEarned(runMaxBounces, bouncesLeft, shotsUsed, enemies.size + crates.size)
+        val allTargetsDestroyed = enemies.none { it.alive } && crates.none { it.alive }
+        earnedStars = GameRules.starsEarnedByPerformance(levelElapsedSeconds, GameRules.targetTimeSeconds(levelId, difficulty), allTargetsDestroyed, bestCombo)
         val starsKey = bestStarsKey(levelId)
         val previousBest = prefs.getInt(starsKey, 0)
         val bestShotsKey = bestShotsKey(levelId)
@@ -427,6 +523,7 @@ private class GameView(context: Context) : View(context) {
             .putInt("unlocked_level", newUnlocked)
             .putInt(starsKey, max(previousBest, earnedStars))
             .putInt(bestShotsKey, min(previousBestShots, shotsUsed))
+            .putInt("best_score_" + levelId + "_difficulty_" + difficulty, max(prefs.getInt("best_score_" + levelId + "_difficulty_" + difficulty, 0), score))
             .putInt("campaign_best_stars_difficulty_" + difficulty,
                 totalBestStarsAfter(levelId, max(previousBest, earnedStars)))
             .apply()
@@ -452,7 +549,7 @@ private class GameView(context: Context) : View(context) {
         levelId = id.coerceIn(1, levels.size)
         level = levels.firstOrNull { it.id == levelId } ?: levels.first()
         enemies = level.enemies.mapIndexed { index, point ->
-            EnemyState(point.x, point.y, true, index % 3)
+            EnemyState(point.x, point.y, true, enemyKindForLevel(levelId), enemyHealthForLevel(levelId, index), 1.2f + (index % 3) * 0.6f, true)
         }.toMutableList()
         crates = level.crates.map { CrateState(it.x, it.y) }.toMutableList()
         bladeX = level.spawn.x
@@ -463,11 +560,19 @@ private class GameView(context: Context) : View(context) {
         flying = false
         aiming = false
         slowMotion = false
-        switchActivated = false
+        switchActivated = !level.requiresSwitch
         runMaxBounces = GameRules.bouncesForDifficulty(level.maxBounces, difficulty)
         bouncesLeft = runMaxBounces
         shotsUsed = 0
         earnedStars = 0
+        score = 0
+        levelElapsedSeconds = 0f
+        comboCount = 0
+        bestCombo = 0
+        comboWindow = 0f
+        teleportCooldown = 0f
+        collectedPowerUps.clear()
+        turretProjectiles.clear()
         slowMeter = 1f
         flightTime = 0f
         particles.clear()
@@ -502,33 +607,28 @@ private class GameView(context: Context) : View(context) {
                     definition.crates.map { PointN(it.x, it.y) },
                     definition.hazards.map {
                         HazardState(it.type.name.lowercase(), it.position.x, it.position.y, it.width, it.height)
-                    }
+                    },
+                    definition.requiresAllTargets,
+                    definition.requiresSwitch
                 )
             }
         } catch (_: Exception) {
             emptyList()
         }
         val byId = loaded.associateBy { it.id }
-        return (1..20).map { id -> byId[id] ?: fallbackLevel(id) }
+        return (1..CampaignWorlds.TOTAL_LEVELS).map { id -> byId[id] ?: fallbackLevel(id) }
     }
 
     private fun fallbackLevel(id: Int): GameLevel {
-        val enemyPositions = listOf(
-            PointN(0.31f, 0.28f), PointN(0.65f, 0.27f), PointN(0.72f, 0.48f),
-            PointN(0.31f, 0.52f), PointN(0.51f, 0.36f), PointN(0.65f, 0.64f),
-            PointN(0.42f, 0.70f), PointN(0.78f, 0.37f)
-        )
-        val crates = listOf(PointN(0.45f, 0.55f), PointN(0.60f, 0.43f), PointN(0.34f, 0.66f))
-        val count = (2 + id / 3).coerceAtMost(enemyPositions.size)
-        return GameLevel(
-            id, "Arena " + id, 8 + (id - 1) / 4,
-            PointN(0.14f, 0.80f),
-            PointN(0.87f, 0.18f),
-            if (id % 2 == 0) PointN(0.78f, 0.75f) else PointN(0.21f, 0.75f),
-            enemyPositions.take(count),
-            crates.take(if (id % 3 == 0) 3 else 2),
-            listOf(HazardState("spikes", 0.5f, 0.90f, 0.56f, 0.025f))
-        )
+        val world = CampaignWorlds.indexForLevel(id)
+        val enemies = listOf(PointN(0.31f,0.28f),PointN(0.65f,0.27f),PointN(0.72f,0.48f),PointN(0.31f,0.52f),PointN(0.51f,0.36f),PointN(0.65f,0.64f),PointN(0.42f,0.70f),PointN(0.78f,0.37f))
+        val crates = listOf(PointN(0.45f,0.55f),PointN(0.60f,0.43f),PointN(0.34f,0.66f))
+        val tutorial = world == 0
+        return GameLevel(id,CampaignWorlds.worldName(world)+" "+((id-1)%10+1),8+(id-1)/5,
+            PointN(0.14f,0.80f),PointN(0.87f,0.18f),PointN(0.78f,0.75f),
+            if(tutorial) emptyList() else enemies.take((2+id/7).coerceAtMost(enemies.size)),
+            if(tutorial) emptyList() else crates.take(2+id%2),
+            if(tutorial) emptyList() else listOf(HazardState("spikes",0.5f,0.90f,0.56f,0.025f)),!tutorial,!tutorial)
     }
 
     private fun applyTheme() {
@@ -629,44 +729,50 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas, "DRAG BACK TO LAUNCH  •  TWO FINGERS TO SLOW TIME", 0.5f, 0.925f, 0.014f, muted, Paint.Align.CENTER)
     }
 
+    private fun drawWorldSelect(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas,"CHOOSE YOUR WORLD",0.5f,0.285f,0.058f,Color.WHITE,Paint.Align.CENTER)
+        drawText(canvas,"50 LEVELS  •  5 WORLDS  •  OFFLINE CAMPAIGN",0.5f,0.335f,0.019f,muted,Paint.Align.CENTER)
+        val unlocked=prefs.getInt("unlocked_level",1).coerceIn(1,levels.size)
+        for(w in 0 until CampaignWorlds.WORLD_COUNT){
+            val first=CampaignWorlds.firstLevelForWorld(w); val available=unlocked>=first; val top=0.375f+w*0.088f
+            val total=(first..min(first+9,levels.size)).sumOf{prefs.getInt(bestStarsKey(it),0)}
+            val label=(w+1).toString().padStart(2,'0')+"  "+CampaignWorlds.worldName(w)+"  "+if(available) "$total/30 ★" else "LOCKED"
+            drawButton(canvas,0.12f,top,0.88f,top+0.066f,label,if(available) cyan else muted,available)
+        }
+        drawButton(canvas,0.22f,0.83f,0.78f,0.90f,"BACK",gold)
+        if(System.nanoTime()<messageUntil&&message.isNotBlank()) drawText(canvas,message,0.5f,0.93f,0.018f,gold,Paint.Align.CENTER)
+    }
+
     private fun drawLevelSelect(canvas: Canvas) {
-        drawText(canvas, "SELECT ARENA", 0.5f, 0.115f, 0.058f, Color.WHITE, Paint.Align.CENTER)
-        drawText(canvas, "Unlocked: " + prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size) + " / " + levels.size,
-            0.5f, 0.16f, 0.022f, cyan, Paint.Align.CENTER)
-        for (mode in 1..3) {
-            val left = 0.055f + (mode - 1) * 0.31f
-            val label = (if (difficulty == mode) "✓ " else "") + when (mode) {
-                1 -> "★☆☆ EASY"
-                2 -> "★★☆ NORMAL"
-                else -> "★★★ HARD"
-            }
-            drawButton(canvas, left, 0.195f, left + 0.28f, 0.245f, label,
-                if (difficulty == mode) gold else cyan)
+        drawText(canvas,CampaignWorlds.worldName(selectedWorld).uppercase(),0.5f,0.125f,0.055f,Color.WHITE,Paint.Align.CENTER)
+        val first=CampaignWorlds.firstLevelForWorld(selectedWorld); val last=min(first+9,levels.size)
+        drawText(canvas,"LEVELS $first-$last  •  UNLOCKED "+prefs.getInt("unlocked_level",1).coerceIn(1,levels.size)+"/"+levels.size,0.5f,0.165f,0.020f,cyan,Paint.Align.CENTER)
+        for(mode in 1..3){
+            val left=0.055f+(mode-1)*0.31f
+            val label=(if(difficulty==mode) "✓ " else "")+when(mode){1->"★☆☆ EASY";2->"★★☆ NORMAL";else->"★★★ HARD"}
+            drawButton(canvas,left,0.195f,left+0.28f,0.245f,label,if(difficulty==mode) gold else cyan)
         }
-        val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
-        for (id in 1..levels.size) {
-            val column = (id - 1) % 4
-            val row = (id - 1) / 4
-            val left = 0.055f + column * 0.23f
-            val top = 0.268f + row * 0.102f
-            val available = id <= unlocked
-            val col = if (available) cyan else muted
-            val best = prefs.getInt(bestStarsKey(id), 0).coerceIn(0, 3)
-            val label = id.toString().padStart(2, '0') + " " + "★".repeat(best) + "☆".repeat(3 - best)
-            drawButton(canvas, left, top, left + 0.19f, top + 0.078f, label, col, available)
+        val unlocked=prefs.getInt("unlocked_level",1).coerceIn(1,levels.size)
+        for(local in 1..10){
+            val id=first+local-1;if(id>last) continue
+            val col=(local-1)%4;val row=(local-1)/4;val left=0.04f+col*0.24f;val top=0.29f+row*0.135f
+            val active=id<=unlocked;val best=prefs.getInt(bestStarsKey(id),0).coerceIn(0,3)
+            drawButton(canvas,left,top,left+0.22f,top+0.085f,local.toString().padStart(2,'0')+" "+"★".repeat(best)+"☆".repeat(3-best),if(active) cyan else muted,active)
         }
-        drawText(canvas, "STARS SHOW YOUR BEST CLEAR ON THIS DIFFICULTY", 0.5f, 0.795f,
-            0.014f, muted, Paint.Align.CENTER)
-        drawButton(canvas, 0.22f, 0.83f, 0.78f, 0.90f, "BACK", gold)
+        drawText(canvas,"STARS = TIME + COMBO / TARGET CLEAR",0.5f,0.735f,0.014f,muted,Paint.Align.CENTER)
+        drawButton(canvas,0.22f,0.83f,0.78f,0.90f,"BACK TO WORLDS",gold)
     }
 
     private fun drawGame(canvas: Canvas) {
-        drawText(canvas, "BOUNCE BLADE", 0.07f, 0.047f, 0.028f, Color.WHITE)
-        drawText(canvas, level.name.uppercase() + "  " + levelId + "/" + levels.size +
-            "  •  " + "★".repeat(difficulty), 0.5f, 0.047f, 0.022f, cyan, Paint.Align.CENTER)
-        drawText(canvas, "BOUNCES " + bouncesLeft, 0.72f, 0.047f, 0.022f, gold, Paint.Align.RIGHT)
-        drawButton(canvas, 0.81f, 0.065f, 0.94f, 0.115f, "Ⅱ", pink)
-        drawText(canvas, "SHOTS " + shotsUsed, 0.07f, 0.092f, 0.019f, muted)
+        drawText(canvas,"BOUNCE BLADE",0.07f,0.047f,0.025f,Color.WHITE)
+        drawText(canvas,level.name.uppercase()+"  "+levelId+"/"+levels.size+"  •  "+"★".repeat(difficulty),0.48f,0.047f,0.020f,cyan,Paint.Align.CENTER)
+        drawText(canvas,"BOUNCES "+bouncesLeft,0.78f,0.047f,0.019f,gold,Paint.Align.RIGHT)
+        drawButton(canvas,0.83f,0.065f,0.94f,0.115f,"Ⅱ",pink)
+        val timeLeft=GameRules.timeLimitSeconds(levelId,difficulty)-levelElapsedSeconds
+        drawText(canvas,"SCORE "+score,0.07f,0.092f,0.018f,gold)
+        drawText(canvas,"TIME "+formatTime(timeLeft),0.47f,0.092f,0.018f,if(levelElapsedSeconds<=GameRules.targetTimeSeconds(levelId,difficulty)) cyan else pink,Paint.Align.CENTER)
+        drawText(canvas,"COMBO x"+comboCount,0.80f,0.092f,0.018f,pink,Paint.Align.RIGHT)
         val rect = RectF(viewW * 0.05f, viewH * 0.13f, viewW * 0.95f, viewH * 0.94f)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(2f, density * 2f)
@@ -680,10 +786,11 @@ private class GameView(context: Context) : View(context) {
         for (i in 1..8) canvas.drawLine(viewW * 0.055f, viewH * (0.14f + 0.087f * i), viewW * 0.945f, viewH * (0.14f + 0.087f * i), paint)
 
         drawHazards(canvas)
-        drawSwitch(canvas)
+        if(level.requiresSwitch) drawSwitch(canvas)
         drawExit(canvas)
-        for (crate in crates) if (crate.alive) drawCrate(canvas, crate)
-        for (enemy in enemies) if (enemy.alive) drawEnemy(canvas, enemy)
+        drawTurretProjectiles(canvas)
+        for(crate in crates) if(crate.alive) drawCrate(canvas,crate)
+        for((index,enemy) in enemies.withIndex()) if(enemy.alive) drawEnemy(canvas,enemy,index)
         drawBladeTrail(canvas)
         drawParticles(canvas)
         if (aiming && !flying) drawAim(canvas)
@@ -696,8 +803,8 @@ private class GameView(context: Context) : View(context) {
 
         val targetsLeft = enemies.count { it.alive } + crates.count { it.alive }
         val objective = when {
-            targetsLeft > 0 -> "TARGETS LEFT: " + targetsLeft
-            !switchActivated -> "HIT THE GOLD SWITCH"
+            level.requiresAllTargets && targetsLeft > 0 -> "TARGETS LEFT: " + targetsLeft
+            level.requiresSwitch && !switchActivated -> "HIT THE GOLD SWITCH"
             else -> "EXIT OPEN  •  REACH THE PORTAL"
         }
         drawText(canvas, objective, 0.5f, 0.112f, 0.019f,
@@ -713,41 +820,17 @@ private class GameView(context: Context) : View(context) {
     }
 
     private fun drawHazards(canvas: Canvas) {
-        for ((index, hazard) in level.hazards.withIndex()) {
-            val center = hazardCenter(hazard, index)
-            val cx = center.x * viewW
-            val cy = center.y * viewH
-            val halfWidth = hazard.width * viewW / 2f
-            val h = max(hazard.height * viewH, minDim * 0.018f)
-            paint.style = Paint.Style.FILL
-            paint.color = Color.rgb(80, 22, 51)
-            canvas.drawRoundRect(cx - halfWidth, cy - h / 2f, cx + halfWidth, cy + h / 2f, density * 4f, density * 4f, paint)
-            if (hazard.type.contains("spike")) {
-                paint.color = pink
-                val count = max(4, (hazard.width * 22f).toInt())
-                for (i in 0 until count) {
-                    val x = cx - halfWidth + (2f * halfWidth) * i / count
-                    val nextX = min(cx + halfWidth, x + max(density * 6f, 2f * halfWidth / count))
-                    val path = Path()
-                    path.moveTo(x, cy + h / 2f)
-                    path.lineTo((x + nextX) / 2f, cy - h / 2f)
-                    path.lineTo(nextX, cy + h / 2f)
-                    path.close()
-                    canvas.drawPath(path, paint)
-                }
-            } else {
-                paint.color = if (hazard.type.contains("moving")) gold else pink
-                paint.strokeWidth = density * (if (hazard.type.contains("laser")) 3.5f else 3f)
-                paint.setShadowLayer(density * 7f, 0f, 0f, paint.color)
-                canvas.drawLine(cx - halfWidth, cy, cx + halfWidth, cy, paint)
-                paint.clearShadowLayer()
-                if (hazard.type.contains("moving")) {
-                    paint.style = Paint.Style.FILL
-                    canvas.drawCircle(cx, cy, density * 5f, paint)
-                    paint.style = Paint.Style.STROKE
-                }
+        for((index,hazard) in level.hazards.withIndex()) {
+            if(hazard.type=="power_up" && index in collectedPowerUps) continue
+            val c=hazardCenter(hazard,index);val x=c.x*viewW;val y=c.y*viewH
+            val hw=hazard.width*viewW/2f;val h=max(hazard.height*viewH,minDim*0.018f)
+            when(hazard.type){
+                "teleporter"->{paint.style=Paint.Style.STROKE;paint.strokeWidth=max(2f,density*2f);paint.color=cyan;paint.setShadowLayer(density*10f,0f,0f,cyan);canvas.drawCircle(x,y,max(minDim*0.025f,hw),paint);canvas.drawCircle(x,y,max(minDim*0.014f,hw*0.55f),paint);paint.clearShadowLayer()}
+                "power_up"->{paint.style=Paint.Style.FILL;paint.color=gold;paint.setShadowLayer(density*9f,0f,0f,gold);val p=Path();p.moveTo(x,y-h);p.lineTo(x+hw,y);p.lineTo(x,y+h);p.lineTo(x-hw,y);p.close();canvas.drawPath(p,paint);paint.clearShadowLayer();paint.color=dark;paint.textSize=minDim*0.018f;paint.textAlign=Paint.Align.CENTER;canvas.drawText("+",x,y+paint.textSize*0.35f,paint)}
+                else->{paint.style=Paint.Style.FILL;paint.color=when(hazard.type){"sticky_wall"->Color.rgb(95,48,145);"moving_hazard"->Color.rgb(80,65,22);else->Color.rgb(80,22,51)};canvas.drawRoundRect(x-hw,y-h/2f,x+hw,y+h/2f,density*4f,density*4f,paint);paint.style=Paint.Style.STROKE;paint.color=when(hazard.type){"sticky_wall"->Color.rgb(190,105,255);"moving_hazard"->gold;else->pink};paint.strokeWidth=density*when(hazard.type){"laser"->3.5f;"sticky_wall"->4f;else->3f};paint.setShadowLayer(density*7f,0f,0f,paint.color);canvas.drawLine(x-hw,y,x+hw,y,paint);paint.clearShadowLayer();if(hazard.type.contains("spike")){paint.style=Paint.Style.FILL;paint.color=pink;val count=max(4,(hazard.width*22f).toInt());for(i in 0 until count){val sx=x-hw+2f*hw*i/count;val nx=min(x+hw,sx+max(density*6f,2f*hw/count));val p=Path();p.moveTo(sx,y+h/2f);p.lineTo((sx+nx)/2f,y-h/2f);p.lineTo(nx,y+h/2f);p.close();canvas.drawPath(p,paint)}}else if(hazard.type=="moving_hazard"){paint.style=Paint.Style.FILL;paint.color=gold;canvas.drawCircle(x,y,density*5f,paint)}}
             }
         }
+        paint.style=Paint.Style.FILL
     }
 
     private fun drawSwitch(canvas: Canvas) {
@@ -771,7 +854,7 @@ private class GameView(context: Context) : View(context) {
     private fun drawExit(canvas: Canvas) {
         val x = level.exit.x * viewW
         val y = level.exit.y * viewH
-        val ready = GameRules.exitIsUnlocked(enemies.count { it.alive }, crates.count { it.alive }, switchActivated)
+        val ready = GameRules.exitIsUnlocked(enemies.count { it.alive }, crates.count { it.alive }, switchActivated, level.requiresAllTargets, level.requiresSwitch)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(2f, density * 3f)
         paint.color = if (ready) cyan else muted
@@ -784,24 +867,19 @@ private class GameView(context: Context) : View(context) {
         paint.style = Paint.Style.FILL
     }
 
-    private fun drawEnemy(canvas: Canvas, enemy: EnemyState) {
-        val x = enemy.x * viewW
-        val y = enemy.y * viewH
-        val r = minDim * (if (enemy.kind == 1) 0.031f else 0.026f)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = max(2f, density * 2f)
-        paint.color = pink
-        paint.setShadowLayer(density * 10f, 0f, 0f, pink)
-        canvas.drawCircle(x, y, r, paint)
-        paint.clearShadowLayer()
-        paint.style = Paint.Style.FILL
-        paint.color = pink
-        canvas.drawCircle(x - r * 0.32f, y - r * 0.12f, max(2f, r * 0.14f), paint)
-        canvas.drawCircle(x + r * 0.32f, y - r * 0.12f, max(2f, r * 0.14f), paint)
-        paint.strokeWidth = max(1.5f, density * 1.5f)
-        paint.style = Paint.Style.STROKE
-        canvas.drawArc(x - r * 0.42f, y + r * 0.05f, x + r * 0.42f, y + r * 0.6f, 15f, 150f, false, paint)
-        paint.style = Paint.Style.FILL
+    private fun drawEnemy(canvas: Canvas, enemy: EnemyState, index: Int) {
+        val c=enemyCenter(enemy,index);val x=c.x*viewW;val y=c.y*viewH
+        val r=minDim*when(enemy.kind){1->0.031f;2->if(enemy.canSplit)0.030f else 0.018f;3->0.047f;else->0.026f}
+        val col=if(enemy.kind==3&&enemy.health>1)gold else pink
+        paint.style=Paint.Style.FILL;paint.color=col;paint.setShadowLayer(density*10f,0f,0f,col)
+        when(enemy.kind){
+            1->{canvas.drawRoundRect(x-r*0.9f,y-r*0.75f,x+r*0.9f,y+r*0.75f,density*4f,density*4f,paint);canvas.save();canvas.rotate(sin(animationTime*1.4f+index)*25f,x,y);canvas.drawRoundRect(x-r*0.12f,y-r*1.65f,x+r*0.12f,y-r*0.30f,density*3f,density*3f,paint);canvas.restore()}
+            2->{canvas.drawCircle(x-r*0.45f,y+r*0.1f,r*0.6f,paint);canvas.drawCircle(x+r*0.43f,y+r*0.1f,r*0.62f,paint);canvas.drawCircle(x,y-r*0.06f,r*0.91f,paint)}
+            else->canvas.drawCircle(x,y,r,paint)
+        }
+        paint.clearShadowLayer();paint.color=dark;canvas.drawCircle(x-r*0.30f,y-r*0.12f,max(2f,r*0.14f),paint);canvas.drawCircle(x+r*0.30f,y-r*0.12f,max(2f,r*0.14f),paint)
+        if(enemy.kind==3){paint.style=Paint.Style.STROKE;paint.strokeWidth=max(2f,density*2f);paint.color=cyan;canvas.drawCircle(x,y,r*1.18f,paint);paint.style=Paint.Style.FILL;if(enemy.health>1)drawText(canvas,enemy.health.toString(),x/viewW,(y+r*1.6f)/viewH,0.016f,gold,Paint.Align.CENTER)}
+        paint.style=Paint.Style.FILL
     }
 
     private fun drawCrate(canvas: Canvas, crate: CrateState) {
@@ -872,9 +950,9 @@ private class GameView(context: Context) : View(context) {
             else if (x > right) { x = right; dirX = -abs(dirX); wallHit = true }
             if (y < top) { y = top; dirY = abs(dirY); wallHit = true }
             else if (y > bottom) { y = bottom; dirY = -abs(dirY); wallHit = true }
-            val enemyHit = enemies.any {
-                it.alive && distanceSquared(x, y, it.x * viewW, it.y * viewH) <
-                    (radius + minDim * 0.027f) * (radius + minDim * 0.027f)
+            val enemyHit = enemies.withIndex().any { (enemyIndex, enemy) ->
+                val c=enemyCenter(enemy,enemyIndex)
+                enemy.alive && distanceSquared(x,y,c.x*viewW,c.y*viewH)<(radius+minDim*0.027f)*(radius+minDim*0.027f)
             }
             val crateHit = crates.any {
                 it.alive && abs(x - it.x * viewW) < radius + minDim * 0.035f &&
@@ -939,6 +1017,11 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas, "SLOW TIME  •  " + (slowMeter * 100f).toInt() + "%", 0.5f, 0.955f, 0.016f, muted, Paint.Align.CENTER)
     }
 
+    private fun drawTurretProjectiles(canvas: Canvas) {
+        paint.style=Paint.Style.FILL
+        for(s in turretProjectiles){paint.color=pink;paint.setShadowLayer(density*6f,0f,0f,pink);canvas.drawCircle(s.x,s.y,minDim*0.009f,paint);paint.clearShadowLayer()}
+    }
+
     private fun drawParticles(canvas: Canvas) {
         paint.style = Paint.Style.FILL
         for (particle in particles) {
@@ -965,12 +1048,10 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas, title, 0.5f, 0.365f, 0.046f, if (title.contains("CLEAR")) cyan else pink, Paint.Align.CENTER)
         drawText(canvas, subtitle, 0.5f, 0.405f, 0.018f, Color.WHITE, Paint.Align.CENTER)
         if (screen == GameScreen.WON) {
-            drawText(canvas, "★".repeat(earnedStars) + "☆".repeat(3 - earnedStars),
-                0.5f, 0.462f, 0.055f, gold, Paint.Align.CENTER)
-            val bestShots = prefs.getInt(bestShotsKey(levelId), shotsUsed)
-            drawText(canvas, "BEST: " + prefs.getInt(bestStarsKey(levelId), earnedStars) +
-                "/3 STARS  •  FEWEST SHOTS: " + bestShots,
-                0.5f, 0.485f, 0.015f, muted, Paint.Align.CENTER)
+            drawText(canvas,"★".repeat(earnedStars)+"☆".repeat(3-earnedStars),0.5f,0.455f,0.050f,gold,Paint.Align.CENTER)
+            drawText(canvas,"SCORE "+score+" • TIME "+formatTime(levelElapsedSeconds)+" • BEST COMBO x"+bestCombo,0.5f,0.482f,0.014f,muted,Paint.Align.CENTER)
+            val bestShots=prefs.getInt(bestShotsKey(levelId),shotsUsed)
+            drawText(canvas,"BEST: "+prefs.getInt(bestStarsKey(levelId),earnedStars)+"/3 STARS • FEWEST SHOTS: "+bestShots,0.5f,0.502f,0.013f,muted,Paint.Align.CENTER)
         }
     }
 
@@ -1122,43 +1203,25 @@ private class GameView(context: Context) : View(context) {
                     GameScreen.MENU -> {
                         when {
                             inRect(nx, ny, 0.18f, 0.52f, 0.82f, 0.585f) -> screen = GameScreen.DIFFICULTY
-                            inRect(nx, ny, 0.18f, 0.595f, 0.82f, 0.66f) -> screen = GameScreen.LEVELS
+                            inRect(nx, ny, 0.18f, 0.595f, 0.82f, 0.66f) -> screen = GameScreen.WORLDS
                             inRect(nx, ny, 0.18f, 0.67f, 0.82f, 0.735f) -> screen = GameScreen.HELP
                             inRect(nx, ny, 0.18f, 0.745f, 0.82f, 0.81f) -> screen = GameScreen.SETTINGS
                         }
                         invalidate()
                         return true
                     }
+                    GameScreen.WORLDS -> {
+                        if(inRect(nx,ny,0.22f,0.83f,0.78f,0.90f)) screen=GameScreen.MENU else {
+                            val unlocked=prefs.getInt("unlocked_level",1).coerceIn(1,levels.size)
+                            for(w in 0 until CampaignWorlds.WORLD_COUNT){val top=0.375f+w*0.088f;if(inRect(nx,ny,0.12f,top,0.88f,top+0.066f)){if(unlocked>=CampaignWorlds.firstLevelForWorld(w)){selectedWorld=w;screen=GameScreen.LEVELS}else showMessage("CLEAR EARLIER WORLDS FIRST");break}}
+                        };invalidate();return true
+                    }
                     GameScreen.LEVELS -> {
-                        if (inRect(nx, ny, 0.22f, 0.83f, 0.78f, 0.90f)) {
-                            screen = GameScreen.MENU
-                        } else {
-                            var modeChanged = false
-                            for (mode in 1..3) {
-                                val left = 0.055f + (mode - 1) * 0.31f
-                                if (inRect(nx, ny, left, 0.195f, left + 0.28f, 0.245f)) {
-                                    difficulty = mode
-                                    prefs.edit().putInt("difficulty_stars", difficulty).apply()
-                                    modeChanged = true
-                                    break
-                                }
-                            }
-                            if (!modeChanged) {
-                                for (id in 1..levels.size) {
-                                    val column = (id - 1) % 4
-                                    val row = (id - 1) / 4
-                                    val left = 0.055f + column * 0.23f
-                                    val top = 0.268f + row * 0.102f
-                                    if (inRect(nx, ny, left, top, left + 0.19f, top + 0.078f)) {
-                                        val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
-                                        if (id <= unlocked) startLevel(id) else showMessage("LOCKED")
-                                        break
-                                    }
-                                }
-                            }
-                        }
-                        invalidate()
-                        return true
+                        if(inRect(nx,ny,0.22f,0.83f,0.78f,0.90f)) screen=GameScreen.WORLDS else {
+                            var changed=false
+                            for(mode in 1..3){val left=0.055f+(mode-1)*0.31f;if(inRect(nx,ny,left,0.195f,left+0.28f,0.245f)){difficulty=mode;prefs.edit().putInt("difficulty_stars",difficulty).apply();changed=true;break}}
+                            if(!changed){val first=CampaignWorlds.firstLevelForWorld(selectedWorld);for(local in 1..10){val id=first+local-1;if(id>levels.size)continue;val col=(local-1)%4;val row=(local-1)/4;val left=0.04f+col*0.24f;val top=0.29f+row*0.135f;if(inRect(nx,ny,left,top,left+0.22f,top+0.085f)){val unlocked=prefs.getInt("unlocked_level",1).coerceIn(1,levels.size);if(id<=unlocked)startLevel(id)else showMessage("LOCKED");break}}}
+                        };invalidate();return true
                     }
                     GameScreen.SETTINGS -> {
                         when {
@@ -1228,7 +1291,7 @@ private class GameView(context: Context) : View(context) {
                                 if (levelId >= levels.size) screen = GameScreen.CAMPAIGN_COMPLETE
                                 else startLevel(levelId + 1)
                             }
-                            inRect(nx, ny, 0.22f, 0.63f, 0.78f, 0.71f) -> screen = GameScreen.LEVELS
+                            inRect(nx, ny, 0.22f, 0.63f, 0.78f, 0.71f) -> { selectedWorld=CampaignWorlds.indexForLevel(levelId);screen=GameScreen.LEVELS }
                         }
                         invalidate()
                         return true
@@ -1236,7 +1299,7 @@ private class GameView(context: Context) : View(context) {
                     GameScreen.FAILED -> {
                         when {
                             inRect(nx, ny, 0.22f, 0.51f, 0.78f, 0.60f) -> startLevel(levelId)
-                            inRect(nx, ny, 0.22f, 0.63f, 0.78f, 0.71f) -> screen = GameScreen.LEVELS
+                            inRect(nx, ny, 0.22f, 0.63f, 0.78f, 0.71f) -> { selectedWorld=CampaignWorlds.indexForLevel(levelId);screen=GameScreen.LEVELS }
                         }
                         invalidate()
                         return true
@@ -1244,7 +1307,7 @@ private class GameView(context: Context) : View(context) {
                     GameScreen.CAMPAIGN_COMPLETE -> {
                         when {
                             inRect(nx, ny, 0.20f, 0.57f, 0.80f, 0.66f) -> startLevel(1)
-                            inRect(nx, ny, 0.20f, 0.69f, 0.80f, 0.78f) -> screen = GameScreen.LEVELS
+                            inRect(nx, ny, 0.20f, 0.69f, 0.80f, 0.78f) -> { selectedWorld=CampaignWorlds.indexForLevel(levelId);screen=GameScreen.LEVELS }
                         }
                         invalidate()
                         return true

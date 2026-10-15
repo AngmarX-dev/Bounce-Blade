@@ -2,8 +2,15 @@ package com.angmarx.bounceblade.game.session
 
 /** Small pure gameplay rules that can be tested without Android UI classes. */
 object GameRules {
-    fun exitIsUnlocked(enemiesRemaining: Int, cratesRemaining: Int, switchActivated: Boolean): Boolean =
-        enemiesRemaining == 0 && cratesRemaining == 0 && switchActivated
+    fun exitIsUnlocked(
+        enemiesRemaining: Int,
+        cratesRemaining: Int,
+        switchActivated: Boolean,
+        requiresAllTargets: Boolean = true,
+        requiresSwitch: Boolean = true
+    ): Boolean =
+        (!requiresAllTargets || (enemiesRemaining == 0 && cratesRemaining == 0)) &&
+            (!requiresSwitch || switchActivated)
 
     /** Zero means the final permitted bounce was used; failure begins on the next bounce. */
     fun bounceBudgetExceeded(bouncesLeft: Int): Boolean = bouncesLeft < 0
@@ -17,6 +24,23 @@ object GameRules {
             else -> (safeBase * 7 / 10).coerceAtLeast(1) // Hard: 70% of the normal budget.
         }
     }
+
+    /** Star score: 1 for a clear, 2 for a fast clear, 3 for a fast full-clear/combo. */
+    fun starsEarnedByPerformance(elapsedSeconds: Float, targetSeconds: Float, allTargetsDestroyed: Boolean, bestCombo: Int): Int {
+        val elapsed = if (elapsedSeconds.isFinite()) elapsedSeconds.coerceAtLeast(0f) else Float.MAX_VALUE
+        val target = if (targetSeconds.isFinite()) targetSeconds.coerceAtLeast(0f) else 0f
+        if (elapsed > target) return 1
+        return if (allTargetsDestroyed || bestCombo >= 3) 3 else 2
+    }
+
+    fun targetTimeSeconds(levelId: Int, difficultyStars: Int): Float {
+        val id = levelId.coerceIn(1, 50)
+        val world = (id - 1) / 10
+        val local = (id - 1) % 10
+        return (32f - world * 1.4f - local * 0.25f - (difficultyStars.coerceIn(1, 3) - 1) * 2f).coerceAtLeast(16f)
+    }
+
+    fun timeLimitSeconds(levelId: Int, difficultyStars: Int): Float = targetTimeSeconds(levelId, difficultyStars) + 24f
 
     /**
      * Rates a successful run while accounting for the unavoidable collisions needed

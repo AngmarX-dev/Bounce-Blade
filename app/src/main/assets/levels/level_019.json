@@ -1,6 +1,6 @@
 {
   "id": 19,
-  "name": "Blade Mastery",
+  "name": "Circuit Breaker",
   "maxBounces": 14,
   "playerSpawn": {
     "x": 0.14,
@@ -70,5 +70,8 @@
       "width": 0.56,
       "height": 0.025
     }
-  ]
+  ],
+  "world": "Crimson Circuit",
+  "requiresAllTargets": true,
+  "requiresSwitch": true
 }

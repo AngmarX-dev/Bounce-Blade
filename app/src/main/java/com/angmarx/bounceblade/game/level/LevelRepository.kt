@@ -49,7 +49,9 @@ class LevelRepository {
             switch = switch,
             enemies = points(root.optJSONArray("enemies")),
             crates = points(root.optJSONArray("crates")),
-            hazards = hazards(root.optJSONArray("hazards"))
+            hazards = hazards(root.optJSONArray("hazards")),
+            requiresAllTargets = root.optBoolean("requiresAllTargets", true),
+            requiresSwitch = root.optBoolean("requiresSwitch", true)
         )
     }
 
