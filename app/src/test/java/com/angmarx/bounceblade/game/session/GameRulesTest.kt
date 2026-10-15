@@ -45,4 +45,18 @@ class GameRulesTest {
     fun invalidMaximumDoesNotCrashScoring() {
         assertEquals(1, GameRules.starsEarned(0, 0, 1))
     }
+
+    @Test
+    fun difficultyChangesBounceBudget() {
+        assertEquals(15, GameRules.bouncesForDifficulty(10, 1))
+        assertEquals(10, GameRules.bouncesForDifficulty(10, 2))
+        assertEquals(7, GameRules.bouncesForDifficulty(10, 3))
+    }
+
+    @Test
+    fun difficultyInputIsClampedAndBudgetStaysPositive() {
+        assertEquals(1, GameRules.bouncesForDifficulty(0, 2))
+        assertEquals(15, GameRules.bouncesForDifficulty(10, 0))
+        assertEquals(7, GameRules.bouncesForDifficulty(10, 99))
+    }
 }
