@@ -1,6 +1,6 @@
 {
   "id": 8,
-  "name": "Hot Floor",
+  "name": "Crossing Lines",
   "maxBounces": 10,
   "playerSpawn": {
     "x": 0.14,
@@ -14,56 +14,10 @@
     "x": 0.78,
     "y": 0.75
   },
-  "enemies": [
-    {
-      "x": 0.55,
-      "y": 0.438
-    },
-    {
-      "x": 0.76,
-      "y": 0.492
-    },
-    {
-      "x": 0.34,
-      "y": 0.607
-    },
-    {
-      "x": 0.57,
-      "y": 0.682
-    },
-    {
-      "x": 0.8,
-      "y": 0.618
-    }
-  ],
-  "crates": [
-    {
-      "x": 0.465,
-      "y": 0.54
-    },
-    {
-      "x": 0.605,
-      "y": 0.41
-    },
-    {
-      "x": 0.315,
-      "y": 0.68
-    }
-  ],
-  "hazards": [
-    {
-      "type": "spikes",
-      "x": 0.5,
-      "y": 0.9,
-      "width": 0.56,
-      "height": 0.025
-    },
-    {
-      "type": "moving_hazard",
-      "x": 0.5,
-      "y": 0.58,
-      "width": 0.32,
-      "height": 0.026
-    }
-  ]
+  "enemies": [],
+  "crates": [],
+  "hazards": [],
+  "world": "Neon Grid",
+  "requiresAllTargets": false,
+  "requiresSwitch": false
 }
