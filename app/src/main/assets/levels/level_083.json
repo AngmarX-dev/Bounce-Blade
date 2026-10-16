@@ -1,0 +1,72 @@
+{
+  "id": 83,
+  "name": "STORM CITADEL • Solar Wave 3",
+  "world": "Storm Citadel",
+  "maxBounces": 12,
+  "playerSpawn": {
+    "x": 0.14,
+    "y": 0.8
+  },
+  "exit": {
+    "x": 0.87,
+    "y": 0.18
+  },
+  "switch": {
+    "x": 0.78,
+    "y": 0.75
+  },
+  "enemies": [
+    {
+      "x": 0.415,
+      "y": 0.402
+    },
+    {
+      "x": 0.585,
+      "y": 0.532
+    },
+    {
+      "x": 0.755,
+      "y": 0.662
+    },
+    {
+      "x": 0.395,
+      "y": 0.252
+    },
+    {
+      "x": 0.565,
+      "y": 0.382
+    }
+  ],
+  "crates": [
+    {
+      "x": 0.45,
+      "y": 0.45
+    },
+    {
+      "x": 0.66,
+      "y": 0.59
+    },
+    {
+      "x": 0.45,
+      "y": 0.73
+    }
+  ],
+  "hazards": [
+    {
+      "type": "teleporter",
+      "x": 0.2,
+      "y": 0.34,
+      "width": 0.075,
+      "height": 0.075
+    },
+    {
+      "type": "teleporter",
+      "x": 0.79,
+      "y": 0.67,
+      "width": 0.075,
+      "height": 0.075
+    }
+  ],
+  "requiresAllTargets": true,
+  "requiresSwitch": true
+}
