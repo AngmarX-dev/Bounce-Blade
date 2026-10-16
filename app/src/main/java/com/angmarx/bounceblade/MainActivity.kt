@@ -79,7 +79,7 @@ private data class PointN(val x: Float, val y: Float)
 private data class EnemyState(
     var x: Float, var y: Float, var alive: Boolean = true, val kind: Int = 0,
     var health: Int = 1, var fireCooldown: Float = 1.6f, val canSplit: Boolean = true,
-    var jumpTime: Float = 0f, var jumpCooldown: Float = 1.4f
+    var jumpTime: Float = 0f, var jumpCooldown: Float = 1.4f, var shieldHits: Int = 0
 )
 private data class TurretProjectile(var x: Float, var y: Float, var vx: Float, var vy: Float, var life: Float)
 private data class CrateState(val x: Float, val y: Float, var alive: Boolean = true)
@@ -560,7 +560,7 @@ private class GameView(context: Context) : View(context) {
             in 61..70 -> intArrayOf(5, 0, 8, 1)
             in 71..80 -> intArrayOf(6, 0, 2, 3)
             in 81..90 -> intArrayOf(7, 1, 5, 8)
-            else -> intArrayOf(8, 4, 5, 6, 7)
+            else -> intArrayOf(8, 4, 5, 6, 7, 9)
         }
         return roster[index % roster.size]
     }
@@ -630,9 +630,9 @@ private class GameView(context: Context) : View(context) {
                         enemy.jumpTime = (enemy.jumpTime - dt).coerceAtLeast(0f)
                     }
                 }
-                1, 3, 7, 8 -> {
+                1, 3, 7, 8, 9 -> {
                     // Turrets, snipers and armored guards trade speed for durability.
-                    val turretSpeed = when (enemy.kind) { 1 -> 0.014f; 7 -> 0.008f; 8 -> 0.0075f; else -> 0.011f }
+                    val turretSpeed = when (enemy.kind) { 1 -> 0.014f; 7 -> 0.008f; 8 -> 0.0075f; 9 -> 0.012f; else -> 0.011f }
                     enemy.x -= turretSpeed * difficultyScale * dt
                     val verticalStep = turretSpeed * (if (enemy.kind == 7) 1.2f else 0.52f) * dt
                     if (enemy.kind == 7) {
@@ -1459,7 +1459,7 @@ private class GameView(context: Context) : View(context) {
             val kind = if (bossRush || finalBoss) 3 else enemyKindForCampaignLevel(levelId, index)
             EnemyState(point.x, point.y, true, kind,
                 if (bossRush) 10 + index * 2 else if (finalBoss) 18 else enemyHealthForLevel(levelId, index),
-                1.2f + (index % 3) * 0.6f, true)
+                1.2f + (index % 3) * 0.6f, true, shieldHits = if (kind == 9) 2 else 0)
         }.toMutableList()
         pickups.clear()
         activeEffects.clear()
@@ -2311,14 +2311,14 @@ private class GameView(context: Context) : View(context) {
             else -> 0.030f
         }
         val path = when (enemy.kind) {
-            1, 7, 8 -> "Gameplay Sprites/Enemy Turret.png"
+            1, 7, 8, 9 -> "Gameplay Sprites/Enemy Turret.png"
             2 -> "Gameplay Sprites/Enemy Slime.png"
             3 -> "Gameplay Sprites/Enemy Turret.png"
             6 -> "Gameplay Sprites/Portal.png"
             else -> "Gameplay Sprites/Enemy Drone.png"
         }
         val drawSize = when (enemy.kind) { 3 -> r * 3.2f; 5 -> r * 2.7f; 6 -> r * 2.8f; 8 -> r * 2.6f; else -> r * 2.35f }
-        val isTurret = enemy.kind == 1 || enemy.kind == 3 || enemy.kind == 7 || enemy.kind == 8
+        val isTurret = enemy.kind == 1 || enemy.kind == 3 || enemy.kind == 7 || enemy.kind == 8 || enemy.kind == 9
         if (enemySkin > 0) {
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = max(2f, density * 2.2f)
