@@ -692,8 +692,15 @@ private class GameView(context: Context) : View(context) {
         else -> 0.085f
     }
 
+    private fun clampGuardPaddleY(y: Float): Float {
+        val half = guardPaddleHalf()
+        val top = viewH * 0.145f + half
+        val bottom = viewH * 0.935f - half
+        return (y * viewH).coerceIn(top, bottom) / viewH
+    }
+
     private fun launchWallGuardBlade() {
-        guardPaddleY = guardPaddleY.coerceIn(0.20f, 0.86f)
+        guardPaddleY = clampGuardPaddleY(guardPaddleY)
         bladeX = 0.145f
         bladeY = guardPaddleY
         val speed = minDim * (0.50f + difficulty * 0.075f + min(levelId, 30) * 0.003f)
@@ -1808,7 +1815,7 @@ private class GameView(context: Context) : View(context) {
                             return true
                         }
                         if (wallGuardMode) {
-                            guardPaddleY = ny.coerceIn(0.20f, 0.86f)
+                            guardPaddleY = clampGuardPaddleY(ny)
                             invalidate()
                             return true
                         }
@@ -1826,7 +1833,7 @@ private class GameView(context: Context) : View(context) {
             MotionEvent.ACTION_MOVE -> {
                 if (event.pointerCount > 1) slowMotion = true
                 if (wallGuardMode && screen == GameScreen.PLAYING) {
-                    guardPaddleY = ny.coerceIn(0.20f, 0.86f)
+                    guardPaddleY = clampGuardPaddleY(ny)
                     invalidate()
                     return true
                 }
