@@ -148,6 +148,31 @@ jobs:
       - name: Run unit tests and build debug APK
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug
 
+      - name: Verify trimmed transparent PNG assets are packaged
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          import zipfile
+
+          generated = Path("app/build/generated/trimmedImageAssets")
+          manifest = generated / "trimmed-assets.txt"
+          apk = Path("app/build/outputs/apk/debug/app-debug.apk")
+          if not manifest.is_file() or not apk.is_file():
+              sys.exit("Expected generated trim manifest and debug APK.")
+          paths = [line.strip() for line in manifest.read_text(encoding="utf-8").splitlines() if line.strip()]
+          if not paths:
+              sys.exit("No transparent PNG margins were trimmed.")
+          with zipfile.ZipFile(apk) as archive:
+              names = set(archive.namelist())
+              missing = [f"assets/{path}" for path in paths if f"assets/{path}" not in names]
+              if "assets/trimmed-assets.txt" not in names:
+                  missing.append("assets/trimmed-assets.txt")
+          if missing:
+              sys.exit("Trimmed assets not packaged: " + ", ".join(missing[:10]))
+          print(f"Verified {len(paths)} trimmed PNG assets are present in the APK.")
+          PY
+
       - name: Upload debug APK
         if: success()
         uses: actions/upload-artifact@v4
