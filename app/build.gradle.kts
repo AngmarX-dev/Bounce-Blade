@@ -85,7 +85,7 @@ val trimTransparentImageAssets by tasks.registering {
     outputs.dir(outputDirectory)
 
     doLast {
-        val sourceRoot = sourceDirectory.get().asFile
+        val sourceRoot = sourceDirectory.asFile
         val outputRoot = outputDirectory.get().asFile
         outputRoot.deleteRecursively()
         outputRoot.mkdirs()
