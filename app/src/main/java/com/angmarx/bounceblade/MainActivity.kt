@@ -132,15 +132,6 @@ private class GameView(context: Context) : View(context) {
     private val loadedSoundIds = mutableSetOf<Int>()
     private val bitmapAssets = mutableMapOf<String, Bitmap>()
     private val failedBitmapAssets = mutableSetOf<String>()
-    private val trimmedAssetPaths: Set<String> by lazy {
-        try {
-            context.assets.open("trimmed-assets.txt").bufferedReader().useLines { lines ->
-                lines.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-            }
-        } catch (_: Exception) {
-            emptySet()
-        }
-    }
     private var currentMusicPath: String? = null
     private var musicPlayer: MediaPlayer? = null
     private var musicPrepared = false
@@ -964,13 +955,56 @@ private class GameView(context: Context) : View(context) {
                 inSampleSize = sample
                 inPreferredConfig = Bitmap.Config.ARGB_8888
             }
-            val bitmap = context.assets.open(path).use { BitmapFactory.decodeStream(it, null, options) }
+            val decoded = context.assets.open(path).use { BitmapFactory.decodeStream(it, null, options) }
                 ?: error("Could not decode image: $path")
+            // Crop transparent margins in memory before drawing. The original PNGs
+            // stay untouched in the repository and APK, avoiding PNG re-encoding bloat.
+            val bitmap = trimTransparentPadding(decoded)
+            if (bitmap !== decoded && !decoded.isRecycled) decoded.recycle()
             bitmapAssets[path] = bitmap
             bitmap
         } catch (_: Exception) {
             failedBitmapAssets.add(path)
             null
+        }
+    }
+
+    private fun trimTransparentPadding(source: Bitmap): Bitmap {
+        val width = source.width
+        val height = source.height
+        if (width < 2 || height < 2 || !source.hasAlpha()) return source
+
+        return try {
+            val pixels = IntArray(width * height)
+            source.getPixels(pixels, 0, width, 0, 0, width, height)
+            var minX = width
+            var minY = height
+            var maxX = -1
+            var maxY = -1
+            for (index in pixels.indices) {
+                val alpha = (pixels[index] ushr 24) and 0xff
+                if (alpha > 12) {
+                    val x = index % width
+                    val y = index / width
+                    if (x < minX) minX = x
+                    if (x > maxX) maxX = x
+                    if (y < minY) minY = y
+                    if (y > maxY) maxY = y
+                }
+            }
+            if (maxX < minX || maxY < minY) return source
+
+            // Leave a slim margin for antialiasing and soft glows.
+            val margin = max(1, (max(width, height) * 0.02f).toInt())
+            val left = (minX - margin).coerceAtLeast(0)
+            val top = (minY - margin).coerceAtLeast(0)
+            val right = (maxX + margin + 1).coerceAtMost(width)
+            val bottom = (maxY + margin + 1).coerceAtMost(height)
+            if (left == 0 && top == 0 && right == width && bottom == height) return source
+
+            Bitmap.createBitmap(source, left, top, right - left, bottom - top)
+        } catch (_: RuntimeException) {
+            source
         }
     }
 
@@ -982,23 +1016,7 @@ private class GameView(context: Context) : View(context) {
         paint.alpha = alpha.coerceIn(0, 255)
         paint.isFilterBitmap = true
         paint.style = Paint.Style.FILL
-
-        // Images trimmed at build time need aspect-fit drawing after their
-        // transparent margins are removed, otherwise sprites and icons stretch.
-        val targetRect = if (path in trimmedAssetPaths && rect.width() > 0f && rect.height() > 0f) {
-            val imageAspect = bitmap.width.toFloat() / bitmap.height.toFloat()
-            val rectAspect = rect.width() / rect.height()
-            if (imageAspect > rectAspect) {
-                val fittedHeight = rect.width() / imageAspect
-                RectF(rect.left, rect.centerY() - fittedHeight / 2f, rect.right, rect.centerY() + fittedHeight / 2f)
-            } else {
-                val fittedWidth = rect.height() * imageAspect
-                RectF(rect.centerX() - fittedWidth / 2f, rect.top, rect.centerX() + fittedWidth / 2f, rect.bottom)
-            }
-        } else {
-            rect
-        }
-        canvas.drawBitmap(bitmap, null, targetRect, paint)
+        canvas.drawBitmap(bitmap, null, rect, paint)
         paint.alpha = oldAlpha
         paint.isFilterBitmap = oldFilter
         paint.style = oldStyle
