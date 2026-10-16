@@ -129,6 +129,9 @@ private class GameView(context: Context) : View(context) {
     private val minDim get() = min(viewW, viewH)
     private val wallGuardMode = true
     private var guardPaddleY = 0.5f
+    private var secondGuardPaddleY = 0.5f
+    private var primaryPointerId = -1
+    private var secondPointerId = -1
     private var viewW = 1f
     private var viewH = 1f
     private var themeId = prefs.getInt("theme_id", 0).coerceIn(0, 2)
@@ -853,11 +856,16 @@ private class GameView(context: Context) : View(context) {
 
         if ((!leftHandedMode && px < leftContact) || (leftHandedMode && px > rightContact)) {
             val paddleCenter = guardPaddleY * viewH
+            val secondCenter = secondGuardPaddleY * viewH
             val paddleHalf = guardPaddleHalf()
             val shieldContact = if (leftHandedMode) rightContact else leftContact
-            if (abs(py - paddleCenter) <= paddleHalf + radius) {
+            val firstCatch = abs(py - paddleCenter) <= paddleHalf + radius
+            val secondCatch = gameMode == "local_coop" && abs(py - secondCenter) <= paddleHalf + radius
+            if (firstCatch || secondCatch) {
                 px = shieldContact
-                val offset = ((py - paddleCenter) / (paddleHalf + radius)).coerceIn(-1f, 1f)
+                val catchCenter = if (!firstCatch && secondCatch) secondCenter else paddleCenter
+                val offset = ((py - catchCenter) / (paddleHalf + radius)).coerceIn(-1f, 1f)
+                if (secondCatch && !firstCatch) showMessage("PLAYER 2 SAVE!")
                 val oldSpeed = sqrt(velocityX * velocityX + velocityY * velocityY)
                 val speed = (oldSpeed * 1.035f).coerceIn(
                     minDim * 0.46f * bladeSpeedScale(),
@@ -1230,6 +1238,9 @@ private class GameView(context: Context) : View(context) {
                 requiresSwitch = false
             )
             guardPaddleY = 0.5f
+            secondGuardPaddleY = 0.5f
+            secondPointerId = -1
+            primaryPointerId = -1
         }
         val activeEnemyPoints = when {
             gameMode == "procedural" -> {
@@ -1911,6 +1922,24 @@ private class GameView(context: Context) : View(context) {
                 paddle.centerX() + density, paddle.bottom - density * 7f),
             density, density, paint
         )
+        if (gameMode == "local_coop") {
+            val secondCenter = secondGuardPaddleY * viewH
+            val secondPaddle = if (leftHandedMode) RectF(viewW * 0.902f, secondCenter - paddleHalf,
+                viewW * 0.957f, secondCenter + paddleHalf)
+            else RectF(viewW * 0.043f, secondCenter - paddleHalf, viewW * 0.098f, secondCenter + paddleHalf)
+            paint.style = Paint.Style.FILL
+            paint.color = Color.argb(if (secondPointerId >= 0) 145 else 70, Color.red(pink), Color.green(pink), Color.blue(pink))
+            paint.setShadowLayer(density * 9f, 0f, 0f, pink)
+            canvas.drawRoundRect(secondPaddle, density * 8f, density * 8f, paint)
+            paint.clearShadowLayer()
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = max(2f, density * 2f)
+            paint.color = pink
+            canvas.drawRoundRect(secondPaddle, density * 8f, density * 8f, paint)
+            paint.style = Paint.Style.FILL
+            drawText(canvas, "P2", if (leftHandedMode) 0.88f else 0.12f,
+                (secondCenter - paddleHalf - density * 3f) / viewH, 0.014f, pink, Paint.Align.CENTER)
+        }
 
         val bladePx = bladeX * viewW
         val bladePy = bladeY * viewH
@@ -2268,7 +2297,7 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas, "GAME MODES", 0.5f, 0.16f, 0.060f, Color.WHITE, Paint.Align.CENTER)
         drawText(canvas, "ACTIVE: " + gameMode.replace('_', ' ').uppercase(), 0.5f, 0.205f, 0.020f, gold, Paint.Align.CENTER)
         val modes = listOf(
-            "campaign" to "CAMPAIGN • 50 STAGES",
+            "campaign" to "CAMPAIGN • 100 STAGES",
             "endless" to "ENDLESS • LOOP FOREVER",
             "time_attack" to "TIME ATTACK • 60 SECONDS",
             "zen" to "ZEN / PRACTICE • NO RUN LOST",
@@ -2769,16 +2798,25 @@ private class GameView(context: Context) : View(context) {
         val ny = event.y / viewH
         when (event.actionMasked) {
             MotionEvent.ACTION_POINTER_DOWN -> {
-                slowMotion = true
+                if (screen == GameScreen.PLAYING && gameMode == "local_coop") {
+                    val index = event.actionIndex
+                    secondPointerId = event.getPointerId(index)
+                    secondGuardPaddleY = clampGuardPaddleY(event.getY(index) / viewH)
+                    slowMotion = false
+                } else slowMotion = true
                 invalidate()
                 return true
             }
             MotionEvent.ACTION_POINTER_UP -> {
-                slowMotion = event.pointerCount > 2
+                val liftedId = event.getPointerId(event.actionIndex)
+                if (liftedId == secondPointerId) secondPointerId = -1
+                if (liftedId == primaryPointerId) primaryPointerId = -1
+                slowMotion = gameMode != "local_coop" && event.pointerCount > 2
                 invalidate()
                 return true
             }
             MotionEvent.ACTION_DOWN -> {
+                primaryPointerId = event.getPointerId(0)
                 if (screen != GameScreen.PLAYING) playSfx("UI & Feedback SFX/Button Click.wav")
                 when (screen) {
                     GameScreen.MENU -> {
@@ -2809,7 +2847,7 @@ private class GameView(context: Context) : View(context) {
                         return true
                     }
                     GameScreen.MODES -> {
-                        val modes = listOf("campaign", "endless", "time_attack", "zen", "boss_rush", "speedrun", "procedural")
+                        val modes = listOf("campaign", "endless", "time_attack", "zen", "boss_rush", "speedrun", "procedural", "local_coop")
                         val i = modes.indices.firstOrNull { inRect(nx, ny, 0.10f, 0.245f + it * 0.067f, 0.90f, 0.312f + it * 0.067f) }
                         if (i != null) selectMode(modes[i]) else if (inRect(nx, ny, 0.24f, 0.80f, 0.76f, 0.88f)) screen = GameScreen.FEATURES
                         invalidate()
@@ -3132,6 +3170,16 @@ private class GameView(context: Context) : View(context) {
             }
             MotionEvent.ACTION_MOVE -> {
                 if (touchingAbility) return true
+                if (screen == GameScreen.PLAYING && gameMode == "local_coop") {
+                    for (index in 0 until event.pointerCount) {
+                        val id = event.getPointerId(index)
+                        val pointerY = event.getY(index) / viewH
+                        if (id == primaryPointerId) guardPaddleY = clampGuardPaddleY(pointerY)
+                        if (id == secondPointerId) secondGuardPaddleY = clampGuardPaddleY(pointerY)
+                    }
+                    invalidate()
+                    return true
+                }
                 if (event.pointerCount > 1) slowMotion = true
                 if (wallGuardMode && screen == GameScreen.PLAYING) {
                     guardPaddleY = clampGuardPaddleY(ny)
@@ -3146,6 +3194,8 @@ private class GameView(context: Context) : View(context) {
                 return true
             }
             MotionEvent.ACTION_UP -> {
+                primaryPointerId = -1
+                secondPointerId = -1
                 if (touchingAbility) {
                     touchingAbility = false
                     invalidate()
@@ -3180,6 +3230,8 @@ private class GameView(context: Context) : View(context) {
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
+                primaryPointerId = -1
+                secondPointerId = -1
                 touchingAbility = false
                 aiming = false
                 slowMotion = false
