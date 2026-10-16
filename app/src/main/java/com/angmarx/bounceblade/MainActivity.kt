@@ -705,7 +705,7 @@ private class GameView(context: Context) : View(context) {
         bladeY = guardPaddleY
         val speed = minDim * (0.50f + difficulty * 0.075f + min(levelId, 30) * 0.003f)
         velocityX = speed
-        velocityY = speed * (sin(levelId * 1.37f) * 0.22f)
+        velocityY = speed * (sin(levelId * 1.37f) * 0.045f)
         flying = true
         aiming = false
         shotsUsed = 1
@@ -786,7 +786,12 @@ private class GameView(context: Context) : View(context) {
             val points = (0 until targetCount).map { index ->
                 val column = index % 4
                 val row = index / 4
-                PointN(0.49f + column * 0.115f, 0.235f + row * 0.215f)
+                val y = when (row) {
+                    0 -> 0.5f
+                    1 -> if (column % 2 == 0) 0.32f else 0.68f
+                    else -> if (column % 2 == 0) 0.25f else 0.75f
+                }
+                PointN(0.49f + column * 0.115f, y)
             }
             level = level.copy(
                 spawn = PointN(0.145f, 0.5f),
