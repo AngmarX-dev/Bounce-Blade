@@ -1,34 +1,29 @@
 # ⚔️ Bounce Blade
 
-**Bounce Blade** is an offline Android physics-puzzle game built with Kotlin and a custom Canvas renderer. Aim a spinning energy blade, use ricochets to clear enemies and crates, activate the switch, and reach the exit.
+**Bounce Blade** is an offline Android arcade game built with Kotlin and a custom Canvas renderer. A spinning blade launches automatically from the left, hits enemies and ricochets back. You move a glowing shield along the left wall to catch every return.
 
 ## Gameplay features
 
-- **50 levels across five worlds:** Neon Grid, Crimson Circuit, Azure Vault, Magenta Maze and Golden Core, with linear unlocking and local saves.
-- **Trajectory preview with ricochet prediction** while aiming; forecast segments highlight likely target, crate, and hazard collisions.
-- **Bundled game art and UI:** menu and gameplay backgrounds, title/logo, animated blade sprites, drone/turret/slime sprites, portal/switch/crate art, button icons, banners and impact/combo effects.
-- **Soundtrack and SFX:** looping menu/gameplay/victory/game-over music plus sampled blade, ricochet, enemy, crate, switch, portal, combo, timer, power-up and UI sounds. The Sound setting controls music and effects.
-- **Three-star difficulty selection:** Easy gives 50% more bounces, Normal uses the level's default budget, and Hard gives 70% of that budget.
-- **Three-star level cards:** all three stars stay visible; earned stars are filled in and saved independently for each difficulty.
-- **Performance stars, timer, score and combos:** beat the star time target and clear every target or chain three hits for the top rating; a longer deadline still lets slower runs finish.
-- **Help screen** with controls, objectives and hazard tips.
-- **Three selectable color themes** (Cyan, Green, Violet), saved between launches.
-- **New enemies and objects:** moving drones, firing turrets, splitting slimes, shielded drones and a multi-hit final boss, plus sticky walls, teleporters and collectible +2-bounce power-ups.
-- **Real objective gating:** clear every enemy and crate, activate the gold switch, then reach the portal.
-- **Bounce budget, retry flow, pause menu, victory/failure screens, and level selection.**
-- **Two-finger slow motion** with a rechargeable meter.
-- **Persistent settings** for sound, vibration, color theme, selected difficulty, campaign progress and best stars.
-- **No external art or audio is required to start:** the game draws its core art and provides device-generated sound feedback.
-- **GitHub Actions** validates level files, runs unit tests, builds the debug APK, and uploads it as an artifact.
+- **50 stages across five worlds:** Neon Grid, Crimson Circuit, Azure Vault, Magenta Maze and Golden Core, with linear unlocking and local saves.
+- **Automatic blade launch:** each stage begins with the blade flying into the arena; enemy impacts reverse its horizontal direction, sending it back toward the player.
+- **Player-controlled left shield:** touch and drag vertically anywhere on the screen to move the shield up or down.
+- **Instant-loss rule:** if the returning blade passes the shield at the left edge, the run ends immediately.
+- **Enemy waves:** every stage creates a growing formation of enemies, with tougher enemy types and multi-hit targets in later stages.
+- **Score, impact effects and catch streaks:** hits, catches and ricochets use the included visual and audio feedback.
+- **Three difficulty levels:** Easy gives the shield a larger catch area, Normal is balanced, and Hard uses a smaller shield with a faster blade.
+- **Bundled game art and UI:** menu/gameplay backgrounds, game logo, blade sprites, drone/turret/slime sprites, buttons, banners, and impact effects.
+- **Soundtrack and SFX:** looping menu/gameplay/victory/game-over music plus blade launch, ricochet, enemy-hit and UI sounds. The Sound setting controls music and effects.
+- **Three selectable color themes** (Cyan, Green, Violet), plus saved campaign progress, score stars, sound and vibration settings.
+- **Pause, retry, stage selection and victory/failure screens.**
+- **GitHub Actions** validates the assets and 50 level files, runs unit tests, builds the debug APK, and uploads it as an artifact.
 
 ## Controls
 
-1. In the arena, drag backward to aim. The preview line shows predicted ricochets and likely impacts.
-2. Release to launch the blade.
-3. Use wall and object rebounds to destroy enemies and crates.
-4. Hit the gold switch after clearing the required targets. The exit only accepts the blade when all objectives are satisfied.
-5. Keep an eye on moving lasers and spike strips. A hazard hit restarts the level attempt.
-6. Place a second finger on the screen during flight to slow time.
+1. The blade launches automatically when a stage starts.
+2. Touch anywhere and drag **up or down** to move the glowing shield on the left wall.
+3. When the blade hits an enemy, it bounces back. Catch it by moving the shield into its path.
+4. If the blade slips past the shield and exits on the left, you lose immediately.
+5. Clear every enemy to finish the stage; use **Ⅱ** in the top-right corner to pause.
 
 ## Build
 
