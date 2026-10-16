@@ -1,0 +1,72 @@
+{
+  "id": 77,
+  "name": "QUANTUM ABYSS • Blackout 7",
+  "world": "Quantum Abyss",
+  "maxBounces": 19,
+  "playerSpawn": {
+    "x": 0.14,
+    "y": 0.8
+  },
+  "exit": {
+    "x": 0.87,
+    "y": 0.18
+  },
+  "switch": {
+    "x": 0.78,
+    "y": 0.75
+  },
+  "enemies": [
+    {
+      "x": 0.38,
+      "y": 0.24
+    },
+    {
+      "x": 0.55,
+      "y": 0.37
+    },
+    {
+      "x": 0.72,
+      "y": 0.5
+    },
+    {
+      "x": 0.36,
+      "y": 0.63
+    },
+    {
+      "x": 0.53,
+      "y": 0.76
+    }
+  ],
+  "crates": [
+    {
+      "x": 0.39,
+      "y": 0.45
+    },
+    {
+      "x": 0.6,
+      "y": 0.59
+    },
+    {
+      "x": 0.39,
+      "y": 0.73
+    }
+  ],
+  "hazards": [
+    {
+      "type": "teleporter",
+      "x": 0.2,
+      "y": 0.34,
+      "width": 0.075,
+      "height": 0.075
+    },
+    {
+      "type": "teleporter",
+      "x": 0.79,
+      "y": 0.67,
+      "width": 0.075,
+      "height": 0.075
+    }
+  ],
+  "requiresAllTargets": true,
+  "requiresSwitch": true
+}
