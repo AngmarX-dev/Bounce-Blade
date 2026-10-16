@@ -74,7 +74,7 @@ jobs:
               "simulateWallGuardStep",
               "launchWallGuardBlade",
               "drawWallGuardGame",
-              "guardPaddleY = ny.coerceIn",
+              "guardPaddleY = clampGuardPaddleY(ny)",
               "THE BLADE PASSED THE LEFT WALL",
           ]
           missing = [marker for marker in required if marker not in source]
