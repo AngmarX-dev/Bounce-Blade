@@ -2,6 +2,7 @@ package com.angmarx.bounceblade
 
 import android.app.Activity
 import android.content.Context
+import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -16,6 +17,13 @@ import android.media.MediaPlayer
 import android.media.SoundPool
 import android.media.ToneGenerator
 import android.os.Bundle
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.view.InputDevice
+import android.view.KeyEvent
+import java.io.File
+import java.io.FileOutputStream
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
@@ -104,7 +112,7 @@ private data class Particle(
     val color: Int,
     val radius: Float
 )
-private enum class GameScreen { MENU, WORLDS, LEVELS, PLAYING, PAUSED, SETTINGS, HELP, DIFFICULTY, SHOP, FEATURES, MODES, CHALLENGES, ACHIEVEMENTS, STATS, CUSTOMIZE, EDITOR, ACCESSIBILITY, JUKEBOX, WON, FAILED, CAMPAIGN_COMPLETE }
+private enum class GameScreen { MENU, WORLDS, LEVELS, PLAYING, PAUSED, SETTINGS, HELP, DIFFICULTY, SHOP, FEATURES, MODES, CHALLENGES, ACHIEVEMENTS, STATS, CUSTOMIZE, EDITOR, ACCESSIBILITY, JUKEBOX, EXTRAS, LOCAL_SCORES, REPLAYS, PHOTO_MODE, SEASONAL, ONLINE_FEATURES, WON, FAILED, CAMPAIGN_COMPLETE }
 
 private data class ShopItem(
     val id: String,
@@ -191,6 +199,11 @@ private class GameView(context: Context) : View(context) {
     private var bladeSkin = prefs.getInt("blade_skin", 0).coerceIn(0, 5)
     private var shieldSkin = prefs.getInt("shield_skin", 0).coerceIn(0, 5)
     private var highContrast = prefs.getBoolean("high_contrast", false)
+    private var colorblindMode = prefs.getBoolean("colorblind_mode", false)
+    private var hapticLevel = prefs.getInt("haptic_level", 2).coerceIn(0, 3)
+    private var playerName = prefs.getString("player_name", "BLADE RUNNER") ?: "BLADE RUNNER"
+    private var traceTimer = 0f
+    private val runTrace = mutableListOf<PointF>()
     private var reducedMotion = prefs.getBoolean("reduced_motion", false)
     private var leftHandedMode = prefs.getBoolean("left_handed", false)
     private var largeUi = prefs.getBoolean("large_ui", false)
@@ -287,7 +300,7 @@ private class GameView(context: Context) : View(context) {
         playSfx("UI & Feedback SFX/Button Back.wav")
         when (screen) {
             GameScreen.PLAYING -> screen = GameScreen.PAUSED
-            GameScreen.PAUSED, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.EDITOR, GameScreen.ACCESSIBILITY, GameScreen.JUKEBOX -> screen = if (screen == GameScreen.FEATURES) GameScreen.MENU else GameScreen.FEATURES
+            GameScreen.PAUSED, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.EDITOR, GameScreen.ACCESSIBILITY, GameScreen.JUKEBOX, GameScreen.EXTRAS, GameScreen.LOCAL_SCORES, GameScreen.REPLAYS, GameScreen.PHOTO_MODE, GameScreen.SEASONAL, GameScreen.ONLINE_FEATURES -> screen = if (screen == GameScreen.FEATURES) GameScreen.MENU else if (screen == GameScreen.EXTRAS) GameScreen.FEATURES else GameScreen.EXTRAS
             GameScreen.SHOP -> {
                 screen = shopReturnScreen
                 if (screen == GameScreen.PLAYING) lastFrame = System.nanoTime()
@@ -361,6 +374,12 @@ private class GameView(context: Context) : View(context) {
             GameScreen.EDITOR -> drawEditor(canvas)
             GameScreen.ACCESSIBILITY -> drawAccessibility(canvas)
             GameScreen.JUKEBOX -> drawJukebox(canvas)
+            GameScreen.EXTRAS -> drawExtras(canvas)
+            GameScreen.LOCAL_SCORES -> drawLocalScores(canvas)
+            GameScreen.REPLAYS -> drawReplays(canvas)
+            GameScreen.PHOTO_MODE -> drawPhotoMode(canvas)
+            GameScreen.SEASONAL -> drawSeasonal(canvas)
+            GameScreen.ONLINE_FEATURES -> drawOnlineFeatures(canvas)
             GameScreen.WON -> {
                 drawGame(canvas)
                 drawOverlay(canvas, "LEVEL CLEARED", "Nice shot! The exit is open.")
@@ -390,6 +409,13 @@ private class GameView(context: Context) : View(context) {
         val rawDt = ((now - lastFrame) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.025f)
         lastFrame = now
         animationTime += rawDt
+        if (screen == GameScreen.PLAYING) {
+            traceTimer += rawDt
+            if (traceTimer >= 0.06f && runTrace.size < 1000) {
+                runTrace.add(PointF(bladeX.coerceIn(0f, 1f), bladeY.coerceIn(0f, 1f)))
+                traceTimer = 0f
+            }
+        }
         if (screen == GameScreen.PLAYING) {
             val effectIterator = activeEffects.entries.iterator()
             while (effectIterator.hasNext()) {
@@ -480,7 +506,9 @@ private class GameView(context: Context) : View(context) {
     private fun registerTargetHit(points: Int, x: Float, y: Float, color: Int) {
         comboCount = if (comboWindow > 0f) comboCount + 1 else 1
         comboWindow = 2.25f; bestCombo = max(bestCombo, comboCount)
-        score += points * comboCount
+        if (bestCombo > prefs.getInt("all_time_best_combo", 0)) prefs.edit().putInt("all_time_best_combo", bestCombo).apply()
+        val multiplier = (if ((activeEffects["score_multiplier"] ?: 0f) > 0f) 2 else 1) * (if (comboCount >= 5) 2 else 1)
+        score += points * comboCount * multiplier
         lastImpactX = x; lastImpactY = y; impactUntil = System.nanoTime() + 320_000_000L
         addBurst(x, y, color, if (comboCount >= 3) 20 else 13)
         if (comboCount >= 2) { showMessage("COMBO x" + comboCount); playSfx("UI & Feedback SFX/Combo - Streak.wav") }
@@ -1076,6 +1104,8 @@ private class GameView(context: Context) : View(context) {
             .apply()
         if (gameMode == "daily") prefs.edit().putInt("daily_best_score", max(prefs.getInt("daily_best_score", 0), score)).apply()
         if (gameMode == "weekly") prefs.edit().putInt("weekly_best_score", max(prefs.getInt("weekly_best_score", 0), score)).apply()
+        saveReplayTrace()
+        if (gameMode == "speedrun") prefs.edit().putFloat("best_speedrun_seconds", min(prefs.getFloat("best_speedrun_seconds", Float.MAX_VALUE), levelElapsedSeconds)).apply()
         screen = if (levelId >= levels.size) GameScreen.CAMPAIGN_COMPLETE else GameScreen.WON
         playSfx("Core Gameplay SFX/Level Complete.wav")
         if (earnedStars > previousBest) playSfx("UI & Feedback SFX/Star - Score Earned.wav")
@@ -1104,6 +1134,7 @@ private class GameView(context: Context) : View(context) {
             showMessage("EXTRA LIFE USED")
             return
         }
+        saveReplayTrace()
         prefs.edit().putInt("total_fails", prefs.getInt("total_fails", 0) + 1).apply()
         flying = false
         aiming = false
@@ -1219,6 +1250,8 @@ private class GameView(context: Context) : View(context) {
             return
         }
         prefs.edit().putInt("total_runs", prefs.getInt("total_runs", 0) + 1).apply()
+        runTrace.clear()
+        traceTimer = 0f
         loadLevel(id)
         screen = GameScreen.PLAYING
         if (wallGuardMode) launchWallGuardBlade()
@@ -1479,12 +1512,13 @@ private class GameView(context: Context) : View(context) {
 
     private fun updateMusicForScreen() {
         val target = when (screen) {
-            GameScreen.MENU, GameScreen.WORLDS, GameScreen.LEVELS, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY, GameScreen.SHOP, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.EDITOR, GameScreen.ACCESSIBILITY ->
+            GameScreen.MENU, GameScreen.WORLDS, GameScreen.LEVELS, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY, GameScreen.SHOP, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.EDITOR, GameScreen.ACCESSIBILITY, GameScreen.EXTRAS, GameScreen.LOCAL_SCORES, GameScreen.REPLAYS, GameScreen.SEASONAL, GameScreen.ONLINE_FEATURES ->
                 "Music & Ambience/Main Menu Theme.wav"
             GameScreen.PLAYING, GameScreen.PAUSED -> "Music & Ambience/Gameplay Background.wav"
             GameScreen.WON, GameScreen.CAMPAIGN_COMPLETE -> "Music & Ambience/Victory Theme.wav"
             GameScreen.FAILED -> "Music & Ambience/Game Over Theme.wav"
             GameScreen.JUKEBOX -> musicTracks[jukeboxTrackId]
+            GameScreen.PHOTO_MODE -> "Music & Ambience/Gameplay Background.wav"
         }
         if (!soundEnabled || audioLifecyclePaused) {
             if (musicPrepared) try { musicPlayer?.pause() } catch (_: IllegalStateException) { }
@@ -2166,7 +2200,7 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas, "FEATURE HUB", 0.5f, 0.16f, 0.060f, Color.WHITE, Paint.Align.CENTER)
         drawText(canvas, "OFFLINE MODES • PROGRESSION • PERSONALIZATION", 0.5f, 0.205f, 0.017f, cyan, Paint.Align.CENTER)
         val items = listOf("GAME MODES", "DAILY / WEEKLY CHALLENGE", "ACHIEVEMENTS", "PROFILE & STATS",
-            "BLADE / SHIELD COSMETICS", "LEVEL LAB & SHARE", "ACCESSIBILITY & AUDIO", "HELP & CONTROLS")
+            "BLADE / SHIELD COSMETICS", "LEVEL LAB & SHARE", "ACCESSIBILITY & AUDIO", "EXTRAS / SCORES / REPLAY")
         items.forEachIndexed { i, label ->
             val top = 0.235f + i * 0.065f
             drawButton(canvas, 0.12f, top, 0.88f, top + 0.058f, label, if (i % 2 == 0) cyan else gold)
@@ -2422,7 +2456,8 @@ private class GameView(context: Context) : View(context) {
 
     private fun addBurst(x: Float, y: Float, color: Int, count: Int) {
         val seed = (x.toInt() * 31 + y.toInt() * 17 + count * 13)
-        for (i in 0 until count) {
+        val particleCount = if (reducedMotion) (count / 4).coerceAtLeast(1) else count
+        for (i in 0 until particleCount) {
             val angle = ((i * 137 + seed) % 360) * Math.PI.toFloat() / 180f
             val speed = density * (35f + (i % 5) * 16f)
             particles.add(Particle(x, y, kotlin.math.cos(angle) * speed, kotlin.math.sin(angle) * speed,
@@ -2455,7 +2490,9 @@ private class GameView(context: Context) : View(context) {
     }
 
     private fun haptic() {
-        if (vibrationEnabled) performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+        if (!vibrationEnabled || hapticLevel == 0) return
+        val feedback = when (hapticLevel) { 1 -> HapticFeedbackConstants.CLOCK_TICK; 2 -> HapticFeedbackConstants.VIRTUAL_KEY; else -> HapticFeedbackConstants.LONG_PRESS }
+        performHapticFeedback(feedback)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -2496,7 +2533,7 @@ private class GameView(context: Context) : View(context) {
                             inRect(nx, ny, 0.12f, 0.495f, 0.88f, 0.553f) -> screen = GameScreen.CUSTOMIZE
                             inRect(nx, ny, 0.12f, 0.560f, 0.88f, 0.618f) -> screen = GameScreen.EDITOR
                             inRect(nx, ny, 0.12f, 0.625f, 0.88f, 0.683f) -> screen = GameScreen.ACCESSIBILITY
-                            inRect(nx, ny, 0.12f, 0.690f, 0.88f, 0.748f) -> screen = GameScreen.HELP
+                            inRect(nx, ny, 0.12f, 0.690f, 0.88f, 0.748f) -> screen = GameScreen.EXTRAS
                             inRect(nx, ny, 0.24f, 0.785f, 0.76f, 0.865f) -> screen = GameScreen.MENU
                         }
                         invalidate()
