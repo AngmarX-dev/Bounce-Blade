@@ -158,7 +158,7 @@ jobs:
               "enemy.jumpTime = 0.58f",
               "id in 21..30 || id >= 41 -> 3",
               "DRONE HIT THE WALL — YOU BURNED",
-              "val isTurret = enemy.kind == 1 || enemy.kind == 3 || enemy.kind == 7 || enemy.kind == 8",
+              "val isTurret = enemy.kind == 1 || enemy.kind == 3 || enemy.kind == 7 || enemy.kind == 8 || enemy.kind == 9",
           ]
           missing = [marker for marker in required if marker not in source]
           if missing:
