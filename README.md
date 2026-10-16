@@ -12,6 +12,7 @@
 
 ## Table of Contents
 
+- [The Story](#the-story)
 - [Gameplay Features](#gameplay-features)
 - [Worlds & Stages](#worlds--stages)
 - [Enemies & Hazards](#enemies--hazards)
@@ -24,14 +25,28 @@
 - [Build & CI](#build--ci)
 - [Project Layout](#project-layout)
 - [Editing Levels](#editing-levels)
-- [Roadmap Feature Status](#roadmap-feature-status)
+- [Roadmap / Planned Features](#roadmap--planned-features)
 - [Not Included](#not-included)
+
+---
+
+## The Story
+
+In the beginning, there was only the **Lumen Grid**—a vast, shimmering tapestry of light and data, woven from the dreams of a thousand forgotten stars. At its heart burned the **Golden Core**, the first spark, the source of all creation. To protect this fragile light, the Guardians were forged: beings of will and reflection, each wielding a shield of pure intent.
+
+But the Grid was not alone. From the edges of the void came the **Corruption**—a creeping static that twisted the Grid’s own energies into ravenous enemies. To fight it, the Guardians created the **Bounce Blade**: a weapon of precision, a shard of the Core itself, designed to ricochet through the Corruption and return to its master’s hand.
+
+For eons, the balance held. But the Corruption learned. It poisoned the Blade, filling it with wild, uncontrollable momentum. Now, when the Blade is launched, it does not simply return—it rebounds with the force of every impact, a runaway star that can shatter the Grid if it escapes.
+
+You are the last Guardian. Your shield is the final wall between order and oblivion. Across five worlds—the **Neon Grid** of logic, the **Crimson Circuit** of passion, the **Azure Vault** of memory, the **Magenta Maze** of chaos, and the **Golden Core** of creation itself—you must guide the Blade. Destroy the Corruption. Catch the light. If the Blade slips past you, the darkness wins.
+
+But you are not alone. The Blade remembers its purpose. Every enemy it strikes, every ricochet, every perfect catch strengthens the bond between you. The Grid whispers in light and sound, and the music of the spheres becomes your battle hymn. Catch the Blade. Save the light. Become the legend.
 
 ---
 
 ## Gameplay Features
 
-- **100 stages across ten worlds**: Neon Grid, Crimson Circuit, Azure Vault, Magenta Maze, Golden Core, Obsidian Rift, Solar Flare, Quantum Abyss, Storm Citadel, and Celestial Forge.
+- **50 handcrafted stages** across five worlds: Neon Grid, Crimson Circuit, Azure Vault, Magenta Maze, and Golden Core.
 - **Linear campaign progression** with local save data.
 - **Automatic blade launch:** each stage begins with the blade flying into the arena.
 - **Ricochet physics:** enemy impacts reverse the blade’s horizontal direction, sending it back toward the player.
@@ -43,13 +58,7 @@
 - **Three difficulty levels:** Easy gives the shield a larger catch area, Normal is balanced, and Hard uses a smaller shield with a faster blade.
 - **Pause, retry, stage selection, and victory/failure screens.**
 - **Clear every enemy to finish the stage.**
-- **Use Ⅱ to pause**; the pause location adapts to left-handed layout.
-- **Multiple playable modes:** campaign, endless, time attack, Zen/practice, daily and weekly challenges, boss rush, speedrun, procedural arenas, and two-player local co-op.
-- **Progression and meta:** local achievements, profile and lifetime stats, per-stage score tables, a seasonal event pass, unlockable cosmetics, and persistent coin-funded blade upgrades.
-- **Replay and sharing tools:** locally saved ghost traces, replay export, photo mode, save backup import/export, and editable/shareable level drafts.
-- **Combat variations:** armored/shielded enemies, healers, explosive enemies, teleporters, snipers and boss targets; expanded hazards and world-specific environmental effects.
-- **Accessibility and input:** English/Persian UI, colorblind palette, high contrast, reduced motion, adjustable haptics, remappable keyboard controls, gamepad input, left-handed and one-handed layouts, and larger UI.
-- **Performance options:** battery saver and refresh-rate-aware frame pacing.
+- **Use Ⅱ in the top-right corner to pause.**
 
 ## Worlds & Stages
 
@@ -59,12 +68,7 @@
 | Crimson Circuit | Red / industrial | 11–20 | Faster blade, tighter catches |
 | Azure Vault | Blue / icy | 21–30 | Multi-hit enemies appear |
 | Magenta Maze | Purple / chaotic | 31–40 | Dense waves and mixed hazards |
-| Golden Core | Gold / endgame | 41–50 | Toughest original campaign formations |
-| Obsidian Rift | Black / violet | 51–60 | Advanced hazards and resilient enemies |
-| Solar Flare | Solar / orange | 61–70 | Fast waves and aggressive patterns |
-| Quantum Abyss | Deep blue | 71–80 | Teleporters and unstable formations |
-| Storm Citadel | Storm / silver | 81–90 | High-pressure enemy combinations |
-| Celestial Forge | Gold / white | 91–100 | Final gauntlet and endgame challenge |
+| Golden Core | Gold / endgame | 41–50 | Toughest formations and final challenges |
 
 - **Linear unlocking:** complete a stage to unlock the next.
 - **Local saves:** campaign progress, score stars, and settings are stored on-device.
@@ -75,50 +79,43 @@
 
 ### Enemy Types
 
-- **Drone, turret and slime** — the original roster, including splitting and multi-hit variants.
-- **Armored and shielded enemies** — require additional impacts.
-- **Healer** — restores nearby hostile units.
-- **Explosive** — advances quickly and threatens a wall breach.
-- **Teleporter** — blinks between arena positions.
-- **Sniper** — a more durable, high-pressure enemy.
-- **Final boss** — a multi-hit target in the final campaign world.
+- **Drone** — basic flying enemy.
+- **Turret** — stationary or slow-moving threat.
+- **Slime** — bouncing or splitting enemy.
+- **Tougher variants** — appear in later stages.
+- **Multi-hit targets** — require multiple blade impacts.
 
 ### Hazards
 
-Level JSON and gameplay support spikes and moving spikes, standard and rotating lasers, moving hazards, sticky walls, portals/teleporters, gravity wells, conveyors, breakable walls, switches, keys and doors, plus pickups. The procedural generator can place supported hazard variants in its generated arenas. Teleporter pairs are validated by CI.
-
-### Environmental Effects
-
-Wind gusts, ice drift, water drag and timed lava surges vary movement or add pressure in later worlds. World-specific visual effects reinforce the environment theme.
+- `spikes`
+- `laser`
+- `moving_hazard`
+- `sticky_wall`
+- `teleporter` — requires a pair.
+- `power_up`
 
 ## Power-ups & Pickups
 
-Playable pickups include shield expansion, slow time, multi-catch, coin magnet, score multiplier, extra life, blade speed and piercing. They apply temporary effects or immediate rewards during a run.
-
-Blade Forge also contains persistent, coin-funded blade and shield upgrades, including Nova Pulse and improvements to rebound speed, shield size, pulse radius and coin rewards.
+- `power_up` hazard type is supported in level JSON.
+- Planned power-ups include shield expand, slow time, multi-catch, score multiplier, and more.
 
 ## Progression & Customization
 
-- **Ten worlds and 100 campaign stages**, with linear unlocking and on-device progress.
-- **Difficulty settings** and performance stars; perfect catches, combo chains and score multipliers add replay value.
-- **Local achievements, profile name and stats**, including runs, clears, failures, play time, stars and best combo.
-- **Local leaderboard** by score and difficulty.
-- **Seasonal event / pass** with a locally tracked progress path and coin reward.
-- **Themes and unlockable cosmetics:** blade, shield and enemy styles; cosmetics can be unlocked using earned coins.
-- **Blade Forge** upgrades persist on the device.
-- **English/Persian localization**, colorblind palette, high-contrast and reduced-motion options.
-- **Soundtrack jukebox**, adjustable haptic feedback, keyboard remapping and accessibility options.
-- **Replay traces, ghost paths and replay export**, along with photo mode.
-- **Save portability:** export and import a JSON save backup or custom level draft. Transfer the file or text through a service you choose; the game does not automatically upload saves.
+- **Three selectable color themes:** Cyan, Green, Violet.
+- **Saved campaign progress.**
+- **Score stars.**
+- **Sound settings** control music and effects.
+- **Vibration settings.**
+- **Local high scores** per stage.
 
 ## Controls
 
-1. Play in horizontal (landscape) mode; the playfield uses normalized coordinates to adapt to different screen sizes.
-2. The blade launches automatically. Drag vertically to move the shield and catch the blade on its return.
-3. In two-player local co-op, use two simultaneous touch points to control the two shields.
-4. Use the pause button to pause. Its location adapts to the left-handed layout setting.
-5. Keyboard and gamepad key events can move the shield and pause. Remap supported keys from Help / Controls.
-6. Collect pickups, hit targets, and build combos. Missing a catch normally ends the run; Zen/practice is designed for retrying without losing the run.
+0. Play in horizontal (landscape) mode; rotate your device sideways if auto-rotate is disabled.
+1. The blade launches automatically when a stage starts.
+2. Touch anywhere and drag **up or down** to move the glowing shield on the left wall.
+3. When the blade hits an enemy, it bounces back. Catch it by moving the shield into its path.
+4. If the blade slips past the shield and exits on the left, you lose immediately.
+5. Clear every enemy to finish the stage; use **Ⅱ** in the top-right corner to pause.
 
 ## Difficulty Levels
 
@@ -136,9 +133,7 @@ Blade Forge also contains persistent, coin-funded blade and shield upgrades, inc
 - **Soundtrack and SFX:** looping menu/gameplay/victory/game-over music plus blade launch, ricochet, enemy-hit, and UI sounds.
 - **The Sound setting controls music and effects.**
 - **Impact effects:** screen shake, particles, and flashes.
-- **Catch streaks, perfect catches, combo multipliers, environmental effects and multi-stage enemy damage** provide visual and audio feedback.
-- **Replay traces and photo mode** let players save a run path or export a gameplay image.
-- **Refresh-aware rendering and reduced-motion / battery-saver options** allow a lower frame rate where appropriate.
+- **Catch streaks:** visual and audio feedback for consecutive catches.
 
 ## Art and Audio Assets
 
@@ -150,91 +145,3 @@ Requires JDK 17. In Android Studio, open the repository and sync Gradle; alterna
 
 ```bash
 gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
-```
-
-APK output:
-
-`app/build/outputs/apk/debug/app-debug.apk`
-
-The [GitHub Actions page](https://github.com/AngmarX-dev/Bounce-Blade/actions) contains the latest build runs and the downloadable debug APK artifact.
-
-### CI Pipeline
-
-- Validates assets, all 100 campaign level files and supported hazard data.
-- Runs unit tests.
-- Builds the debug APK.
-- Uploads the APK as an artifact.
-
-## Project Layout
-
-```text
-app/src/main/
-  java/com/angmarx/bounceblade/
-    MainActivity.kt                 gameplay, rendering, touch, campaign flow
-    core/GameConfig.kt              shared game defaults
-    game/model/                     normalized level models
-    game/physics/                   reusable wall physics
-    game/input/                     aim gesture helper
-    game/level/                     JSON level repository
-    game/session/                   pure game rules and session state
-    game/progression/               local progress storage
-    game/audio/                     audio helper
-    game/render/                    shared palette
-    game/editor/                    level-draft support and custom arena sharing
-    game/daily/                     daily challenge data model
-    game/leaderboard/               online leaderboard contract
-  assets/levels/                    100 campaign files plus template
-  res/                              Android theme, colors and launcher icon
-  test/                             unit tests
-```
-
-## Editing Levels
-
-Edit `app/src/main/assets/levels/level_001.json` through `level_100.json`. Coordinates are normalized from 0.0 to 1.0. Supported hazards include spikes, moving spikes, rotating lasers, gravity wells, portals, conveyors, breakable walls, switches, keys, doors, and power-ups. The CI validates level IDs, world mapping, normalized positions and required portal pairs. The in-game Level Lab can save/share a custom draft and run a play test.
-
-## Roadmap Feature Status
-
-The original roadmap has been checked against the current playable build. These features now have in-game implementations, generally using local data so the game remains playable offline.
-
-### Implemented Game Modes
-
-- Endless mode, time attack, Zen/practice, daily and weekly seeded challenges, boss rush, speedrun and procedural generation.
-- Local two-player co-op with independent touch shields.
-- Custom level draft editing, import/export and play testing.
-
-### Implemented Progression & Meta
-
-- Local achievements/trophies, player profile, stats tracking and score tables.
-- Local save persistence, JSON backup import/export and manual cross-device transfer.
-- Replay/ghost trace storage and export, photo mode, local seasonal event/pass and unlockable cosmetics.
-
-### Implemented Gameplay Expansion
-
-- Ten worlds and 100 campaign levels, with a final boss.
-- Dynamic difficulty, blade upgrades, shield abilities, combo chains, perfect-catch bonuses and score-multiplier chains.
-- Shield expand, slow time, multi-catch, magnet, score multiplier, extra life, blade speed and piercing power-ups.
-- Armored, shielded, healing, splitting, teleporting, explosive and sniper enemy variants.
-- Moving spikes, rotating lasers, gravity wells, portals, conveyors, breakable walls, switches, keys and doors.
-- Wind, ice, lava and water environmental effects.
-
-### Implemented Customization & Accessibility
-
-- In-game Level Lab, themes, blade/shield/enemy skins and soundtrack jukebox.
-- English/Persian localization, colorblind palette, high contrast, screen-reader announcements, adjustable haptics and remappable controls.
-- Left-handed and one-handed modes, larger UI, reduced motion, battery saver and refresh-rate-aware frame pacing.
-- Responsive normalized-coordinate layout, plus keyboard and gamepad key-event input.
-
-### Services That Still Need External Infrastructure
-
-These items are visible in the game’s Online / Platform Services screen as unavailable until the required service is configured; the offline client does not pretend to provide a global service:
-
-- **Online leaderboards, online multiplayer and a challenge server** need hosted backend services.
-- **Automatic cloud saves, authentication and live cross-device sync** need a backend/account system. Manual export/import is available now.
-- **Advertising and in-app purchases** need a configured store SDK, product IDs, policy setup and release configuration.
-- **Analytics and crash reporting** need a selected SDK and project configuration.
-- **Beta channel and downloadable modular asset packs** need a distribution/update pipeline.
-- **Foldable, Android TV and Chromebook/tablet support** still need dedicated device-layout and input testing. Generic responsive layout and keyboard/gamepad events are present, but those form factors have not been verified on physical hardware.
-
-## Not Included
-
-The build is still an offline-first Android game. Global/online services, authentication, ad and purchase integrations, automatic cloud sync, a hosted challenge/leaderboard backend and platform-specific device certification are not enabled without external accounts, SDKs, service endpoints and testing. Local alternatives (scores, challenges, saves, replays, events and profiles) are implemented in-game.
