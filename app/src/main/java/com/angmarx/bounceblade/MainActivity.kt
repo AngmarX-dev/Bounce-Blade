@@ -293,7 +293,9 @@ private class GameView(context: Context) : View(context) {
         loadLevel(1)
         screen = GameScreen.MENU
         isFocusable = true
+        isFocusableInTouchMode = true
         isClickable = true
+        requestFocus()
     }
 
     fun handleBack(): Boolean {
@@ -769,16 +771,22 @@ private class GameView(context: Context) : View(context) {
     private fun simulateWallGuardStep(dt: Float) {
         val radius = minDim * 0.022f
         val leftContact = viewW * 0.098f + radius
-        val right = viewW * 0.955f - radius
+        val rightContact = viewW * 0.902f - radius
+        val leftWall = viewW * 0.045f + radius
+        val rightWall = viewW * 0.955f - radius
         val top = viewH * 0.145f + radius
         val bottom = viewH * 0.935f - radius
         var px = bladeX * viewW + velocityX * dt
         var py = bladeY * viewH + velocityY * dt
 
         var wallHit = false
-        if (px > right) {
-            px = right
+        if (!leftHandedMode && px > rightWall) {
+            px = rightWall
             velocityX = -abs(velocityX)
+            wallHit = true
+        } else if (leftHandedMode && px < leftWall) {
+            px = leftWall
+            velocityX = abs(velocityX)
             wallHit = true
         }
         if (py < top) {
@@ -843,11 +851,12 @@ private class GameView(context: Context) : View(context) {
             if (screen != GameScreen.PLAYING) return
         }
 
-        if (px < leftContact) {
+        if ((!leftHandedMode && px < leftContact) || (leftHandedMode && px > rightContact)) {
             val paddleCenter = guardPaddleY * viewH
             val paddleHalf = guardPaddleHalf()
+            val shieldContact = if (leftHandedMode) rightContact else leftContact
             if (abs(py - paddleCenter) <= paddleHalf + radius) {
-                px = leftContact
+                px = shieldContact
                 val offset = ((py - paddleCenter) / (paddleHalf + radius)).coerceIn(-1f, 1f)
                 val oldSpeed = sqrt(velocityX * velocityX + velocityY * velocityY)
                 val speed = (oldSpeed * 1.035f).coerceIn(
@@ -855,7 +864,7 @@ private class GameView(context: Context) : View(context) {
                     minDim * 0.90f * bladeSpeedScale()
                 )
                 val bounceAngle = offset * 1.10f
-                velocityX = abs(cos(bounceAngle) * speed).coerceAtLeast(minDim * 0.32f)
+                velocityX = (if (leftHandedMode) -1f else 1f) * abs(cos(bounceAngle) * speed).coerceAtLeast(minDim * 0.32f)
                 velocityY = sin(bounceAngle) * speed
                 comboCount = (comboCount + 1).coerceAtMost(99)
                 bestCombo = max(bestCombo, comboCount)
@@ -1840,7 +1849,8 @@ private class GameView(context: Context) : View(context) {
     private fun drawWallGuardGame(canvas: Canvas) {
         drawText(canvas, "BOUNCE BLADE", 0.07f, 0.047f, 0.025f, Color.WHITE)
         drawText(canvas, "LEVEL " + levelId + "/" + levels.size, 0.49f, 0.047f, 0.022f, cyan, Paint.Align.CENTER)
-        drawButton(canvas, 0.825f, 0.027f, 0.97f, 0.110f, "Ⅱ", pink)
+        if (leftHandedMode) drawButton(canvas, 0.03f, 0.027f, 0.175f, 0.110f, "Ⅱ", pink)
+        else drawButton(canvas, 0.825f, 0.027f, 0.97f, 0.110f, "Ⅱ", pink)
         drawText(canvas, "SCORE $score", 0.07f, 0.092f, 0.019f, gold)
         drawText(canvas, "TARGETS " + enemies.count { it.alive }, 0.50f, 0.092f, 0.019f, pink, Paint.Align.CENTER)
         drawText(canvas, "SAVE STREAK $comboCount", 0.78f, 0.092f, 0.016f, cyan, Paint.Align.RIGHT)
@@ -1880,11 +1890,10 @@ private class GameView(context: Context) : View(context) {
         // Player-controlled barrier occupying a short segment of the left wall.
         val paddleHalf = guardPaddleHalf()
         val paddleCenter = guardPaddleY * viewH
-        val paddle = RectF(
-            viewW * 0.043f,
-            paddleCenter - paddleHalf,
-            viewW * 0.098f,
-            paddleCenter + paddleHalf
+        val paddle = if (leftHandedMode) RectF(
+            viewW * 0.902f, paddleCenter - paddleHalf, viewW * 0.957f, paddleCenter + paddleHalf
+        ) else RectF(
+            viewW * 0.043f, paddleCenter - paddleHalf, viewW * 0.098f, paddleCenter + paddleHalf
         )
         paint.style = Paint.Style.FILL
         val shieldColor = shieldSkinColor()
@@ -1923,7 +1932,8 @@ private class GameView(context: Context) : View(context) {
                 novaCooldownRemaining <= 0f -> "NOVA READY"
                 else -> "NOVA " + (novaCooldownRemaining + 0.99f).toInt() + "s"
             }
-            drawButton(canvas, 0.775f, 0.790f, 0.98f, 0.935f, novaLabel, gold, true)
+            if (leftHandedMode) drawButton(canvas, 0.02f, 0.790f, 0.225f, 0.935f, novaLabel, gold, true)
+            else drawButton(canvas, 0.775f, 0.790f, 0.98f, 0.935f, novaLabel, gold, true)
         }
         if (System.nanoTime() < messageUntil && message.isNotBlank()) {
             drawText(canvas, message, 0.5f, 0.885f, 0.020f, gold, Paint.Align.CENTER)
@@ -2712,6 +2722,49 @@ private class GameView(context: Context) : View(context) {
         performHapticFeedback(feedback)
     }
 
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (screen == GameScreen.PLAYING && wallGuardMode) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_W -> {
+                    guardPaddleY = clampGuardPaddleY(guardPaddleY - 0.035f)
+                    invalidate()
+                    return true
+                }
+                KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_S -> {
+                    guardPaddleY = clampGuardPaddleY(guardPaddleY + 0.035f)
+                    invalidate()
+                    return true
+                }
+                KeyEvent.KEYCODE_SPACE, KeyEvent.KEYCODE_P -> {
+                    screen = GameScreen.PAUSED
+                    slowMotion = false
+                    invalidate()
+                    return true
+                }
+            }
+        } else if (screen == GameScreen.PAUSED &&
+            (keyCode == KeyEvent.KEYCODE_SPACE || keyCode == KeyEvent.KEYCODE_ENTER)) {
+            screen = GameScreen.PLAYING
+            lastFrame = System.nanoTime()
+            invalidate()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        if ((event.source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK &&
+            event.action == MotionEvent.ACTION_MOVE && screen == GameScreen.PLAYING && wallGuardMode) {
+            val axisY = event.getAxisValue(MotionEvent.AXIS_Y)
+            if (abs(axisY) > 0.12f) {
+                guardPaddleY = clampGuardPaddleY(guardPaddleY + axisY * 0.025f)
+                invalidate()
+                return true
+            }
+        }
+        return super.onGenericMotionEvent(event)
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val nx = event.x / viewW
         val ny = event.y / viewH
@@ -3047,13 +3100,15 @@ private class GameView(context: Context) : View(context) {
                         return true
                     }
                     GameScreen.PLAYING -> {
-                        if (inRect(nx, ny, 0.775f, 0.790f, 0.98f, 0.935f)) {
+                        if (if (leftHandedMode) inRect(nx, ny, 0.02f, 0.790f, 0.225f, 0.935f)
+                            else inRect(nx, ny, 0.775f, 0.790f, 0.98f, 0.935f)) {
                             touchingAbility = true
                             if (upgradeLevel("nova") > 0) activateNovaPulse() else openShop(GameScreen.PLAYING)
                             invalidate()
                             return true
                         }
-                        if (inRect(nx, ny, 0.82f, 0.025f, 0.98f, 0.115f)) {
+                        if (if (leftHandedMode) inRect(nx, ny, 0.02f, 0.025f, 0.18f, 0.115f)
+                            else inRect(nx, ny, 0.82f, 0.025f, 0.98f, 0.115f)) {
                             screen = GameScreen.PAUSED
                             slowMotion = false
                             playSfx("UI & Feedback SFX/Pause.wav")
