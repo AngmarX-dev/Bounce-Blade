@@ -192,6 +192,30 @@ jobs:
           print("Verified shop economy, persistent upgrades, Nova Pulse, larger buttons, and slower drones.")
           PY
 
+      - name: Verify large and tappable game buttons
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+
+          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
+          required = [
+              "hitRect.width() * buttonExpansion",
+              ") 0.015f else 0.055f",
+              "if (label.length > 18) 0.022f else 0.028f",
+              "drawButton(canvas, 0.825f, 0.027f, 0.97f, 0.110f, \"Ⅱ\", pink)",
+              "drawButton(canvas, 0.775f, 0.790f, 0.98f, 0.935f, novaLabel, gold, true)",
+              "inRect(nx, ny, 0.82f, 0.025f, 0.98f, 0.115f)",
+              "inRect(nx, ny, 0.775f, 0.790f, 0.98f, 0.935f)",
+              "0.10f, 0.456f, 0.90f, 0.523f",
+              "private fun inRect(x: Float, y: Float, left: Float, top: Float, right: Float, bottom: Float): Boolean {",
+          ]
+          missing = [marker for marker in required if marker not in source]
+          if missing:
+              sys.exit("Missing larger button or matching hitbox wiring: " + ", ".join(missing))
+          print("Verified larger button artwork, type, and matching touch zones.")
+          PY
+
       - name: Run unit tests and build debug APK
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug
 
