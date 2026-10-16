@@ -64,6 +64,20 @@ jobs:
           PY
 
 
+      - name: Verify landscape orientation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          manifest = Path("app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
+          activity = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
+          if 'android:screenOrientation="landscape"' not in manifest:
+              sys.exit("AndroidManifest must declare landscape orientation.")
+          if "SCREEN_ORIENTATION_LANDSCAPE" not in activity:
+              sys.exit("MainActivity must request landscape orientation.")
+          print("Verified landscape orientation in the manifest and Activity.")
+          PY
+
       - name: Verify left-wall guard gameplay
         run: |
           python3 - <<'PY'
