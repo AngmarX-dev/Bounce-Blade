@@ -7,6 +7,7 @@
 - **50 stages across five worlds:** Neon Grid, Crimson Circuit, Azure Vault, Magenta Maze and Golden Core, with linear unlocking and local saves.
 - **Automatic blade launch:** each stage begins with the blade flying into the arena; enemy impacts reverse its horizontal direction, sending it back toward the player.
 - **Player-controlled left shield:** touch and drag vertically anywhere on the screen to move the shield up or down.
+- **Landscape orientation:** the app opens and stays in horizontal fullscreen mode, giving the blade arena more width for tracking enemies and catching returns.
 - **Instant-loss rule:** if the returning blade passes the shield at the left edge, the run ends immediately.
 - **Enemy waves:** every stage creates a growing formation of enemies, with tougher enemy types and multi-hit targets in later stages.
 - **Score, impact effects and catch streaks:** hits, catches and ricochets use the included visual and audio feedback.
@@ -19,6 +20,7 @@
 
 ## Controls
 
+0. Play in horizontal (landscape) mode; rotate your device sideways if auto-rotate is disabled.
 1. The blade launches automatically when a stage starts.
 2. Touch anywhere and drag **up or down** to move the glowing shield on the left wall.
 3. When the blade hits an enemy, it bounces back. Catch it by moving the shield into its path.
