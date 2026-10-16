@@ -38,13 +38,9 @@ private fun trimTransparentPadding(image: BufferedImage): Pair<BufferedImage, Bo
     val bottom = (maxY + margin + 1).coerceAtMost(height)
     if (left == 0 && top == 0 && right == width && bottom == height) return image to false
 
-    val cropped = BufferedImage(right - left, bottom - top, BufferedImage.TYPE_INT_ARGB)
-    val graphics = cropped.createGraphics()
-    try {
-        graphics.drawImage(image, 0, 0, cropped.width, cropped.height, left, top, right, bottom, null)
-    } finally {
-        graphics.dispose()
-    }
+    // A subimage keeps the original color model (including indexed PNG palettes),
+    // so trimming dimensions does not inflate compact source PNGs into RGBA files.
+    val cropped = image.getSubimage(left, top, right - left, bottom - top)
     return cropped to true
 }
 
