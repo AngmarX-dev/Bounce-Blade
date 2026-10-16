@@ -1256,6 +1256,28 @@ private class GameView(context: Context) : View(context) {
             secondPointerId = -1
             primaryPointerId = -1
         }
+        if (gameMode == "procedural") {
+            val hazardRandom = kotlin.random.Random(levelId * 997 + prefs.getInt("procedural_seed", 23) + 41)
+            val generatedHazards = mutableListOf<HazardState>()
+            val hazardOptions = listOf("spikes", "laser", "moving_hazard", "sticky_wall", "power_up")
+            repeat(2) { index ->
+                val type = hazardOptions[hazardRandom.nextInt(hazardOptions.size)]
+                generatedHazards.add(
+                    HazardState(type,
+                        0.32f + hazardRandom.nextFloat() * 0.40f,
+                        0.28f + hazardRandom.nextFloat() * 0.48f,
+                        when (type) { "spikes", "laser", "moving_hazard" -> 0.28f + hazardRandom.nextFloat() * 0.28f; else -> 0.05f + hazardRandom.nextFloat() * 0.06f },
+                        when (type) { "sticky_wall" -> 0.14f; "laser" -> 0.018f; "spikes", "moving_hazard" -> 0.025f; else -> 0.055f }
+                    )
+                )
+            }
+            if (hazardRandom.nextBoolean()) {
+                generatedHazards.add(HazardState("teleporter", 0.22f, 0.35f, 0.075f, 0.075f))
+                generatedHazards.add(HazardState("teleporter", 0.78f, 0.67f, 0.075f, 0.075f))
+            }
+            level = level.copy(hazards = generatedHazards)
+        }
+
         val activeEnemyPoints = when {
             gameMode == "procedural" -> {
                 val seeded = kotlin.random.Random(levelId * 739 + prefs.getInt("procedural_seed", 23))
@@ -1885,6 +1907,7 @@ private class GameView(context: Context) : View(context) {
         drawAssetCover(canvas, "Backgrounds & Environments/Gameplay Background.png", arena, 230)
         drawAsset(canvas, "UI Elements/UI Panel.png",
             RectF(viewW * 0.025f, viewH * 0.012f, viewW * 0.975f, viewH * 0.125f), 115)
+        drawEnvironmentEffects(canvas)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(2f, density * 2f)
         paint.color = cyan
@@ -1982,6 +2005,73 @@ private class GameView(context: Context) : View(context) {
         if (System.nanoTime() < messageUntil && message.isNotBlank()) {
             drawText(canvas, message, 0.5f, 0.885f, 0.020f, gold, Paint.Align.CENTER)
         }
+    }
+
+
+    private fun drawEnvironmentEffects(canvas: Canvas) {
+        val world = CampaignWorlds.indexForLevel(levelId)
+        paint.style = Paint.Style.FILL
+        when (world) {
+            5 -> {
+                paint.color = Color.argb(22, 100, 38, 150)
+                canvas.drawRect(viewW * 0.035f, viewH * 0.135f, viewW * 0.965f, viewH * 0.94f, paint)
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = max(1f, density)
+                paint.color = Color.argb(70, 177, 105, 255)
+                for (i in 0..5) {
+                    val x = viewW * (0.12f + i * 0.15f)
+                    val pulse = 0.018f + abs(sin(animationTime * 0.7f + i)) * 0.03f
+                    canvas.drawCircle(x, viewH * (0.3f + (i % 3) * 0.22f), minDim * pulse, paint)
+                }
+            }
+            6 -> {
+                paint.color = Color.argb(28, 250, 80, 12)
+                canvas.drawRect(viewW * 0.035f, viewH * 0.82f, viewW * 0.965f, viewH * 0.94f, paint)
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = max(1f, density)
+                paint.color = Color.argb(115, 255, 155, 50)
+                for (i in 0..8) {
+                    val x = viewW * (0.08f + i * 0.105f)
+                    val sway = sin(animationTime * 1.1f + i * 0.8f) * minDim * 0.018f
+                    canvas.drawLine(x, viewH * 0.90f, x + sway, viewH * (0.72f - (i % 3) * 0.04f), paint)
+                }
+            }
+            7 -> {
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = max(1f, density)
+                for (i in 0..2) {
+                    val cx = viewW * (0.32f + i * 0.28f)
+                    val cy = viewH * (0.33f + (i % 2) * 0.34f)
+                    val radius = minDim * (0.018f + ((animationTime * 0.05f + i * 0.02f) % 0.045f))
+                    paint.color = Color.argb(65, 70, 180, 255)
+                    canvas.drawCircle(cx, cy, radius, paint)
+                    canvas.drawCircle(cx, cy, radius * 1.6f, paint)
+                }
+            }
+            8 -> {
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = max(1f, density)
+                paint.color = Color.argb(80, 170, 210, 255)
+                for (i in 0..17) {
+                    val x = viewW * (((i * 53 + 17) % 997) / 997f)
+                    val phase = (animationTime * (0.35f + (i % 4) * 0.06f) + i * 0.071f) % 1f
+                    val y = viewH * (0.14f + phase * 0.77f)
+                    val drift = minDim * 0.018f
+                    canvas.drawLine(x, y, x - drift, y + minDim * 0.025f, paint)
+                }
+            }
+            9 -> {
+                paint.style = Paint.Style.FILL
+                for (i in 0..13) {
+                    val x = viewW * (((i * 73 + 11) % 991) / 991f)
+                    val y = viewH * (0.16f + ((i * 43 + 7) % 771) / 1000f)
+                    val alpha = (45 + 45 * (0.5f + 0.5f * sin(animationTime * 2f + i))).toInt().coerceIn(25, 90)
+                    paint.color = Color.argb(alpha, 255, 223, 133)
+                    canvas.drawCircle(x, y, max(1.2f * density, minDim * 0.002f), paint)
+                }
+            }
+        }
+        paint.style = Paint.Style.FILL
     }
 
     private fun drawHazards(canvas: Canvas) {
