@@ -1298,30 +1298,27 @@ private class GameView(context: Context) : View(context) {
 
     private fun applyTheme() {
         when (themeId.coerceIn(0, 2)) {
+        when (themeId.coerceIn(0, 2)) {
             1 -> {
-                cyan = Color.rgb(75, 255, 150)
-                pink = Color.rgb(255, 105, 75)
-                gold = Color.rgb(220, 255, 90)
-                dark = Color.rgb(5, 18, 18)
-                muted = Color.rgb(90, 146, 128)
-                grid = Color.rgb(17, 50, 47)
+                cyan = Color.rgb(75, 255, 150); pink = Color.rgb(255, 105, 75)
+                gold = Color.rgb(220, 255, 90); dark = Color.rgb(5, 18, 18)
+                muted = Color.rgb(90, 146, 128); grid = Color.rgb(17, 50, 47)
             }
             2 -> {
-                cyan = Color.rgb(180, 130, 255)
-                pink = Color.rgb(255, 90, 190)
-                gold = Color.rgb(255, 190, 100)
-                dark = Color.rgb(13, 7, 25)
-                muted = Color.rgb(132, 112, 165)
-                grid = Color.rgb(41, 25, 63)
+                cyan = Color.rgb(180, 130, 255); pink = Color.rgb(255, 90, 190)
+                gold = Color.rgb(255, 190, 100); dark = Color.rgb(13, 7, 25)
+                muted = Color.rgb(132, 112, 165); grid = Color.rgb(41, 25, 63)
             }
             else -> {
-                cyan = Color.rgb(45, 235, 255)
-                pink = Color.rgb(255, 65, 150)
-                gold = Color.rgb(255, 199, 83)
-                dark = Color.rgb(7, 10, 22)
-                muted = Color.rgb(94, 120, 150)
-                grid = Color.rgb(22, 35, 58)
+                cyan = Color.rgb(45, 235, 255); pink = Color.rgb(255, 65, 150)
+                gold = Color.rgb(255, 199, 83); dark = Color.rgb(7, 10, 22)
+                muted = Color.rgb(94, 120, 150); grid = Color.rgb(22, 35, 58)
             }
+        }
+        if (colorblindMode) {
+            cyan = Color.rgb(0, 114, 178)
+            pink = Color.rgb(230, 159, 0)
+            gold = Color.rgb(240, 228, 66)
         }
     }
 
@@ -2219,10 +2216,11 @@ private class GameView(context: Context) : View(context) {
             "zen" to "ZEN / PRACTICE • NO RUN LOST",
             "boss_rush" to "BOSS RUSH • ARMORED TARGETS",
             "speedrun" to "SPEEDRUN • TRACK YOUR TIME",
-            "procedural" to "PROCEDURAL • RANDOM ARENA"
+            "procedural" to "PROCEDURAL • RANDOM ARENA",
+            "local_coop" to "LOCAL CO-OP • 2 TOUCHES"
         )
         modes.forEachIndexed { i, pair ->
-            val top = 0.245f + i * 0.077f
+            val top = 0.245f + i * 0.067f
             val label = (if (gameMode == pair.first) "✓  " else "") + pair.second
             drawButton(canvas, 0.10f, top, 0.90f, top + 0.067f, label, if (i % 2 == 0) cyan else gold)
         }
@@ -2270,7 +2268,7 @@ private class GameView(context: Context) : View(context) {
     private fun drawStats(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         val seconds = prefs.getLong("total_play_seconds", 0L)
-        drawText(canvas, "LOCAL PROFILE", 0.5f, 0.18f, 0.060f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, playerName, 0.5f, 0.18f, 0.060f, Color.WHITE, Paint.Align.CENTER)
         drawText(canvas, "BLADE RUNNER  •  OFFLINE PROFILE", 0.5f, 0.245f, 0.021f, cyan, Paint.Align.CENTER)
         val lines = listOf(
             "RUNS STARTED  " + prefs.getInt("total_runs", 0),
@@ -2282,7 +2280,8 @@ private class GameView(context: Context) : View(context) {
         )
         lines.forEachIndexed { i, text -> drawText(canvas, text, 0.18f, 0.34f + i * 0.065f, 0.021f, if (i % 2 == 0) Color.WHITE else muted) }
         drawText(canvas, "Cloud profile sync needs a configured online service.", 0.5f, 0.77f, 0.015f, muted, Paint.Align.CENTER)
-        drawButton(canvas, 0.24f, 0.82f, 0.76f, 0.90f, "BACK", cyan)
+        drawButton(canvas, 0.24f, 0.77f, 0.76f, 0.835f, "EDIT PROFILE NAME", gold)
+        drawButton(canvas, 0.24f, 0.85f, 0.76f, 0.915f, "BACK", cyan)
     }
 
     private fun drawCustomize(canvas: Canvas) {
@@ -2315,20 +2314,22 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas, "ACCESSIBILITY & PERFORMANCE", 0.5f, 0.17f, 0.052f, Color.WHITE, Paint.Align.CENTER)
         val options = listOf(
             "HIGH CONTRAST: " + if (highContrast) "ON" else "OFF",
+            "COLORBLIND PALETTE: " + if (colorblindMode) "ON" else "OFF",
             "REDUCED MOTION: " + if (reducedMotion) "ON" else "OFF",
-            "LEFT-HANDED LAYOUT: " + if (leftHandedMode) "ON" else "OFF",
+            "LEFT-HANDED CONTROL: " + if (leftHandedMode) "ON" else "OFF",
             "LARGE UI: " + if (largeUi) "ON" else "OFF",
             "BATTERY SAVER: " + if (batterySaver) "ON" else "OFF",
             "DYNAMIC DIFFICULTY: " + if (dynamicDifficulty) "ON" else "OFF",
             "VIBRATION: " + if (vibrationEnabled) "ON" else "OFF"
         )
         options.forEachIndexed { i, label ->
-            val top = 0.235f + i * 0.063f
-            drawButton(canvas, 0.12f, top, 0.88f, top + 0.056f, label, if (i % 2 == 0) cyan else gold)
+            val top = 0.215f + i * 0.052f
+            drawButton(canvas, 0.12f, top, 0.88f, top + 0.047f, label, if (i % 2 == 0) cyan else gold)
         }
-        drawButton(canvas, 0.12f, 0.70f, 0.48f, 0.765f, "JUKEBOX", pink)
-        drawButton(canvas, 0.52f, 0.70f, 0.88f, 0.765f, "HELP", gold)
-        drawButton(canvas, 0.24f, 0.81f, 0.76f, 0.89f, "BACK", cyan)
+        drawButton(canvas, 0.12f, 0.64f, 0.48f, 0.70f, "HAPTIC LEVEL: " + hapticLevel, pink)
+        drawButton(canvas, 0.52f, 0.64f, 0.88f, 0.70f, "JUKEBOX", pink)
+        drawButton(canvas, 0.12f, 0.72f, 0.48f, 0.78f, "HELP", gold)
+        drawButton(canvas, 0.52f, 0.72f, 0.88f, 0.78f, "BACK", cyan)
     }
 
     private fun drawJukebox(canvas: Canvas) {
@@ -2497,6 +2498,7 @@ private class GameView(context: Context) : View(context) {
         val lines = listOf(
             "ONLINE LEADERBOARD      NEEDS SERVER",
             "DAILY CHALLENGE SERVER   NEEDS SERVER",
+            "ONLINE MULTIPLAYER       NEEDS SERVER",
             "CLOUD SAVE / DEVICE SYNC NEEDS AUTH",
             "CROSS-PLATFORM SAVES     NEEDS BACKEND",
             "ADS / IN-APP PURCHASES   NEEDS STORE SETUP",
@@ -2707,7 +2709,7 @@ private class GameView(context: Context) : View(context) {
                     }
                     GameScreen.MODES -> {
                         val modes = listOf("campaign", "endless", "time_attack", "zen", "boss_rush", "speedrun", "procedural")
-                        val i = modes.indices.firstOrNull { inRect(nx, ny, 0.10f, 0.245f + it * 0.077f, 0.90f, 0.312f + it * 0.077f) }
+                        val i = modes.indices.firstOrNull { inRect(nx, ny, 0.10f, 0.245f + it * 0.067f, 0.90f, 0.312f + it * 0.067f) }
                         if (i != null) selectMode(modes[i]) else if (inRect(nx, ny, 0.24f, 0.80f, 0.76f, 0.88f)) screen = GameScreen.FEATURES
                         invalidate()
                         return true
@@ -2721,8 +2723,32 @@ private class GameView(context: Context) : View(context) {
                         invalidate()
                         return true
                     }
-                    GameScreen.ACHIEVEMENTS, GameScreen.STATS -> {
+                    GameScreen.ACHIEVEMENTS -> {
                         if (inRect(nx, ny, 0.24f, 0.82f, 0.76f, 0.90f)) screen = GameScreen.FEATURES
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.STATS -> {
+                        when {
+                            inRect(nx, ny, 0.24f, 0.77f, 0.76f, 0.835f) -> {
+                                val field = android.widget.EditText(context).apply {
+                                    setText(playerName)
+                                    setSingleLine(true)
+                                    hint = "Player name"
+                                }
+                                android.app.AlertDialog.Builder(context)
+                                    .setTitle("Edit local profile")
+                                    .setView(field)
+                                    .setPositiveButton("Save") { _, _ ->
+                                        playerName = field.text.toString().trim().take(24).ifBlank { "BLADE RUNNER" }
+                                        prefs.edit().putString("player_name", playerName).apply()
+                                        invalidate()
+                                    }
+                                    .setNegativeButton("Cancel", null)
+                                    .show()
+                            }
+                            inRect(nx, ny, 0.24f, 0.85f, 0.76f, 0.915f) -> screen = GameScreen.FEATURES
+                        }
                         invalidate()
                         return true
                     }
@@ -2761,18 +2787,21 @@ private class GameView(context: Context) : View(context) {
                     }
                     GameScreen.ACCESSIBILITY -> {
                         when {
-                            inRect(nx, ny, 0.12f, 0.235f, 0.88f, 0.291f) -> highContrast = !highContrast
-                            inRect(nx, ny, 0.12f, 0.298f, 0.88f, 0.354f) -> reducedMotion = !reducedMotion
-                            inRect(nx, ny, 0.361f, 0.361f, 0.88f, 0.417f) -> leftHandedMode = !leftHandedMode
-                            inRect(nx, ny, 0.12f, 0.424f, 0.88f, 0.480f) -> largeUi = !largeUi
-                            inRect(nx, ny, 0.12f, 0.487f, 0.88f, 0.543f) -> batterySaver = !batterySaver
-                            inRect(nx, ny, 0.12f, 0.550f, 0.88f, 0.606f) -> dynamicDifficulty = !dynamicDifficulty
-                            inRect(nx, ny, 0.12f, 0.613f, 0.88f, 0.669f) -> vibrationEnabled = !vibrationEnabled
-                            inRect(nx, ny, 0.12f, 0.70f, 0.48f, 0.765f) -> screen = GameScreen.JUKEBOX
-                            inRect(nx, ny, 0.52f, 0.70f, 0.88f, 0.765f) -> screen = GameScreen.HELP
-                            inRect(nx, ny, 0.24f, 0.81f, 0.76f, 0.89f) -> screen = GameScreen.FEATURES
+                            inRect(nx, ny, 0.12f, 0.215f, 0.88f, 0.262f) -> highContrast = !highContrast
+                            inRect(nx, ny, 0.12f, 0.267f, 0.88f, 0.314f) -> { colorblindMode = !colorblindMode; applyTheme() }
+                            inRect(nx, ny, 0.12f, 0.319f, 0.88f, 0.366f) -> reducedMotion = !reducedMotion
+                            inRect(nx, ny, 0.12f, 0.371f, 0.88f, 0.418f) -> leftHandedMode = !leftHandedMode
+                            inRect(nx, ny, 0.12f, 0.423f, 0.88f, 0.470f) -> largeUi = !largeUi
+                            inRect(nx, ny, 0.12f, 0.475f, 0.88f, 0.522f) -> batterySaver = !batterySaver
+                            inRect(nx, ny, 0.12f, 0.527f, 0.88f, 0.574f) -> dynamicDifficulty = !dynamicDifficulty
+                            inRect(nx, ny, 0.12f, 0.579f, 0.88f, 0.626f) -> vibrationEnabled = !vibrationEnabled
+                            inRect(nx, ny, 0.12f, 0.64f, 0.48f, 0.70f) -> hapticLevel = (hapticLevel + 1) % 4
+                            inRect(nx, ny, 0.52f, 0.64f, 0.88f, 0.70f) -> screen = GameScreen.JUKEBOX
+                            inRect(nx, ny, 0.12f, 0.72f, 0.48f, 0.78f) -> screen = GameScreen.HELP
+                            inRect(nx, ny, 0.52f, 0.72f, 0.88f, 0.78f) -> screen = GameScreen.FEATURES
                         }
-                        prefs.edit().putBoolean("high_contrast", highContrast).putBoolean("reduced_motion", reducedMotion)
+                        prefs.edit().putBoolean("high_contrast", highContrast).putBoolean("colorblind_mode", colorblindMode)
+                            .putInt("haptic_level", hapticLevel).putBoolean("reduced_motion", reducedMotion)
                             .putBoolean("left_handed", leftHandedMode).putBoolean("large_ui", largeUi)
                             .putBoolean("battery_saver", batterySaver).putBoolean("dynamic_difficulty", dynamicDifficulty)
                             .putBoolean("vibration_enabled", vibrationEnabled).apply()
