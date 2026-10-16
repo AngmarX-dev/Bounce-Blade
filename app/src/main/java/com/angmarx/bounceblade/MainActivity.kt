@@ -214,6 +214,7 @@ private class GameView(context: Context) : View(context) {
     private val runTrace = mutableListOf<PointF>()
     private var reducedMotion = prefs.getBoolean("reduced_motion", false)
     private var leftHandedMode = prefs.getBoolean("left_handed", false)
+    private var oneHandedMode = prefs.getBoolean("one_handed_mode", false)
     private var largeUi = prefs.getBoolean("large_ui", false)
     private var batterySaver = prefs.getBoolean("battery_saver", false)
     private var dynamicDifficulty = prefs.getBoolean("dynamic_difficulty", true)
@@ -2734,25 +2735,26 @@ private class GameView(context: Context) : View(context) {
 
     private fun drawAccessibility(canvas: Canvas) {
         drawMenuBackdrop(canvas)
-        drawText(canvas, "ACCESSIBILITY & PERFORMANCE", 0.5f, 0.17f, 0.052f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "ACCESSIBILITY & PERFORMANCE", 0.5f, 0.15f, 0.048f, Color.WHITE, Paint.Align.CENTER)
         val options = listOf(
             "HIGH CONTRAST: " + if (highContrast) "ON" else "OFF",
             "COLORBLIND PALETTE: " + if (colorblindMode) "ON" else "OFF",
             "REDUCED MOTION: " + if (reducedMotion) "ON" else "OFF",
             "LEFT-HANDED CONTROL: " + if (leftHandedMode) "ON" else "OFF",
+            "ONE-HANDED MODE: " + if (oneHandedMode) "ON" else "OFF",
             "LARGE UI: " + if (largeUi) "ON" else "OFF",
             "BATTERY SAVER: " + if (batterySaver) "ON" else "OFF",
             "DYNAMIC DIFFICULTY: " + if (dynamicDifficulty) "ON" else "OFF",
             "VIBRATION: " + if (vibrationEnabled) "ON" else "OFF"
         )
         options.forEachIndexed { i, label ->
-            val top = 0.215f + i * 0.052f
-            drawButton(canvas, 0.12f, top, 0.88f, top + 0.047f, label, if (i % 2 == 0) cyan else gold)
+            val top = 0.185f + i * 0.046f
+            drawButton(canvas, 0.12f, top, 0.88f, top + 0.042f, label, if (i % 2 == 0) cyan else gold)
         }
-        drawButton(canvas, 0.12f, 0.64f, 0.48f, 0.70f, "HAPTIC LEVEL: " + hapticLevel, pink)
-        drawButton(canvas, 0.52f, 0.64f, 0.88f, 0.70f, "JUKEBOX", pink)
-        drawButton(canvas, 0.12f, 0.72f, 0.48f, 0.78f, "HELP", gold)
-        drawButton(canvas, 0.52f, 0.72f, 0.88f, 0.78f, "BACK TO FEATURES", cyan)
+        drawButton(canvas, 0.12f, 0.61f, 0.48f, 0.655f, "HAPTIC LEVEL: " + hapticLevel, pink)
+        drawButton(canvas, 0.52f, 0.61f, 0.88f, 0.655f, "JUKEBOX", gold)
+        drawButton(canvas, 0.12f, 0.665f, 0.48f, 0.71f, "HELP", cyan)
+        drawButton(canvas, 0.52f, 0.665f, 0.88f, 0.71f, "BACK TO FEATURES", gold)
     }
 
     private fun drawJukebox(canvas: Canvas) {
@@ -3319,24 +3321,25 @@ private class GameView(context: Context) : View(context) {
                     }
                     GameScreen.ACCESSIBILITY -> {
                         when {
-                            inRect(nx, ny, 0.12f, 0.215f, 0.88f, 0.262f) -> highContrast = !highContrast
-                            inRect(nx, ny, 0.12f, 0.267f, 0.88f, 0.314f) -> { colorblindMode = !colorblindMode; applyTheme() }
-                            inRect(nx, ny, 0.12f, 0.319f, 0.88f, 0.366f) -> reducedMotion = !reducedMotion
-                            inRect(nx, ny, 0.12f, 0.371f, 0.88f, 0.418f) -> leftHandedMode = !leftHandedMode
-                            inRect(nx, ny, 0.12f, 0.423f, 0.88f, 0.470f) -> largeUi = !largeUi
-                            inRect(nx, ny, 0.12f, 0.475f, 0.88f, 0.522f) -> batterySaver = !batterySaver
-                            inRect(nx, ny, 0.12f, 0.527f, 0.88f, 0.574f) -> dynamicDifficulty = !dynamicDifficulty
-                            inRect(nx, ny, 0.12f, 0.579f, 0.88f, 0.626f) -> vibrationEnabled = !vibrationEnabled
-                            inRect(nx, ny, 0.12f, 0.64f, 0.48f, 0.70f) -> hapticLevel = (hapticLevel + 1) % 4
-                            inRect(nx, ny, 0.52f, 0.64f, 0.88f, 0.70f) -> screen = GameScreen.JUKEBOX
-                            inRect(nx, ny, 0.12f, 0.72f, 0.48f, 0.78f) -> screen = GameScreen.HELP
-                            inRect(nx, ny, 0.52f, 0.72f, 0.88f, 0.78f) -> screen = GameScreen.FEATURES
+                            inRect(nx, ny, 0.12f, 0.185f, 0.88f, 0.227f) -> highContrast = !highContrast
+                            inRect(nx, ny, 0.12f, 0.231f, 0.88f, 0.273f) -> { colorblindMode = !colorblindMode; applyTheme() }
+                            inRect(nx, ny, 0.12f, 0.277f, 0.88f, 0.319f) -> reducedMotion = !reducedMotion
+                            inRect(nx, ny, 0.12f, 0.323f, 0.88f, 0.365f) -> leftHandedMode = !leftHandedMode
+                            inRect(nx, ny, 0.12f, 0.369f, 0.88f, 0.411f) -> oneHandedMode = !oneHandedMode
+                            inRect(nx, ny, 0.12f, 0.415f, 0.88f, 0.457f) -> largeUi = !largeUi
+                            inRect(nx, ny, 0.12f, 0.461f, 0.88f, 0.503f) -> batterySaver = !batterySaver
+                            inRect(nx, ny, 0.12f, 0.507f, 0.88f, 0.549f) -> dynamicDifficulty = !dynamicDifficulty
+                            inRect(nx, ny, 0.12f, 0.553f, 0.88f, 0.595f) -> vibrationEnabled = !vibrationEnabled
+                            inRect(nx, ny, 0.12f, 0.61f, 0.48f, 0.655f) -> hapticLevel = (hapticLevel + 1) % 4
+                            inRect(nx, ny, 0.52f, 0.61f, 0.88f, 0.655f) -> screen = GameScreen.JUKEBOX
+                            inRect(nx, ny, 0.12f, 0.665f, 0.48f, 0.71f) -> screen = GameScreen.HELP
+                            inRect(nx, ny, 0.52f, 0.665f, 0.88f, 0.71f) -> screen = GameScreen.FEATURES
                         }
                         prefs.edit().putBoolean("high_contrast", highContrast).putBoolean("colorblind_mode", colorblindMode)
                             .putInt("haptic_level", hapticLevel).putBoolean("reduced_motion", reducedMotion)
-                            .putBoolean("left_handed", leftHandedMode).putBoolean("large_ui", largeUi)
-                            .putBoolean("battery_saver", batterySaver).putBoolean("dynamic_difficulty", dynamicDifficulty)
-                            .putBoolean("vibration_enabled", vibrationEnabled).apply()
+                            .putBoolean("left_handed", leftHandedMode).putBoolean("one_handed_mode", oneHandedMode)
+                            .putBoolean("large_ui", largeUi).putBoolean("battery_saver", batterySaver)
+                            .putBoolean("dynamic_difficulty", dynamicDifficulty).putBoolean("vibration_enabled", vibrationEnabled).apply()
                         invalidate()
                         return true
                     }
