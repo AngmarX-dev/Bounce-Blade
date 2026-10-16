@@ -215,6 +215,7 @@ private class GameView(context: Context) : View(context) {
     private var reducedMotion = prefs.getBoolean("reduced_motion", false)
     private var leftHandedMode = prefs.getBoolean("left_handed", false)
     private var oneHandedMode = prefs.getBoolean("one_handed_mode", false)
+    private var persianLanguage = prefs.getBoolean("persian_language", false)
     private var largeUi = prefs.getBoolean("large_ui", false)
     private var batterySaver = prefs.getBoolean("battery_saver", false)
     private var dynamicDifficulty = prefs.getBoolean("dynamic_difficulty", true)
@@ -2752,9 +2753,10 @@ private class GameView(context: Context) : View(context) {
             drawButton(canvas, 0.12f, top, 0.88f, top + 0.042f, label, if (i % 2 == 0) cyan else gold)
         }
         drawButton(canvas, 0.12f, 0.61f, 0.48f, 0.655f, "HAPTIC LEVEL: " + hapticLevel, pink)
-        drawButton(canvas, 0.52f, 0.61f, 0.88f, 0.655f, "JUKEBOX", gold)
-        drawButton(canvas, 0.12f, 0.665f, 0.48f, 0.71f, "HELP", cyan)
-        drawButton(canvas, 0.52f, 0.665f, 0.88f, 0.71f, "BACK TO FEATURES", gold)
+        drawButton(canvas, 0.52f, 0.61f, 0.88f, 0.655f, "LANGUAGE: " + if (persianLanguage) "فارسی" else "ENGLISH", gold)
+        drawButton(canvas, 0.12f, 0.665f, 0.48f, 0.71f, "JUKEBOX", pink)
+        drawButton(canvas, 0.52f, 0.665f, 0.88f, 0.71f, "HELP", cyan)
+        drawButton(canvas, 0.24f, 0.72f, 0.76f, 0.775f, "BACK TO FEATURES", gold)
     }
 
     private fun drawJukebox(canvas: Canvas) {
@@ -3331,9 +3333,10 @@ private class GameView(context: Context) : View(context) {
                             inRect(nx, ny, 0.12f, 0.507f, 0.88f, 0.549f) -> dynamicDifficulty = !dynamicDifficulty
                             inRect(nx, ny, 0.12f, 0.553f, 0.88f, 0.595f) -> vibrationEnabled = !vibrationEnabled
                             inRect(nx, ny, 0.12f, 0.61f, 0.48f, 0.655f) -> hapticLevel = (hapticLevel + 1) % 4
-                            inRect(nx, ny, 0.52f, 0.61f, 0.88f, 0.655f) -> screen = GameScreen.JUKEBOX
-                            inRect(nx, ny, 0.12f, 0.665f, 0.48f, 0.71f) -> screen = GameScreen.HELP
-                            inRect(nx, ny, 0.52f, 0.665f, 0.88f, 0.71f) -> screen = GameScreen.FEATURES
+                            inRect(nx, ny, 0.52f, 0.61f, 0.88f, 0.655f) -> { persianLanguage = !persianLanguage; prefs.edit().putBoolean("persian_language", persianLanguage).apply() }
+                            inRect(nx, ny, 0.12f, 0.665f, 0.48f, 0.71f) -> screen = GameScreen.JUKEBOX
+                            inRect(nx, ny, 0.52f, 0.665f, 0.88f, 0.71f) -> screen = GameScreen.HELP
+                            inRect(nx, ny, 0.24f, 0.72f, 0.76f, 0.775f) -> screen = GameScreen.FEATURES
                         }
                         prefs.edit().putBoolean("high_contrast", highContrast).putBoolean("colorblind_mode", colorblindMode)
                             .putInt("haptic_level", hapticLevel).putBoolean("reduced_motion", reducedMotion)
