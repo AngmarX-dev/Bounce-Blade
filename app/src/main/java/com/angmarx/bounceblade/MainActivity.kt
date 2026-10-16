@@ -1346,6 +1346,20 @@ private class GameView(context: Context) : View(context) {
             secondPointerId = -1
             primaryPointerId = -1
         }
+        if (gameMode == "editor_test") {
+            val draftHazards = when (editorHazardId) {
+                1 -> listOf(HazardState("spikes", 0.50f, 0.86f, 0.62f, 0.035f))
+                2 -> listOf(HazardState("laser", 0.50f, 0.48f, 0.64f, 0.018f))
+                3 -> listOf(HazardState("moving_hazard", 0.50f, 0.62f, 0.38f, 0.03f))
+                4 -> listOf(
+                    HazardState("teleporter", 0.22f, 0.34f, 0.075f, 0.075f),
+                    HazardState("teleporter", 0.78f, 0.66f, 0.075f, 0.075f)
+                )
+                5 -> listOf(HazardState("sticky_wall", 0.75f, 0.53f, 0.085f, 0.21f))
+                else -> emptyList()
+            }
+            level = level.copy(hazards = draftHazards)
+        }
         if (gameMode == "procedural") {
             val hazardRandom = kotlin.random.Random(levelId * 997 + prefs.getInt("procedural_seed", 23) + 41)
             val generatedHazards = mutableListOf<HazardState>()
@@ -1394,7 +1408,7 @@ private class GameView(context: Context) : View(context) {
         multiCatchCharges = 0
         val pickupTypes = listOf("shield_expand", "slow_time", "multi_catch", "score_multiplier", "extra_life", "blade_speed", "magnet", "piercing")
         val pickupCount = when {
-            gameMode == "editor_test" && editorHazardId > 0 -> 1
+            gameMode == "editor_test" -> 0
             gameMode == "procedural" -> 2
             levelId % 2 == 0 -> 1
             else -> 0
@@ -2487,6 +2501,34 @@ private class GameView(context: Context) : View(context) {
         return draft
     }
 
+    private fun showEditorSharingDialog() {
+        AlertDialog.Builder(context)
+            .setTitle("Custom level draft")
+            .setItems(arrayOf("Share / export draft", "Import draft from clipboard")) { _, choice ->
+                if (choice == 0) shareEditorDraft() else importEditorDraftFromClipboard()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun importEditorDraftFromClipboard() {
+        try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+            val text = clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+            val data = org.json.JSONObject(text)
+            editorTargetCount = data.optInt("targets", 6).coerceIn(1, 12)
+            editorHazardId = editorHazards.indexOf(data.optString("hazard", "NONE").uppercase()).coerceAtLeast(0)
+            val seed = data.optInt("seed", 23)
+            prefs.edit().putString("custom_level_draft", data.toString())
+                .putInt("editor_target_count", editorTargetCount).putInt("editor_hazard", editorHazardId)
+                .putInt("procedural_seed", seed).apply()
+            showMessage("CUSTOM DRAFT IMPORTED")
+            invalidate()
+        } catch (_: Exception) {
+            showMessage("COPY A BOUNCE BLADE DRAFT BEFORE IMPORTING")
+        }
+    }
+
     private fun shareEditorDraft() {
         val draft = saveEditorDraft()
         try {
@@ -2620,7 +2662,7 @@ private class GameView(context: Context) : View(context) {
         drawButton(canvas, 0.15f, 0.29f, 0.85f, 0.365f, "TARGET COUNT: " + editorTargetCount + " (TAP TO CYCLE)", gold)
         drawButton(canvas, 0.15f, 0.39f, 0.85f, 0.465f, "HAZARD: " + editorHazards[editorHazardId], pink)
         drawButton(canvas, 0.15f, 0.50f, 0.85f, 0.575f, "SAVE DRAFT", cyan)
-        drawButton(canvas, 0.15f, 0.605f, 0.85f, 0.68f, "SHARE DRAFT", gold)
+        drawButton(canvas, 0.15f, 0.605f, 0.85f, 0.68f, "IMPORT / SHARE DRAFT", gold)
         drawButton(canvas, 0.15f, 0.71f, 0.85f, 0.785f, "PLAY TEST", pink)
         drawText(canvas, "Saved draft: " + if (prefs.contains("custom_level_draft")) "YES" else "NO", 0.5f, 0.815f, 0.017f, muted, Paint.Align.CENTER)
         drawButton(canvas, 0.24f, 0.85f, 0.76f, 0.925f, "BACK", cyan)
@@ -3194,7 +3236,7 @@ private class GameView(context: Context) : View(context) {
                             inRect(nx, ny, 0.15f, 0.29f, 0.85f, 0.365f) -> editorTargetCount = if (editorTargetCount >= 12) 1 else editorTargetCount + 1
                             inRect(nx, ny, 0.15f, 0.39f, 0.85f, 0.465f) -> editorHazardId = (editorHazardId + 1) % editorHazards.size
                             inRect(nx, ny, 0.15f, 0.50f, 0.85f, 0.575f) -> { saveEditorDraft(); showMessage("CUSTOM ARENA SAVED") }
-                            inRect(nx, ny, 0.15f, 0.605f, 0.85f, 0.68f) -> shareEditorDraft()
+                            inRect(nx, ny, 0.15f, 0.605f, 0.85f, 0.68f) -> showEditorSharingDialog()
                             inRect(nx, ny, 0.15f, 0.71f, 0.85f, 0.785f) -> { gameMode = "editor_test"; prefs.edit().putString("game_mode", gameMode).apply(); startLevel(prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)) }
                             inRect(nx, ny, 0.24f, 0.85f, 0.76f, 0.925f) -> screen = GameScreen.FEATURES
                         }
