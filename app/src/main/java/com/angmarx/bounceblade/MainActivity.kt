@@ -205,6 +205,9 @@ private class GameView(context: Context) : View(context) {
     private var highContrast = prefs.getBoolean("high_contrast", false)
     private var colorblindMode = prefs.getBoolean("colorblind_mode", false)
     private var hapticLevel = prefs.getInt("haptic_level", 2).coerceIn(0, 3)
+    private var keyMoveUp = prefs.getInt("key_move_up", KeyEvent.KEYCODE_DPAD_UP)
+    private var keyMoveDown = prefs.getInt("key_move_down", KeyEvent.KEYCODE_DPAD_DOWN)
+    private var keyPause = prefs.getInt("key_pause", KeyEvent.KEYCODE_SPACE)
     private var playerName = prefs.getString("player_name", "BLADE RUNNER") ?: "BLADE RUNNER"
     private var traceTimer = 0f
     private val runTrace = mutableListOf<PointF>()
@@ -2624,7 +2627,7 @@ private class GameView(context: Context) : View(context) {
         drawButton(canvas, 0.12f, 0.64f, 0.48f, 0.70f, "HAPTIC LEVEL: " + hapticLevel, pink)
         drawButton(canvas, 0.52f, 0.64f, 0.88f, 0.70f, "JUKEBOX", pink)
         drawButton(canvas, 0.12f, 0.72f, 0.48f, 0.78f, "HELP", gold)
-        drawButton(canvas, 0.52f, 0.72f, 0.88f, 0.78f, "BACK", cyan)
+        drawButton(canvas, 0.52f, 0.72f, 0.88f, 0.78f, "BACK TO FEATURES", cyan)
     }
 
     private fun drawJukebox(canvas: Canvas) {
@@ -2839,8 +2842,9 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas, "4. Catch it on the left or you lose immediately.", 0.12f, 0.565f, 0.018f, pink)
         drawText(canvas, "5. Hit every enemy to clear the level.", 0.12f, 0.625f, 0.018f, Color.WHITE)
         drawText(canvas, "Easy gives a larger shield; Hard gives a smaller one.", 0.12f, 0.685f, 0.016f, gold)
-        drawText(canvas, "Tip: move early to meet the returning blade.", 0.5f, 0.735f, 0.017f, muted, Paint.Align.CENTER)
-        drawButton(canvas, 0.20f, 0.78f, 0.80f, 0.87f, "BACK", cyan)
+        drawText(canvas, "Keyboard, gamepad and custom key bindings are supported.", 0.5f, 0.735f, 0.016f, muted, Paint.Align.CENTER)
+        drawButton(canvas, 0.10f, 0.78f, 0.48f, 0.87f, "REMAP CONTROLS", gold)
+        drawButton(canvas, 0.52f, 0.78f, 0.90f, 0.87f, "BACK", cyan)
     }
 
     private fun drawText(
@@ -2958,20 +2962,41 @@ private class GameView(context: Context) : View(context) {
         performHapticFeedback(feedback)
     }
 
+    private fun showControlMappingDialog() {
+        val actions = arrayOf("Move shield up", "Move shield down", "Pause / resume")
+        AlertDialog.Builder(context).setTitle("Remap controls").setItems(actions) { _, action ->
+            val labels = arrayOf("Arrow Up", "W", "I", "Arrow Down", "S", "K", "Space", "P", "Enter")
+            val codes = intArrayOf(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_W, KeyEvent.KEYCODE_I,
+                KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_S, KeyEvent.KEYCODE_K,
+                KeyEvent.KEYCODE_SPACE, KeyEvent.KEYCODE_P, KeyEvent.KEYCODE_ENTER)
+            AlertDialog.Builder(context).setTitle("Choose a key").setItems(labels) { _, selection ->
+                val code = codes[selection]
+                when (action) {
+                    0 -> keyMoveUp = code
+                    1 -> keyMoveDown = code
+                    else -> keyPause = code
+                }
+                prefs.edit().putInt("key_move_up", keyMoveUp).putInt("key_move_down", keyMoveDown)
+                    .putInt("key_pause", keyPause).apply()
+                showMessage("KEY BINDING SAVED")
+            }.show()
+        }.setNegativeButton("Cancel", null).show()
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         if (screen == GameScreen.PLAYING && wallGuardMode) {
             when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_W -> {
+                keyMoveUp, KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_W, KeyEvent.KEYCODE_I -> {
                     guardPaddleY = clampGuardPaddleY(guardPaddleY - 0.035f)
                     invalidate()
                     return true
                 }
-                KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_S -> {
+                keyMoveDown, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_S, KeyEvent.KEYCODE_K -> {
                     guardPaddleY = clampGuardPaddleY(guardPaddleY + 0.035f)
                     invalidate()
                     return true
                 }
-                KeyEvent.KEYCODE_SPACE, KeyEvent.KEYCODE_P -> {
+                keyPause, KeyEvent.KEYCODE_SPACE, KeyEvent.KEYCODE_P -> {
                     screen = GameScreen.PAUSED
                     slowMotion = false
                     invalidate()
@@ -3323,7 +3348,10 @@ private class GameView(context: Context) : View(context) {
                         return true
                     }
                     GameScreen.HELP -> {
-                        if (inRect(nx, ny, 0.20f, 0.78f, 0.80f, 0.87f)) screen = GameScreen.MENU
+                        when {
+                            inRect(nx, ny, 0.10f, 0.78f, 0.48f, 0.87f) -> showControlMappingDialog()
+                            inRect(nx, ny, 0.52f, 0.78f, 0.90f, 0.87f) -> screen = GameScreen.MENU
+                        }
                         invalidate()
                         return true
                     }
