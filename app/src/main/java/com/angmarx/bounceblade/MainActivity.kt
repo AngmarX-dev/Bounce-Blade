@@ -398,7 +398,7 @@ private class GameView(context: Context) : View(context) {
                 drawMenuBackdrop(canvas)
                 drawAssetCover(canvas, "Backgrounds & Environments/Victory Background.png", RectF(0f, 0f, viewW, viewH), 238)
                 drawAsset(canvas, "Banners & Text/Victory Banner.png", RectF(viewW * 0.12f, viewH * 0.27f, viewW * 0.88f, viewH * 0.43f), 255)
-                drawText(canvas, "You conquered all five worlds.", 0.5f, 0.48f, 0.024f, Color.WHITE, Paint.Align.CENTER)
+                drawText(canvas, "You conquered all ten worlds.", 0.5f, 0.48f, 0.024f, Color.WHITE, Paint.Align.CENTER)
                 drawButton(canvas, 0.15f, 0.565f, 0.85f, 0.665f, "PLAY AGAIN", cyan)
                 drawButton(canvas, 0.15f, 0.680f, 0.85f, 0.780f, "LEVEL SELECT", gold)
             }
