@@ -201,6 +201,7 @@ private class GameView(context: Context) : View(context) {
     private var gameMode = prefs.getString("game_mode", "campaign") ?: "campaign"
     private var bladeSkin = prefs.getInt("blade_skin", 0).coerceIn(0, 5)
     private var shieldSkin = prefs.getInt("shield_skin", 0).coerceIn(0, 5)
+    private var enemySkin = prefs.getInt("enemy_skin", 0).coerceIn(0, 3)
     private var highContrast = prefs.getBoolean("high_contrast", false)
     private var colorblindMode = prefs.getBoolean("colorblind_mode", false)
     private var hapticLevel = prefs.getInt("haptic_level", 2).coerceIn(0, 3)
@@ -2041,6 +2042,14 @@ private class GameView(context: Context) : View(context) {
         }
         val drawSize = if (enemy.kind == 3) r * 3.2f else r * 2.35f
         val isTurret = enemy.kind == 1 || enemy.kind == 3
+        if (enemySkin > 0) {
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = max(2f, density * 2.2f)
+            paint.color = enemySkinColor()
+            paint.setShadowLayer(density * 8f, 0f, 0f, enemySkinColor())
+            canvas.drawCircle(x, y, drawSize * 0.68f, paint)
+            paint.clearShadowLayer()
+        }
         if (isTurret) {
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = max(2f, density * 2f)
@@ -2250,6 +2259,13 @@ private class GameView(context: Context) : View(context) {
         else -> cyan
     }
 
+    private fun enemySkinColor(): Int = when (enemySkin) {
+        1 -> Color.rgb(255, 88, 90)
+        2 -> Color.rgb(170, 110, 255)
+        3 -> Color.rgb(255, 210, 80)
+        else -> cyan
+    }
+
     private fun selectMode(mode: String, startImmediately: Boolean = true) {
         gameMode = mode
         prefs.edit().putString("game_mode", mode).apply()
@@ -2391,11 +2407,19 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas, "BLADE & SHIELD LAB", 0.5f, 0.20f, 0.060f, Color.WHITE, Paint.Align.CENTER)
         drawText(canvas, "THEME  " + themeName(), 0.5f, 0.29f, 0.023f, cyan, Paint.Align.CENTER)
         drawButton(canvas, 0.14f, 0.33f, 0.86f, 0.415f, "CYCLE THEME", cyan)
-        drawText(canvas, "BLADE SKIN  " + (bladeSkin + 1) + "/6", 0.5f, 0.465f, 0.023f, bladeSkinColor(), Paint.Align.CENTER)
-        drawButton(canvas, 0.14f, 0.49f, 0.86f, 0.575f, "NEXT BLADE SKIN", gold)
-        drawText(canvas, "SHIELD SKIN  " + (shieldSkin + 1) + "/6", 0.5f, 0.625f, 0.023f, shieldSkinColor(), Paint.Align.CENTER)
-        drawButton(canvas, 0.14f, 0.65f, 0.86f, 0.735f, "NEXT SHIELD SKIN", pink)
-        drawButton(canvas, 0.24f, 0.80f, 0.76f, 0.88f, "BACK", cyan)
+        val nextBlade = (bladeSkin + 1) % 6
+        val bladeUnlocked = nextBlade == 0 || prefs.getBoolean("blade_skin_unlocked_" + nextBlade, false)
+        drawText(canvas, "BLADE SKIN  " + (bladeSkin + 1) + "/6", 0.5f, 0.455f, 0.021f, bladeSkinColor(), Paint.Align.CENTER)
+        drawButton(canvas, 0.14f, 0.475f, 0.86f, 0.545f, if (bladeUnlocked) "NEXT BLADE SKIN" else "UNLOCK BLADE SKIN • 150 COINS", gold)
+        val nextShield = (shieldSkin + 1) % 6
+        val shieldUnlocked = nextShield == 0 || prefs.getBoolean("shield_skin_unlocked_" + nextShield, false)
+        drawText(canvas, "SHIELD SKIN  " + (shieldSkin + 1) + "/6", 0.5f, 0.585f, 0.021f, shieldSkinColor(), Paint.Align.CENTER)
+        drawButton(canvas, 0.14f, 0.605f, 0.86f, 0.675f, if (shieldUnlocked) "NEXT SHIELD SKIN" else "UNLOCK SHIELD SKIN • 150 COINS", pink)
+        drawText(canvas, "ENEMY STYLE  " + (enemySkin + 1) + "/4", 0.5f, 0.715f, 0.021f, enemySkinColor(), Paint.Align.CENTER)
+        val nextEnemy = (enemySkin + 1) % 4
+        val enemyUnlocked = nextEnemy == 0 || prefs.getBoolean("enemy_skin_unlocked_" + nextEnemy, false)
+        drawButton(canvas, 0.14f, 0.735f, 0.86f, 0.80f, if (enemyUnlocked) "NEXT ENEMY STYLE" else "UNLOCK ENEMY STYLE • 200 COINS", cyan)
+        drawButton(canvas, 0.24f, 0.845f, 0.76f, 0.915f, "BACK", cyan)
     }
 
     private fun drawEditor(canvas: Canvas) {
@@ -2913,15 +2937,40 @@ private class GameView(context: Context) : View(context) {
                                 prefs.edit().putInt("theme_id", themeId).apply()
                                 applyTheme()
                             }
-                            inRect(nx, ny, 0.14f, 0.49f, 0.86f, 0.575f) -> {
-                                bladeSkin = (bladeSkin + 1) % 6
+                            inRect(nx, ny, 0.14f, 0.475f, 0.86f, 0.545f) -> {
+                                val next = (bladeSkin + 1) % 6
+                                val key = "blade_skin_unlocked_" + next
+                                if (next == 0 || prefs.getBoolean(key, false)) bladeSkin = next
+                                else if (coinBalance() >= 150) {
+                                    prefs.edit().putInt("coins", coinBalance() - 150).putBoolean(key, true).apply()
+                                    bladeSkin = next
+                                    showMessage("BLADE SKIN UNLOCKED")
+                                } else showMessage("NEED 150 COINS")
                                 prefs.edit().putInt("blade_skin", bladeSkin).apply()
                             }
-                            inRect(nx, ny, 0.14f, 0.65f, 0.86f, 0.735f) -> {
-                                shieldSkin = (shieldSkin + 1) % 6
+                            inRect(nx, ny, 0.14f, 0.605f, 0.86f, 0.675f) -> {
+                                val next = (shieldSkin + 1) % 6
+                                val key = "shield_skin_unlocked_" + next
+                                if (next == 0 || prefs.getBoolean(key, false)) shieldSkin = next
+                                else if (coinBalance() >= 150) {
+                                    prefs.edit().putInt("coins", coinBalance() - 150).putBoolean(key, true).apply()
+                                    shieldSkin = next
+                                    showMessage("SHIELD SKIN UNLOCKED")
+                                } else showMessage("NEED 150 COINS")
                                 prefs.edit().putInt("shield_skin", shieldSkin).apply()
                             }
-                            inRect(nx, ny, 0.24f, 0.80f, 0.76f, 0.88f) -> screen = GameScreen.FEATURES
+                            inRect(nx, ny, 0.14f, 0.735f, 0.86f, 0.80f) -> {
+                                val next = (enemySkin + 1) % 4
+                                val key = "enemy_skin_unlocked_" + next
+                                if (next == 0 || prefs.getBoolean(key, false)) enemySkin = next
+                                else if (coinBalance() >= 200) {
+                                    prefs.edit().putInt("coins", coinBalance() - 200).putBoolean(key, true).apply()
+                                    enemySkin = next
+                                    showMessage("ENEMY STYLE UNLOCKED")
+                                } else showMessage("NEED 200 COINS")
+                                prefs.edit().putInt("enemy_skin", enemySkin).apply()
+                            }
+                            inRect(nx, ny, 0.24f, 0.845f, 0.76f, 0.915f) -> screen = GameScreen.FEATURES
                         }
                         invalidate()
                         return true
