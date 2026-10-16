@@ -132,6 +132,15 @@ private class GameView(context: Context) : View(context) {
     private val loadedSoundIds = mutableSetOf<Int>()
     private val bitmapAssets = mutableMapOf<String, Bitmap>()
     private val failedBitmapAssets = mutableSetOf<String>()
+    private val trimmedAssetPaths: Set<String> by lazy {
+        try {
+            context.assets.open("trimmed-assets.txt").bufferedReader().useLines { lines ->
+                lines.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+            }
+        } catch (_: Exception) {
+            emptySet()
+        }
+    }
     private var currentMusicPath: String? = null
     private var musicPlayer: MediaPlayer? = null
     private var musicPrepared = false
@@ -973,7 +982,23 @@ private class GameView(context: Context) : View(context) {
         paint.alpha = alpha.coerceIn(0, 255)
         paint.isFilterBitmap = true
         paint.style = Paint.Style.FILL
-        canvas.drawBitmap(bitmap, null, rect, paint)
+
+        // Images trimmed at build time need aspect-fit drawing after their
+        // transparent margins are removed, otherwise sprites and icons stretch.
+        val targetRect = if (path in trimmedAssetPaths && rect.width() > 0f && rect.height() > 0f) {
+            val imageAspect = bitmap.width.toFloat() / bitmap.height.toFloat()
+            val rectAspect = rect.width() / rect.height()
+            if (imageAspect > rectAspect) {
+                val fittedHeight = rect.width() / imageAspect
+                RectF(rect.left, rect.centerY() - fittedHeight / 2f, rect.right, rect.centerY() + fittedHeight / 2f)
+            } else {
+                val fittedWidth = rect.height() * imageAspect
+                RectF(rect.centerX() - fittedWidth / 2f, rect.top, rect.centerX() + fittedWidth / 2f, rect.bottom)
+            }
+        } else {
+            rect
+        }
+        canvas.drawBitmap(bitmap, null, targetRect, paint)
         paint.alpha = oldAlpha
         paint.isFilterBitmap = oldFilter
         paint.style = oldStyle
