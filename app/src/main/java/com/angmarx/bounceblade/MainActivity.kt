@@ -321,9 +321,9 @@ private class GameView(context: Context) : View(context) {
             GameScreen.PAUSED -> {
                 drawGame(canvas)
                 drawOverlay(canvas, "PAUSED", "Take a breath. The blade can wait.")
-                drawButton(canvas, 0.24f, 0.43f, 0.76f, 0.51f, "RESUME", cyan)
-                drawButton(canvas, 0.24f, 0.54f, 0.76f, 0.62f, "RESTART LEVEL", gold)
-                drawButton(canvas, 0.24f, 0.65f, 0.76f, 0.73f, "MAIN MENU", pink)
+                drawButton(canvas, 0.18f, 0.425f, 0.82f, 0.515f, "RESUME", cyan)
+                drawButton(canvas, 0.18f, 0.535f, 0.82f, 0.625f, "RESTART LEVEL", gold)
+                drawButton(canvas, 0.18f, 0.645f, 0.82f, 0.735f, "MAIN MENU", pink)
             }
             GameScreen.SETTINGS -> drawSettings(canvas)
             GameScreen.HELP -> drawHelp(canvas)
@@ -332,22 +332,22 @@ private class GameView(context: Context) : View(context) {
             GameScreen.WON -> {
                 drawGame(canvas)
                 drawOverlay(canvas, "LEVEL CLEARED", "Nice shot! The exit is open.")
-                drawButton(canvas, 0.22f, 0.51f, 0.78f, 0.60f, "NEXT LEVEL", cyan)
-                drawButton(canvas, 0.22f, 0.63f, 0.78f, 0.71f, "LEVEL SELECT", gold)
+                drawButton(canvas, 0.18f, 0.50f, 0.82f, 0.60f, "NEXT LEVEL", cyan)
+                drawButton(canvas, 0.18f, 0.625f, 0.82f, 0.725f, "LEVEL SELECT", gold)
             }
             GameScreen.FAILED -> {
                 drawGame(canvas)
                 drawOverlay(canvas, "TRY AGAIN", message.ifBlank { "Reset and try a different angle." })
-                drawButton(canvas, 0.22f, 0.51f, 0.78f, 0.60f, "RETRY", cyan)
-                drawButton(canvas, 0.22f, 0.63f, 0.78f, 0.71f, "LEVEL SELECT", gold)
+                drawButton(canvas, 0.18f, 0.50f, 0.82f, 0.60f, "RETRY", cyan)
+                drawButton(canvas, 0.18f, 0.625f, 0.82f, 0.725f, "LEVEL SELECT", gold)
             }
             GameScreen.CAMPAIGN_COMPLETE -> {
                 drawMenuBackdrop(canvas)
                 drawAssetCover(canvas, "Backgrounds & Environments/Victory Background.png", RectF(0f, 0f, viewW, viewH), 238)
                 drawAsset(canvas, "Banners & Text/Victory Banner.png", RectF(viewW * 0.12f, viewH * 0.27f, viewW * 0.88f, viewH * 0.43f), 255)
                 drawText(canvas, "You conquered all five worlds.", 0.5f, 0.48f, 0.024f, Color.WHITE, Paint.Align.CENTER)
-                drawButton(canvas, 0.20f, 0.57f, 0.80f, 0.66f, "PLAY AGAIN", cyan)
-                drawButton(canvas, 0.20f, 0.69f, 0.80f, 0.78f, "LEVEL SELECT", gold)
+                drawButton(canvas, 0.15f, 0.565f, 0.85f, 0.665f, "PLAY AGAIN", cyan)
+                drawButton(canvas, 0.15f, 0.680f, 0.85f, 0.780f, "LEVEL SELECT", gold)
             }
         }
         if (screen == GameScreen.PLAYING || flying || particles.isNotEmpty() || turretProjectiles.isNotEmpty()) postInvalidateDelayed(16L)
@@ -1452,15 +1452,15 @@ private class GameView(context: Context) : View(context) {
         drawAsset(canvas, "App Icon & Logo/Game Logo.png", RectF(viewW * 0.16f, viewH * 0.13f, viewW * 0.84f, viewH * 0.29f), 255)
         drawText(canvas, "BOUNCE OFF ENEMIES  •  GUARD THE LEFT WALL", 0.5f, 0.435f, 0.020f, muted, Paint.Align.CENTER)
         drawText(canvas, "◈ " + coinBalance(), 0.91f, 0.105f, 0.026f, gold, Paint.Align.RIGHT)
-        drawButton(canvas, 0.14f, 0.465f, 0.86f, 0.522f, "PLAY CAMPAIGN", cyan)
-        drawButton(canvas, 0.14f, 0.532f, 0.86f, 0.589f, "LEVEL SELECT", gold)
-        drawButton(canvas, 0.14f, 0.599f, 0.86f, 0.656f, "HELP", pink)
-        drawButton(canvas, 0.14f, 0.666f, 0.86f, 0.723f, "BLADE SHOP", gold)
-        drawButton(canvas, 0.14f, 0.733f, 0.86f, 0.790f, "SETTINGS", cyan)
+        drawButton(canvas, 0.10f, 0.456f, 0.90f, 0.523f, "PLAY CAMPAIGN", cyan)
+        drawButton(canvas, 0.10f, 0.532f, 0.90f, 0.599f, "LEVEL SELECT", gold)
+        drawButton(canvas, 0.10f, 0.608f, 0.90f, 0.675f, "HELP", pink)
+        drawButton(canvas, 0.10f, 0.684f, 0.90f, 0.751f, "BLADE SHOP", gold)
+        drawButton(canvas, 0.10f, 0.760f, 0.90f, 0.827f, "SETTINGS", cyan)
         val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
         val bestTotal = totalBestStarsAfter(0, 0)
         drawText(canvas, "UNLOCKED  " + unlocked + "/" + levels.size + "     BEST STARS  " + bestTotal + "/" + (levels.size * 3),
-            0.5f, 0.85f, 0.019f, muted, Paint.Align.CENTER)
+            0.5f, 0.86f, 0.019f, muted, Paint.Align.CENTER)
         drawText(canvas, "COLLECT COINS • UPGRADE YOUR BLADE • SURVIVE EVERY WAVE", 0.5f, 0.91f, 0.014f, muted, Paint.Align.CENTER)
     }
     private fun drawShop(canvas: Canvas) {
@@ -1520,9 +1520,9 @@ private class GameView(context: Context) : View(context) {
             val first=CampaignWorlds.firstLevelForWorld(w); val available=unlocked>=first; val top=0.375f+w*0.088f
             val total=(first..min(first+9,levels.size)).sumOf{prefs.getInt(bestStarsKey(it),0)}
             val label=(w+1).toString().padStart(2,'0')+"  "+CampaignWorlds.worldName(w)+"  "+if(available) "$total/30 ★" else "LOCKED"
-            drawButton(canvas,0.12f,top,0.88f,top+0.066f,label,if(available) cyan else muted,available)
+            drawButton(canvas,0.10f,top,0.90f,top+0.076f,label,if(available) cyan else muted,available)
         }
-        drawButton(canvas,0.22f,0.83f,0.78f,0.90f,"BACK",gold)
+        drawButton(canvas,0.20f,0.83f,0.80f,0.915f,"BACK",gold)
         if(System.nanoTime()<messageUntil&&message.isNotBlank()) drawText(canvas,message,0.5f,0.93f,0.018f,gold,Paint.Align.CENTER)
     }
 
@@ -1531,19 +1531,19 @@ private class GameView(context: Context) : View(context) {
         val first=CampaignWorlds.firstLevelForWorld(selectedWorld); val last=min(first+9,levels.size)
         drawText(canvas,"LEVELS $first-$last  •  UNLOCKED "+prefs.getInt("unlocked_level",1).coerceIn(1,levels.size)+"/"+levels.size,0.5f,0.165f,0.020f,cyan,Paint.Align.CENTER)
         for(mode in 1..3){
-            val left=0.055f+(mode-1)*0.31f
+            val left=0.035f+(mode-1)*0.315f
             val label=(if(difficulty==mode) "✓ " else "")+when(mode){1->"★☆☆ EASY";2->"★★☆ NORMAL";else->"★★★ HARD"}
-            drawButton(canvas,left,0.195f,left+0.28f,0.245f,label,if(difficulty==mode) gold else cyan)
+            drawButton(canvas,left,0.195f,left+0.30f,0.260f,label,if(difficulty==mode) gold else cyan)
         }
         val unlocked=prefs.getInt("unlocked_level",1).coerceIn(1,levels.size)
         for(local in 1..10){
             val id=first+local-1;if(id>last) continue
-            val col=(local-1)%4;val row=(local-1)/4;val left=0.04f+col*0.24f;val top=0.29f+row*0.135f
+            val col=(local-1)%4;val row=(local-1)/4;val left=0.035f+col*0.24f;val top=0.29f+row*0.135f
             val active=id<=unlocked;val best=prefs.getInt(bestStarsKey(id),0).coerceIn(0,3)
-            drawButton(canvas,left,top,left+0.22f,top+0.085f,local.toString().padStart(2,'0')+" "+"★".repeat(best)+"☆".repeat(3-best),if(active) cyan else muted,active)
+            drawButton(canvas,left,top,left+0.23f,top+0.095f,local.toString().padStart(2,'0')+" "+"★".repeat(best)+"☆".repeat(3-best),if(active) cyan else muted,active)
         }
         drawText(canvas,"STARS = TIME + COMBO / TARGET CLEAR",0.5f,0.735f,0.014f,muted,Paint.Align.CENTER)
-        drawButton(canvas,0.22f,0.83f,0.78f,0.90f,"BACK TO WORLDS",gold)
+        drawButton(canvas,0.20f,0.83f,0.80f,0.915f,"BACK TO WORLDS",gold)
     }
 
     private fun drawGame(canvas: Canvas) {
@@ -1554,13 +1554,13 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas,"BOUNCE BLADE",0.07f,0.047f,0.025f,Color.WHITE)
         drawText(canvas,level.name.uppercase()+"  "+levelId+"/"+levels.size+"  •  "+"★".repeat(difficulty),0.48f,0.047f,0.020f,cyan,Paint.Align.CENTER)
         drawText(canvas,"BOUNCES "+bouncesLeft,0.78f,0.047f,0.019f,gold,Paint.Align.RIGHT)
-        drawButton(canvas,0.83f,0.065f,0.94f,0.115f,"Ⅱ",pink)
+        drawButton(canvas,0.825f,0.027f,0.97f,0.110f,"Ⅱ",pink)
         val timeLeft=GameRules.timeLimitSeconds(levelId,difficulty)-levelElapsedSeconds
         drawText(canvas,"SCORE "+score,0.07f,0.092f,0.018f,gold)
         drawText(canvas,"TIME "+formatTime(timeLeft),0.47f,0.092f,0.018f,if(levelElapsedSeconds<=GameRules.targetTimeSeconds(levelId,difficulty)) cyan else pink,Paint.Align.CENTER)
         drawAsset(canvas, "UI Elements/Timer Icon.png", RectF(viewW * 0.365f, viewH * 0.077f, viewW * 0.405f, viewH * 0.11f), 240)
-        drawText(canvas,"COMBO x"+comboCount,0.80f,0.092f,0.018f,pink,Paint.Align.RIGHT)
-        drawAsset(canvas, "UI Elements/Combo Icon.png", RectF(viewW * 0.815f, viewH * 0.077f, viewW * 0.855f, viewH * 0.11f), 240)
+        drawText(canvas,"COMBO x"+comboCount,0.775f,0.092f,0.018f,pink,Paint.Align.RIGHT)
+        drawAsset(canvas, "UI Elements/Combo Icon.png", RectF(viewW * 0.785f, viewH * 0.077f, viewW * 0.815f, viewH * 0.11f), 240)
         val rect = RectF(viewW * 0.05f, viewH * 0.13f, viewW * 0.95f, viewH * 0.94f)
         drawAssetCover(canvas, "Backgrounds & Environments/Gameplay Background.png", rect, 220)
         drawAsset(canvas, "UI Elements/UI Panel.png", RectF(viewW * 0.03f, viewH * 0.012f, viewW * 0.97f, viewH * 0.125f), 105)
@@ -1623,10 +1623,10 @@ private class GameView(context: Context) : View(context) {
     private fun drawWallGuardGame(canvas: Canvas) {
         drawText(canvas, "BOUNCE BLADE", 0.07f, 0.047f, 0.025f, Color.WHITE)
         drawText(canvas, "LEVEL " + levelId + "/" + levels.size, 0.49f, 0.047f, 0.022f, cyan, Paint.Align.CENTER)
-        drawButton(canvas, 0.83f, 0.065f, 0.94f, 0.115f, "Ⅱ", pink)
+        drawButton(canvas, 0.825f, 0.027f, 0.97f, 0.110f, "Ⅱ", pink)
         drawText(canvas, "SCORE $score", 0.07f, 0.092f, 0.019f, gold)
         drawText(canvas, "TARGETS " + enemies.count { it.alive }, 0.50f, 0.092f, 0.019f, pink, Paint.Align.CENTER)
-        drawText(canvas, "SAVE STREAK $comboCount", 0.92f, 0.092f, 0.016f, cyan, Paint.Align.RIGHT)
+        drawText(canvas, "SAVE STREAK $comboCount", 0.78f, 0.092f, 0.016f, cyan, Paint.Align.RIGHT)
 
         val arena = RectF(viewW * 0.035f, viewH * 0.135f, viewW * 0.965f, viewH * 0.94f)
         drawAssetCover(canvas, "Backgrounds & Environments/Gameplay Background.png", arena, 230)
@@ -1704,7 +1704,7 @@ private class GameView(context: Context) : View(context) {
                 novaCooldownRemaining <= 0f -> "NOVA READY"
                 else -> "NOVA " + (novaCooldownRemaining + 0.99f).toInt() + "s"
             }
-            drawButton(canvas, 0.805f, 0.805f, 0.975f, 0.92f, novaLabel, gold, true)
+            drawButton(canvas, 0.775f, 0.790f, 0.98f, 0.935f, novaLabel, gold, true)
         }
         if (System.nanoTime() < messageUntil && message.isNotBlank()) {
             drawText(canvas, message, 0.5f, 0.885f, 0.020f, gold, Paint.Align.CENTER)
@@ -1962,10 +1962,10 @@ private class GameView(context: Context) : View(context) {
     private fun drawSettings(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         drawText(canvas, "SETTINGS", 0.5f, 0.29f, 0.07f, Color.WHITE, Paint.Align.CENTER)
-        drawButton(canvas, 0.15f, 0.39f, 0.85f, 0.46f, "SOUND: " + if (soundEnabled) "ON" else "OFF", cyan)
-        drawButton(canvas, 0.15f, 0.48f, 0.85f, 0.55f, "VIBRATION: " + if (vibrationEnabled) "ON" else "OFF", gold)
-        drawButton(canvas, 0.15f, 0.57f, 0.85f, 0.64f, "THEME: " + themeName(), pink)
-        drawButton(canvas, 0.15f, 0.69f, 0.85f, 0.76f, "BACK", cyan)
+        drawButton(canvas, 0.12f, 0.38f, 0.88f, 0.465f, "SOUND: " + if (soundEnabled) "ON" else "OFF", cyan)
+        drawButton(canvas, 0.12f, 0.475f, 0.88f, 0.560f, "VIBRATION: " + if (vibrationEnabled) "ON" else "OFF", gold)
+        drawButton(canvas, 0.12f, 0.570f, 0.88f, 0.655f, "THEME: " + themeName(), pink)
+        drawButton(canvas, 0.12f, 0.680f, 0.88f, 0.765f, "BACK", cyan)
         drawText(canvas, "Tap THEME to cycle through Cyan, Green and Violet.", 0.5f, 0.83f, 0.018f, muted, Paint.Align.CENTER)
         drawText(canvas, "Settings are saved on this device.", 0.5f, 0.87f, 0.018f, muted, Paint.Align.CENTER)
     }
@@ -1979,9 +1979,9 @@ private class GameView(context: Context) : View(context) {
         for (mode in 1..3) {
             val top = 0.405f + (mode - 1) * 0.11f
             val label = (if (difficulty == mode) "✓  " else "") + labels[mode - 1]
-            drawButton(canvas, 0.13f, top, 0.87f, top + 0.078f, label, accents[mode - 1])
+            drawButton(canvas, 0.10f, top, 0.90f, top + 0.090f, label, accents[mode - 1])
         }
-        drawButton(canvas, 0.22f, 0.755f, 0.78f, 0.83f, "BACK", gold)
+        drawButton(canvas, 0.20f, 0.755f, 0.80f, 0.845f, "BACK", gold)
     }
 
     private fun drawHelp(canvas: Canvas) {
@@ -1994,7 +1994,7 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas, "5. Hit every enemy to clear the level.", 0.12f, 0.625f, 0.018f, Color.WHITE)
         drawText(canvas, "Easy gives a larger shield; Hard gives a smaller one.", 0.12f, 0.685f, 0.016f, gold)
         drawText(canvas, "Tip: move early to meet the returning blade.", 0.5f, 0.735f, 0.017f, muted, Paint.Align.CENTER)
-        drawButton(canvas, 0.22f, 0.79f, 0.78f, 0.86f, "BACK", cyan)
+        drawButton(canvas, 0.20f, 0.78f, 0.80f, 0.87f, "BACK", cyan)
     }
 
     private fun drawText(
@@ -2029,11 +2029,15 @@ private class GameView(context: Context) : View(context) {
         // the layout rectangle while its original proportions are preserved.
         val hitRect = RectF(left * viewW, top * viewH, right * viewW, bottom * viewH)
         // Slightly enlarge the button artwork without stretching or changing hit bounds.
+        val buttonExpansion = if (
+            (right - left) < 0.24f && label != "Ⅱ" &&
+            !label.contains("NOVA") && label != "BLADE SHOP"
+        ) 0.015f else 0.055f
         val artBounds = RectF(
-            hitRect.left - hitRect.width() * 0.03f,
-            hitRect.top - hitRect.height() * 0.03f,
-            hitRect.right + hitRect.width() * 0.03f,
-            hitRect.bottom + hitRect.height() * 0.03f
+            hitRect.left - hitRect.width() * buttonExpansion,
+            hitRect.top - hitRect.height() * buttonExpansion,
+            hitRect.right + hitRect.width() * buttonExpansion,
+            hitRect.bottom + hitRect.height() * buttonExpansion
         )
         val buttonBitmap = bitmapAsset("UI Elements/Button.png")
         val visualRect = buttonBitmap?.let { fitAssetRect(it, artBounds) } ?: artBounds
@@ -2049,7 +2053,7 @@ private class GameView(context: Context) : View(context) {
             else -> null
         }
         if (iconPath != null) {
-            val iconSize = min(visualRect.height() * 0.58f, minDim * 0.050f)
+            val iconSize = min(visualRect.height() * 0.62f, minDim * 0.060f)
             val iconX = if (label == "Ⅱ") visualRect.centerX() else visualRect.left + iconSize * 0.82f
             drawAssetCentered(canvas, iconPath, iconX, visualRect.centerY(), iconSize, if (enabled) 255 else 120)
             if (label == "Ⅱ") return
@@ -2060,7 +2064,7 @@ private class GameView(context: Context) : View(context) {
             label,
             (visualRect.centerX() + shift) / viewW,
             visualRect.centerY() / viewH + 0.010f,
-            if (label.length > 18) 0.019f else 0.024f,
+            if (label.length > 18) 0.022f else 0.028f,
             if (enabled) color else muted,
             Paint.Align.CENTER
         )
@@ -2123,11 +2127,11 @@ private class GameView(context: Context) : View(context) {
                 when (screen) {
                     GameScreen.MENU -> {
                         when {
-                            inRect(nx, ny, 0.14f, 0.465f, 0.86f, 0.522f) -> screen = GameScreen.DIFFICULTY
-                            inRect(nx, ny, 0.14f, 0.532f, 0.86f, 0.589f) -> screen = GameScreen.WORLDS
-                            inRect(nx, ny, 0.14f, 0.599f, 0.86f, 0.656f) -> screen = GameScreen.HELP
-                            inRect(nx, ny, 0.14f, 0.666f, 0.86f, 0.723f) -> openShop(GameScreen.MENU)
-                            inRect(nx, ny, 0.14f, 0.733f, 0.86f, 0.790f) -> screen = GameScreen.SETTINGS
+                            inRect(nx, ny, 0.10f, 0.456f, 0.90f, 0.523f) -> screen = GameScreen.DIFFICULTY
+                            inRect(nx, ny, 0.10f, 0.532f, 0.90f, 0.599f) -> screen = GameScreen.WORLDS
+                            inRect(nx, ny, 0.10f, 0.608f, 0.90f, 0.675f) -> screen = GameScreen.HELP
+                            inRect(nx, ny, 0.10f, 0.684f, 0.90f, 0.751f) -> openShop(GameScreen.MENU)
+                            inRect(nx, ny, 0.10f, 0.760f, 0.90f, 0.827f) -> screen = GameScreen.SETTINGS
                         }
                         invalidate()
                         return true
@@ -2147,115 +2151,115 @@ private class GameView(context: Context) : View(context) {
                         return true
                     }
                     GameScreen.WORLDS -> {
-                        if(inRect(nx,ny,0.22f,0.83f,0.78f,0.90f)) screen=GameScreen.MENU else {
+                        if(inRect(nx,ny,0.20f,0.83f,0.80f,0.915f)) screen=GameScreen.MENU else {
                             val unlocked=prefs.getInt("unlocked_level",1).coerceIn(1,levels.size)
-                            for(w in 0 until CampaignWorlds.WORLD_COUNT){val top=0.375f+w*0.088f;if(inRect(nx,ny,0.12f,top,0.88f,top+0.066f)){if(unlocked>=CampaignWorlds.firstLevelForWorld(w)){selectedWorld=w;screen=GameScreen.LEVELS}else showMessage("CLEAR EARLIER WORLDS FIRST");break}}
+                            for(w in 0 until CampaignWorlds.WORLD_COUNT){val top=0.375f+w*0.088f;if(inRect(nx,ny,0.10f,top,0.90f,top+0.076f)){if(unlocked>=CampaignWorlds.firstLevelForWorld(w)){selectedWorld=w;screen=GameScreen.LEVELS}else showMessage("CLEAR EARLIER WORLDS FIRST");break}}
                         };invalidate();return true
                     }
                     GameScreen.LEVELS -> {
-                        if(inRect(nx,ny,0.22f,0.83f,0.78f,0.90f)) screen=GameScreen.WORLDS else {
+                        if(inRect(nx,ny,0.20f,0.83f,0.80f,0.915f)) screen=GameScreen.WORLDS else {
                             var changed=false
-                            for(mode in 1..3){val left=0.055f+(mode-1)*0.31f;if(inRect(nx,ny,left,0.195f,left+0.28f,0.245f)){difficulty=mode;prefs.edit().putInt("difficulty_stars",difficulty).apply();changed=true;break}}
-                            if(!changed){val first=CampaignWorlds.firstLevelForWorld(selectedWorld);for(local in 1..10){val id=first+local-1;if(id>levels.size)continue;val col=(local-1)%4;val row=(local-1)/4;val left=0.04f+col*0.24f;val top=0.29f+row*0.135f;if(inRect(nx,ny,left,top,left+0.22f,top+0.085f)){val unlocked=prefs.getInt("unlocked_level",1).coerceIn(1,levels.size);if(id<=unlocked)startLevel(id)else showMessage("LOCKED");break}}}
+                            for(mode in 1..3){val left=0.035f+(mode-1)*0.315f;if(inRect(nx,ny,left,0.195f,left+0.30f,0.260f)){difficulty=mode;prefs.edit().putInt("difficulty_stars",difficulty).apply();changed=true;break}}
+                            if(!changed){val first=CampaignWorlds.firstLevelForWorld(selectedWorld);for(local in 1..10){val id=first+local-1;if(id>levels.size)continue;val col=(local-1)%4;val row=(local-1)/4;val left=0.035f+col*0.24f;val top=0.29f+row*0.135f;if(inRect(nx,ny,left,top,left+0.23f,top+0.095f)){val unlocked=prefs.getInt("unlocked_level",1).coerceIn(1,levels.size);if(id<=unlocked)startLevel(id)else showMessage("LOCKED");break}}}
                         };invalidate();return true
                     }
                     GameScreen.SETTINGS -> {
                         when {
-                            inRect(nx, ny, 0.15f, 0.39f, 0.85f, 0.46f) -> {
+                            inRect(nx, ny, 0.12f, 0.38f, 0.88f, 0.465f) -> {
                                 soundEnabled = !soundEnabled
                                 prefs.edit().putBoolean("sound_enabled", soundEnabled).apply()
                             }
-                            inRect(nx, ny, 0.15f, 0.48f, 0.85f, 0.55f) -> {
+                            inRect(nx, ny, 0.12f, 0.475f, 0.88f, 0.560f) -> {
                                 vibrationEnabled = !vibrationEnabled
                                 prefs.edit().putBoolean("vibration_enabled", vibrationEnabled).apply()
                             }
-                            inRect(nx, ny, 0.15f, 0.57f, 0.85f, 0.64f) -> {
+                            inRect(nx, ny, 0.12f, 0.570f, 0.88f, 0.655f) -> {
                                 themeId = (themeId + 1) % 3
                                 prefs.edit().putInt("theme_id", themeId).apply()
                                 applyTheme()
                             }
-                            inRect(nx, ny, 0.15f, 0.69f, 0.85f, 0.76f) -> screen = GameScreen.MENU
+                            inRect(nx, ny, 0.12f, 0.680f, 0.88f, 0.765f) -> screen = GameScreen.MENU
                         }
                         invalidate()
                         return true
                     }
                     GameScreen.DIFFICULTY -> {
                         when {
-                            inRect(nx, ny, 0.13f, 0.405f, 0.87f, 0.483f) -> {
+                            inRect(nx, ny, 0.10f, 0.405f, 0.90f, 0.495f) -> {
                                 difficulty = 1
                                 prefs.edit().putInt("difficulty_stars", difficulty).apply()
                                 startLevel(prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size))
                             }
-                            inRect(nx, ny, 0.13f, 0.515f, 0.87f, 0.593f) -> {
+                            inRect(nx, ny, 0.10f, 0.515f, 0.90f, 0.605f) -> {
                                 difficulty = 2
                                 prefs.edit().putInt("difficulty_stars", difficulty).apply()
                                 startLevel(prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size))
                             }
-                            inRect(nx, ny, 0.13f, 0.625f, 0.87f, 0.703f) -> {
+                            inRect(nx, ny, 0.10f, 0.625f, 0.90f, 0.715f) -> {
                                 difficulty = 3
                                 prefs.edit().putInt("difficulty_stars", difficulty).apply()
                                 startLevel(prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size))
                             }
-                            inRect(nx, ny, 0.22f, 0.755f, 0.78f, 0.83f) -> screen = GameScreen.MENU
+                            inRect(nx, ny, 0.20f, 0.755f, 0.80f, 0.845f) -> screen = GameScreen.MENU
                         }
                         invalidate()
                         return true
                     }
                     GameScreen.HELP -> {
-                        if (inRect(nx, ny, 0.22f, 0.79f, 0.78f, 0.86f)) screen = GameScreen.MENU
+                        if (inRect(nx, ny, 0.20f, 0.78f, 0.80f, 0.87f)) screen = GameScreen.MENU
                         invalidate()
                         return true
                     }
                     GameScreen.PAUSED -> {
                         when {
-                            inRect(nx, ny, 0.24f, 0.43f, 0.76f, 0.51f) -> {
+                            inRect(nx, ny, 0.18f, 0.425f, 0.82f, 0.515f) -> {
                                 screen = GameScreen.PLAYING
                                 playSfx("UI & Feedback SFX/Unpause.wav")
                                 lastFrame = System.nanoTime()
                             }
-                            inRect(nx, ny, 0.24f, 0.54f, 0.76f, 0.62f) -> {
+                            inRect(nx, ny, 0.18f, 0.535f, 0.82f, 0.625f) -> {
                                 startLevel(levelId)
                             }
-                            inRect(nx, ny, 0.24f, 0.65f, 0.76f, 0.73f) -> screen = GameScreen.MENU
+                            inRect(nx, ny, 0.18f, 0.645f, 0.82f, 0.735f) -> screen = GameScreen.MENU
                         }
                         invalidate()
                         return true
                     }
                     GameScreen.WON -> {
                         when {
-                            inRect(nx, ny, 0.22f, 0.51f, 0.78f, 0.60f) -> {
+                            inRect(nx, ny, 0.18f, 0.50f, 0.82f, 0.60f) -> {
                                 if (levelId >= levels.size) screen = GameScreen.CAMPAIGN_COMPLETE
                                 else startLevel(levelId + 1)
                             }
-                            inRect(nx, ny, 0.22f, 0.63f, 0.78f, 0.71f) -> { selectedWorld=CampaignWorlds.indexForLevel(levelId);screen=GameScreen.LEVELS }
+                            inRect(nx, ny, 0.18f, 0.625f, 0.82f, 0.725f) -> { selectedWorld=CampaignWorlds.indexForLevel(levelId);screen=GameScreen.LEVELS }
                         }
                         invalidate()
                         return true
                     }
                     GameScreen.FAILED -> {
                         when {
-                            inRect(nx, ny, 0.22f, 0.51f, 0.78f, 0.60f) -> startLevel(levelId)
-                            inRect(nx, ny, 0.22f, 0.63f, 0.78f, 0.71f) -> { selectedWorld=CampaignWorlds.indexForLevel(levelId);screen=GameScreen.LEVELS }
+                            inRect(nx, ny, 0.18f, 0.50f, 0.82f, 0.60f) -> startLevel(levelId)
+                            inRect(nx, ny, 0.18f, 0.625f, 0.82f, 0.725f) -> { selectedWorld=CampaignWorlds.indexForLevel(levelId);screen=GameScreen.LEVELS }
                         }
                         invalidate()
                         return true
                     }
                     GameScreen.CAMPAIGN_COMPLETE -> {
                         when {
-                            inRect(nx, ny, 0.20f, 0.57f, 0.80f, 0.66f) -> startLevel(1)
-                            inRect(nx, ny, 0.20f, 0.69f, 0.80f, 0.78f) -> { selectedWorld=CampaignWorlds.indexForLevel(levelId);screen=GameScreen.LEVELS }
+                            inRect(nx, ny, 0.15f, 0.565f, 0.85f, 0.665f) -> startLevel(1)
+                            inRect(nx, ny, 0.15f, 0.680f, 0.85f, 0.780f) -> { selectedWorld=CampaignWorlds.indexForLevel(levelId);screen=GameScreen.LEVELS }
                         }
                         invalidate()
                         return true
                     }
                     GameScreen.PLAYING -> {
-                        if (inRect(nx, ny, 0.805f, 0.805f, 0.975f, 0.92f)) {
+                        if (inRect(nx, ny, 0.775f, 0.790f, 0.98f, 0.935f)) {
                             touchingAbility = true
                             if (upgradeLevel("nova") > 0) activateNovaPulse() else openShop(GameScreen.PLAYING)
                             invalidate()
                             return true
                         }
-                        if (inRect(nx, ny, 0.81f, 0.065f, 0.94f, 0.115f)) {
+                        if (inRect(nx, ny, 0.82f, 0.025f, 0.98f, 0.115f)) {
                             screen = GameScreen.PAUSED
                             slowMotion = false
                             playSfx("UI & Feedback SFX/Pause.wav")
@@ -2338,8 +2342,12 @@ private class GameView(context: Context) : View(context) {
         return true
     }
 
-    private fun inRect(x: Float, y: Float, left: Float, top: Float, right: Float, bottom: Float): Boolean =
-        x >= left && x <= right && y >= top && y <= bottom
+    private fun inRect(x: Float, y: Float, left: Float, top: Float, right: Float, bottom: Float): Boolean {
+        val padX = (right - left) * 0.025f
+        val padY = (bottom - top) * 0.025f
+        return x >= left - padX && x <= right + padX &&
+            y >= top - padY && y <= bottom + padY
+    }
 
     companion object {
         private val TypefaceFactory = object {
