@@ -795,6 +795,54 @@ private class GameView(context: Context) : View(context) {
             playNextRicochet()
         }
 
+        for ((hazardIndex, hazard) in level.hazards.withIndex()) {
+            if (hazard.type == "power_up" && hazardIndex in collectedPowerUps) continue
+            val center = hazardCenter(hazard, hazardIndex)
+            val hx = center.x * viewW
+            val hy = center.y * viewH
+            val halfW = max(hazard.width * viewW * 0.5f, radius)
+            val halfH = max(hazard.height * viewH * 0.5f, radius)
+            val hit = px + radius >= hx - halfW && px - radius <= hx + halfW &&
+                py + radius >= hy - halfH && py - radius <= hy + halfH
+            if (!hit) continue
+            when (hazard.type) {
+                "teleporter" -> {
+                    if (teleportCooldown <= 0f) {
+                        val destination = level.hazards.withIndex().firstOrNull {
+                            it.index != hazardIndex && it.value.type == "teleporter"
+                        }
+                        if (destination != null) {
+                            px = destination.value.x * viewW
+                            py = destination.value.y * viewH
+                            teleportCooldown = 0.85f
+                            addBurst(px, py, cyan, 12)
+                            playSfx("Optional - Extra Sounds/Teleport - Warp.wav")
+                            showMessage("PORTAL WARP")
+                        }
+                    }
+                }
+                "power_up" -> {
+                    if (collectedPowerUps.add(hazardIndex)) {
+                        bouncesLeft += 2
+                        score += 250
+                        activeEffects["score_multiplier"] = 8f
+                        addBurst(hx, hy, gold, 16)
+                        playSfx("Optional - Extra Sounds/Power-Up Collect.wav")
+                        showMessage("POWER-UP • +2 RETURNS")
+                    }
+                }
+                "sticky_wall" -> {
+                    fail("STICKY WALL — BLADE STUCK")
+                    return
+                }
+                else -> {
+                    fail(if (hazard.type == "spikes") "SPIKES HIT" else "HAZARD HIT")
+                    return
+                }
+            }
+            if (screen != GameScreen.PLAYING) return
+        }
+
         if (px < leftContact) {
             val paddleCenter = guardPaddleY * viewH
             val paddleHalf = guardPaddleHalf()
@@ -1168,7 +1216,7 @@ private class GameView(context: Context) : View(context) {
                 spawn = PointN(0.145f, 0.5f),
                 enemies = points,
                 crates = emptyList(),
-                hazards = emptyList(),
+                hazards = level.hazards,
                 requiresAllTargets = true,
                 requiresSwitch = false
             )
@@ -1819,6 +1867,7 @@ private class GameView(context: Context) : View(context) {
         }
         paint.style = Paint.Style.FILL
 
+        drawHazards(canvas)
         drawBladeTrail(canvas)
         drawParticles(canvas)
         val now = System.nanoTime()
