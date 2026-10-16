@@ -166,6 +166,32 @@ jobs:
           print("Verified drone pursuit/breach, slime jumps, and three-hit turrets.")
           PY
 
+      - name: Verify blade shop, coin rewards, and purchased powers
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+
+          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
+          required = [
+              "private fun drawShop(canvas: Canvas)",
+              "private fun purchaseShopItem(index: Int)",
+              "private fun activateNovaPulse()",
+              "private fun drawNovaFlash(canvas: Canvas)",
+              "val baseCoinReward = 80 + levelId * 8 + earnedStars * 30",
+              "private fun bladeSpeedScale(): Float",
+              "private fun coinBalance(): Int",
+              "NOVA READY",
+              "BLADE SHOP",
+              "val droneSpeed = (0.022f + min(levelId, 20) * 0.00045f)",
+              "private fun guardPaddleHalf(): Float = viewH * when (difficulty)",
+          ]
+          missing = [marker for marker in required if marker not in source]
+          if missing:
+              sys.exit("Missing shop/power/economy wiring: " + ", ".join(missing))
+          print("Verified shop economy, persistent upgrades, Nova Pulse, larger buttons, and slower drones.")
+          PY
+
       - name: Run unit tests and build debug APK
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug
 
