@@ -13,6 +13,7 @@
 - **Score, impact effects and catch streaks:** hits, catches and ricochets use the included visual and audio feedback.
 - **Three difficulty levels:** Easy gives the shield a larger catch area, Normal is balanced, and Hard uses a smaller shield with a faster blade.
 - **Bundled game art and UI:** menu/gameplay backgrounds, game logo, blade sprites, drone/turret/slime sprites, buttons, banners, and impact effects.
+- **Tightly framed game art:** transparent outer margins are cropped when PNGs load, so buttons, icons, blades, and enemies use their visible bounds without re-encoding or inflating the original image files.
 - **Soundtrack and SFX:** looping menu/gameplay/victory/game-over music plus blade launch, ricochet, enemy-hit and UI sounds. The Sound setting controls music and effects.
 - **Three selectable color themes** (Cyan, Green, Violet), plus saved campaign progress, score stars, sound and vibration settings.
 - **Pause, retry, stage selection and victory/failure screens.**

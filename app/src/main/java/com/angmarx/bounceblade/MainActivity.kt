@@ -955,13 +955,56 @@ private class GameView(context: Context) : View(context) {
                 inSampleSize = sample
                 inPreferredConfig = Bitmap.Config.ARGB_8888
             }
-            val bitmap = context.assets.open(path).use { BitmapFactory.decodeStream(it, null, options) }
+            val decoded = context.assets.open(path).use { BitmapFactory.decodeStream(it, null, options) }
                 ?: error("Could not decode image: $path")
+            // Crop transparent margins in memory before drawing. The original PNGs
+            // stay untouched in the repository and APK, avoiding PNG re-encoding bloat.
+            val bitmap = trimTransparentPadding(decoded)
+            if (bitmap !== decoded && !decoded.isRecycled) decoded.recycle()
             bitmapAssets[path] = bitmap
             bitmap
         } catch (_: Exception) {
             failedBitmapAssets.add(path)
             null
+        }
+    }
+
+    private fun trimTransparentPadding(source: Bitmap): Bitmap {
+        val width = source.width
+        val height = source.height
+        if (width < 2 || height < 2 || !source.hasAlpha()) return source
+
+        return try {
+            val pixels = IntArray(width * height)
+            source.getPixels(pixels, 0, width, 0, 0, width, height)
+            var minX = width
+            var minY = height
+            var maxX = -1
+            var maxY = -1
+            for (index in pixels.indices) {
+                val alpha = (pixels[index] ushr 24) and 0xff
+                if (alpha > 12) {
+                    val x = index % width
+                    val y = index / width
+                    if (x < minX) minX = x
+                    if (x > maxX) maxX = x
+                    if (y < minY) minY = y
+                    if (y > maxY) maxY = y
+                }
+            }
+            if (maxX < minX || maxY < minY) return source
+
+            // Leave a slim margin for antialiasing and soft glows.
+            val margin = max(1, (max(width, height) * 0.02f).toInt())
+            val left = (minX - margin).coerceAtLeast(0)
+            val top = (minY - margin).coerceAtLeast(0)
+            val right = (maxX + margin + 1).coerceAtMost(width)
+            val bottom = (maxY + margin + 1).coerceAtMost(height)
+            if (left == 0 && top == 0 && right == width && bottom == height) return source
+
+            Bitmap.createBitmap(source, left, top, right - left, bottom - top)
+        } catch (_: RuntimeException) {
+            source
         }
     }
 

@@ -148,6 +148,26 @@ jobs:
       - name: Run unit tests and build debug APK
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug
 
+      - name: Verify transparent-padding trimming is enabled
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+
+          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
+          required = [
+              "private fun trimTransparentPadding(source: Bitmap)",
+              "source.getPixels(pixels, 0, width, 0, 0, width, height)",
+              "if (alpha > 12)",
+              "Bitmap.createBitmap(source, left, top, right - left, bottom - top)",
+              "val bitmap = trimTransparentPadding(decoded)",
+          ]
+          missing = [marker for marker in required if marker not in source]
+          if missing:
+              sys.exit("Missing transparent-padding trimming implementation: " + ", ".join(missing))
+          print("Verified image-load trimming removes transparent borders while preserving source PNGs.")
+          PY
+
       - name: Upload debug APK
         if: success()
         uses: actions/upload-artifact@v4
