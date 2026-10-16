@@ -103,7 +103,16 @@ private data class Particle(
     val color: Int,
     val radius: Float
 )
-private enum class GameScreen { MENU, WORLDS, LEVELS, PLAYING, PAUSED, SETTINGS, HELP, DIFFICULTY, WON, FAILED, CAMPAIGN_COMPLETE }
+private enum class GameScreen { MENU, WORLDS, LEVELS, PLAYING, PAUSED, SETTINGS, HELP, DIFFICULTY, SHOP, WON, FAILED, CAMPAIGN_COMPLETE }
+
+private data class ShopItem(
+    val id: String,
+    val title: String,
+    val description: String,
+    val baseCost: Int,
+    val maxLevel: Int,
+    val iconPath: String
+)
 
 private class GameView(context: Context) : View(context) {
     private val prefs = context.getSharedPreferences("bounce_blade_save", Context.MODE_PRIVATE)
@@ -176,6 +185,28 @@ private class GameView(context: Context) : View(context) {
     private val levels: List<GameLevel> = loadLevels(context)
     private var difficulty = prefs.getInt("difficulty_stars", 2).coerceIn(1, 3)
     private var screen = GameScreen.MENU
+    private var shopReturnScreen = GameScreen.MENU
+    private var touchingAbility = false
+    private var novaCooldownRemaining = 0f
+    private var novaFlashUntil = 0L
+    private var novaFlashX = 0f
+    private var novaFlashY = 0f
+    private var novaFlashRadius = 0f
+    private var lastCoinsEarned = 0
+    private val shopItems = listOf(
+        ShopItem("nova", "NOVA PULSE", "Shockwave around the blade", 350, 1, "Effects & Particles/Explosion.png"),
+        ShopItem("overdrive", "BLADE OVERDRIVE", "Faster blade rebounds", 300, 2, "Gameplay Sprites/Blade.png"),
+        ShopItem("shield_mod", "SHIELD EXTENDER", "A wider safety shield", 250, 2, "UI Elements/UI Panel.png"),
+        ShopItem("pulse_core", "PULSE CORE", "Wider pulse, shorter cooldown", 250, 2, "UI Elements/Combo Icon.png"),
+        ShopItem("coin_magnet", "COIN MAGNET", "More coins per cleared level", 400, 2, "UI Elements/Star Icon.png")
+    )
+    private val shopCardSlots = listOf(
+        floatArrayOf(0.035f, 0.255f, 0.322f, 0.465f),
+        floatArrayOf(0.350f, 0.255f, 0.650f, 0.465f),
+        floatArrayOf(0.678f, 0.255f, 0.965f, 0.465f),
+        floatArrayOf(0.195f, 0.505f, 0.490f, 0.715f),
+        floatArrayOf(0.510f, 0.505f, 0.805f, 0.715f)
+    )
     private var selectedWorld = ((prefs.getInt("unlocked_level", 1).coerceAtLeast(1) - 1) / CampaignWorlds.LEVELS_PER_WORLD).coerceIn(0, CampaignWorlds.WORLD_COUNT - 1)
     private var levelId = 1
     private var level = levels.first()
@@ -234,6 +265,10 @@ private class GameView(context: Context) : View(context) {
         when (screen) {
             GameScreen.PLAYING -> screen = GameScreen.PAUSED
             GameScreen.PAUSED, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY -> screen = GameScreen.MENU
+            GameScreen.SHOP -> {
+                screen = shopReturnScreen
+                if (screen == GameScreen.PLAYING) lastFrame = System.nanoTime()
+            }
             GameScreen.WORLDS -> screen = GameScreen.MENU
             GameScreen.LEVELS -> screen = GameScreen.WORLDS
             GameScreen.WON, GameScreen.FAILED, GameScreen.CAMPAIGN_COMPLETE -> {
@@ -293,6 +328,7 @@ private class GameView(context: Context) : View(context) {
             GameScreen.SETTINGS -> drawSettings(canvas)
             GameScreen.HELP -> drawHelp(canvas)
             GameScreen.DIFFICULTY -> drawDifficulty(canvas)
+            GameScreen.SHOP -> drawShop(canvas)
             GameScreen.WON -> {
                 drawGame(canvas)
                 drawOverlay(canvas, "LEVEL CLEARED", "Nice shot! The exit is open.")
@@ -327,6 +363,7 @@ private class GameView(context: Context) : View(context) {
             comboWindow = (comboWindow - rawDt).coerceAtLeast(0f)
             if (comboWindow <= 0f) comboCount = 0
             teleportCooldown = (teleportCooldown - rawDt).coerceAtLeast(0f)
+            novaCooldownRemaining = (novaCooldownRemaining - rawDt).coerceAtLeast(0f)
             if (wallGuardMode) updateHostileEnemies(rawDt)
             if (!wallGuardMode) {
                 val timeLeft = GameRules.timeLimitSeconds(levelId, difficulty) - levelElapsedSeconds
@@ -454,7 +491,7 @@ private class GameView(context: Context) : View(context) {
                 0 -> {
                     // Drones fly directly toward the player's shield and adjust
                     // their flight path to follow its current height.
-                    val droneSpeed = (0.040f + min(levelId, 20) * 0.0012f) * difficultyScale
+                    val droneSpeed = (0.022f + min(levelId, 20) * 0.00045f) * difficultyScale
                     enemy.x -= droneSpeed * dt
                     val verticalStep = droneSpeed * 0.78f * dt
                     enemy.y += (targetY - enemy.y).coerceIn(-verticalStep, verticalStep)
@@ -694,7 +731,10 @@ private class GameView(context: Context) : View(context) {
                 px = leftContact
                 val offset = ((py - paddleCenter) / (paddleHalf + radius)).coerceIn(-1f, 1f)
                 val oldSpeed = sqrt(velocityX * velocityX + velocityY * velocityY)
-                val speed = (oldSpeed * 1.035f).coerceIn(minDim * 0.46f, minDim * 0.90f)
+                val speed = (oldSpeed * 1.035f).coerceIn(
+                    minDim * 0.46f * bladeSpeedScale(),
+                    minDim * 0.90f * bladeSpeedScale()
+                )
                 val bounceAngle = offset * 1.10f
                 velocityX = abs(cos(bounceAngle) * speed).coerceAtLeast(minDim * 0.32f)
                 velocityY = sin(bounceAngle) * speed
@@ -738,7 +778,10 @@ private class GameView(context: Context) : View(context) {
             }
 
             val speed = sqrt(velocityX * velocityX + velocityY * velocityY)
-                .coerceIn(minDim * 0.46f, minDim * 0.90f)
+                .coerceIn(
+                    minDim * 0.46f * bladeSpeedScale(),
+                    minDim * 0.90f * bladeSpeedScale()
+                )
             velocityX = if (cameFromLeft) -abs(velocityX) else abs(velocityX)
             velocityY += ((py - ey) / hitRadius).coerceIn(-1f, 1f) * minDim * 0.16f
             val adjustedSpeed = sqrt(velocityX * velocityX + velocityY * velocityY).coerceAtLeast(1f)
@@ -761,11 +804,17 @@ private class GameView(context: Context) : View(context) {
         }
     }
 
+    private fun upgradeLevel(id: String): Int = prefs.getInt("upgrade_" + id, 0).coerceAtLeast(0)
+
+    private fun coinBalance(): Int = prefs.getInt("coins", 0).coerceAtLeast(0)
+
+    private fun bladeSpeedScale(): Float = 1f + upgradeLevel("overdrive").coerceAtMost(2) * 0.12f
+
     private fun guardPaddleHalf(): Float = viewH * when (difficulty) {
         1 -> 0.105f
         3 -> 0.065f
         else -> 0.085f
-    }
+    } * (1f + upgradeLevel("shield_mod").coerceAtMost(2) * 0.14f)
 
     private fun clampGuardPaddleY(y: Float): Float {
         val half = guardPaddleHalf()
@@ -778,7 +827,7 @@ private class GameView(context: Context) : View(context) {
         guardPaddleY = clampGuardPaddleY(guardPaddleY)
         bladeX = 0.145f
         bladeY = guardPaddleY
-        val speed = minDim * (0.50f + difficulty * 0.075f + min(levelId, 30) * 0.003f)
+        val speed = minDim * (0.50f + difficulty * 0.075f + min(levelId, 30) * 0.003f) * bladeSpeedScale()
         velocityX = speed
         velocityY = speed * (sin(levelId * 1.37f) * 0.045f)
         flying = true
@@ -810,6 +859,127 @@ private class GameView(context: Context) : View(context) {
         if (GameRules.bounceBudgetExceeded(bouncesLeft) && screen == GameScreen.PLAYING) fail("Out of bounces.")
     }
 
+    private fun openShop(returnTo: GameScreen) {
+        shopReturnScreen = returnTo
+        screen = GameScreen.SHOP
+        slowMotion = false
+        touchingAbility = false
+        lastFrame = System.nanoTime()
+        invalidate()
+    }
+
+    private fun nextShopCost(item: ShopItem, currentLevel: Int): Int =
+        item.baseCost * (currentLevel + 1)
+
+    private fun purchaseShopItem(index: Int) {
+        if (index !in shopItems.indices) return
+        val item = shopItems[index]
+        val currentLevel = upgradeLevel(item.id).coerceAtMost(item.maxLevel)
+        if (item.id == "pulse_core" && upgradeLevel("nova") == 0) {
+            showMessage("UNLOCK NOVA PULSE FIRST")
+            return
+        }
+        if (currentLevel >= item.maxLevel) {
+            showMessage("UPGRADE ALREADY MAXED")
+            return
+        }
+        val cost = nextShopCost(item, currentLevel)
+        val balance = coinBalance()
+        if (balance < cost) {
+            showMessage("NEED " + (cost - balance) + " MORE COINS")
+            playTone(ToneGenerator.TONE_PROP_NACK)
+            return
+        }
+        prefs.edit()
+            .putInt("coins", balance - cost)
+            .putInt("upgrade_" + item.id, currentLevel + 1)
+            .apply()
+        showMessage(item.title + " UPGRADED!")
+        addBurst(viewW * 0.5f, viewH * 0.48f, when (index % 3) { 0 -> cyan; 1 -> gold; else -> pink }, 22)
+        playSfx("Optional - Extra Sounds/Power-Up Collect.wav")
+        haptic()
+        invalidate()
+    }
+
+    private fun activateNovaPulse() {
+        if (upgradeLevel("nova") == 0) {
+            openShop(GameScreen.PLAYING)
+            return
+        }
+        if (novaCooldownRemaining > 0f) {
+            showMessage("NOVA RECHARGING: " + (novaCooldownRemaining + 0.99f).toInt() + "s")
+            return
+        }
+        val coreLevel = upgradeLevel("pulse_core").coerceAtMost(2)
+        val centerX = bladeX * viewW
+        val centerY = bladeY * viewH
+        val radius = minDim * (0.18f + coreLevel * 0.045f)
+        val radiusSquared = radius * radius
+        val pendingSlimes = mutableListOf<EnemyState>()
+        var hits = 0
+
+        for ((index, enemy) in enemies.toList().withIndex()) {
+            if (!enemy.alive) continue
+            val center = enemyCenter(enemy, index)
+            val ex = center.x * viewW
+            val ey = center.y * viewH
+            if (distanceSquared(centerX, centerY, ex, ey) > radiusSquared) continue
+            hits += 1
+            enemy.health -= 1
+            addBurst(ex, ey, if (enemy.health <= 0) cyan else gold, 12)
+            if (enemy.health <= 0) {
+                enemy.alive = false
+                if (enemy.kind == 2 && enemy.canSplit) {
+                    pendingSlimes.add(
+                        EnemyState((enemy.x - 0.035f).coerceIn(0.11f, 0.9f),
+                            (enemy.y - 0.025f).coerceIn(0.2f, 0.82f), true, 2, 1, 8f, false)
+                    )
+                    pendingSlimes.add(
+                        EnemyState((enemy.x + 0.035f).coerceIn(0.11f, 0.9f),
+                            (enemy.y + 0.025f).coerceIn(0.2f, 0.82f), true, 2, 1, 8f, false)
+                    )
+                }
+                registerTargetHit(if (enemy.kind == 3) 250 else 100, ex, ey, cyan)
+                playSfx("Core Gameplay SFX/Enemy Slice (Variation 1).wav")
+            } else {
+                score += 35
+                showMessage("NOVA DAMAGED ENEMY")
+            }
+        }
+
+        if (hits == 0) {
+            showMessage("NO ENEMIES IN NOVA RANGE")
+            return
+        }
+        enemies.addAll(pendingSlimes)
+        novaCooldownRemaining = max(3f, 8f - coreLevel * 1.75f)
+        novaFlashX = centerX
+        novaFlashY = centerY
+        novaFlashRadius = radius
+        novaFlashUntil = System.nanoTime() + 420_000_000L
+        addBurst(centerX, centerY, cyan, 34)
+        showMessage("NOVA PULSE! " + hits + " ENEMY HIT")
+        playSfx("Optional - Extra Sounds/Shield Break.wav")
+        haptic()
+        invalidate()
+    }
+
+    private fun drawNovaFlash(canvas: Canvas) {
+        val remaining = novaFlashUntil - System.nanoTime()
+        if (remaining <= 0L) return
+        val progress = (1f - remaining.toFloat() / 420_000_000f).coerceIn(0f, 1f)
+        val radius = novaFlashRadius * (0.45f + progress * 0.75f)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = density * (4.5f - progress * 2f)
+        paint.color = Color.argb((220f * (1f - progress)).toInt().coerceIn(0, 220),
+            Color.red(cyan), Color.green(cyan), Color.blue(cyan))
+        paint.setShadowLayer(density * 12f, 0f, 0f, cyan)
+        canvas.drawCircle(novaFlashX, novaFlashY, radius, paint)
+        canvas.drawCircle(novaFlashX, novaFlashY, radius * 0.72f, paint)
+        paint.clearShadowLayer()
+        paint.style = Paint.Style.FILL
+    }
+
     private fun completeLevel() {
         flying = false
         aiming = false
@@ -820,12 +990,17 @@ private class GameView(context: Context) : View(context) {
         val newUnlocked = max(currentUnlocked, min(nextId, levels.size))
         val allTargetsDestroyed = enemies.none { it.alive } && crates.none { it.alive }
         earnedStars = GameRules.starsEarnedByPerformance(levelElapsedSeconds, GameRules.targetTimeSeconds(levelId, difficulty), allTargetsDestroyed, bestCombo)
+        val baseCoinReward = 80 + levelId * 8 + earnedStars * 30 + min(bestCombo, 12) * 5
+        val coinMultiplier = 1f + upgradeLevel("coin_magnet").coerceAtMost(2) * 0.25f
+        lastCoinsEarned = (baseCoinReward * coinMultiplier).toInt()
+        val updatedCoinBalance = coinBalance() + lastCoinsEarned
         val starsKey = bestStarsKey(levelId)
         val previousBest = prefs.getInt(starsKey, 0)
         val bestShotsKey = bestShotsKey(levelId)
         val previousBestShots = prefs.getInt(bestShotsKey, Int.MAX_VALUE)
         prefs.edit()
             .putInt("unlocked_level", newUnlocked)
+            .putInt("coins", updatedCoinBalance)
             .putInt(starsKey, max(previousBest, earnedStars))
             .putInt(bestShotsKey, min(previousBestShots, shotsUsed))
             .putInt("best_score_" + levelId + "_difficulty_" + difficulty, max(prefs.getInt("best_score_" + levelId + "_difficulty_" + difficulty, 0), score))
@@ -911,6 +1086,9 @@ private class GameView(context: Context) : View(context) {
         bladeTrail.clear()
         message = ""
         messageUntil = 0L
+        novaCooldownRemaining = 0f
+        lastCoinsEarned = 0
+        touchingAbility = false
         lastFrame = System.nanoTime()
     }
 
@@ -1180,7 +1358,7 @@ private class GameView(context: Context) : View(context) {
 
     private fun updateMusicForScreen() {
         val target = when (screen) {
-            GameScreen.MENU, GameScreen.WORLDS, GameScreen.LEVELS, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY ->
+            GameScreen.MENU, GameScreen.WORLDS, GameScreen.LEVELS, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY, GameScreen.SHOP ->
                 "Music & Ambience/Main Menu Theme.wav"
             GameScreen.PLAYING, GameScreen.PAUSED -> "Music & Ambience/Gameplay Background.wav"
             GameScreen.WON, GameScreen.CAMPAIGN_COMPLETE -> "Music & Ambience/Victory Theme.wav"
@@ -1272,17 +1450,67 @@ private class GameView(context: Context) : View(context) {
     private fun drawMenu(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         drawAsset(canvas, "App Icon & Logo/Game Logo.png", RectF(viewW * 0.16f, viewH * 0.13f, viewW * 0.84f, viewH * 0.29f), 255)
-        drawText(canvas, "BOUNCE OFF ENEMIES  •  GUARD THE LEFT WALL", 0.5f, 0.465f, 0.020f, muted, Paint.Align.CENTER)
-        drawButton(canvas, 0.18f, 0.52f, 0.82f, 0.585f, "PLAY CAMPAIGN", cyan)
-        drawButton(canvas, 0.18f, 0.595f, 0.82f, 0.66f, "LEVEL SELECT", gold)
-        drawButton(canvas, 0.18f, 0.67f, 0.82f, 0.735f, "HELP", pink)
-        drawButton(canvas, 0.18f, 0.745f, 0.82f, 0.81f, "SETTINGS", cyan)
+        drawText(canvas, "BOUNCE OFF ENEMIES  •  GUARD THE LEFT WALL", 0.5f, 0.435f, 0.020f, muted, Paint.Align.CENTER)
+        drawText(canvas, "◈ " + coinBalance(), 0.91f, 0.105f, 0.026f, gold, Paint.Align.RIGHT)
+        drawButton(canvas, 0.14f, 0.465f, 0.86f, 0.522f, "PLAY CAMPAIGN", cyan)
+        drawButton(canvas, 0.14f, 0.532f, 0.86f, 0.589f, "LEVEL SELECT", gold)
+        drawButton(canvas, 0.14f, 0.599f, 0.86f, 0.656f, "HELP", pink)
+        drawButton(canvas, 0.14f, 0.666f, 0.86f, 0.723f, "BLADE SHOP", gold)
+        drawButton(canvas, 0.14f, 0.733f, 0.86f, 0.790f, "SETTINGS", cyan)
         val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
         val bestTotal = totalBestStarsAfter(0, 0)
         drawText(canvas, "UNLOCKED  " + unlocked + "/" + levels.size + "     BEST STARS  " + bestTotal + "/" + (levels.size * 3),
-            0.5f, 0.88f, 0.019f, muted, Paint.Align.CENTER)
-        drawText(canvas, "DRAG UP/DOWN TO MOVE THE SHIELD  •  CATCH EVERY RETURN", 0.5f, 0.925f, 0.014f, muted, Paint.Align.CENTER)
+            0.5f, 0.85f, 0.019f, muted, Paint.Align.CENTER)
+        drawText(canvas, "COLLECT COINS • UPGRADE YOUR BLADE • SURVIVE EVERY WAVE", 0.5f, 0.91f, 0.014f, muted, Paint.Align.CENTER)
     }
+    private fun drawShop(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "BLADE FORGE", 0.5f, 0.135f, 0.064f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "UPGRADE YOUR EDGE. TURN EVERY CLEAR INTO COINS.", 0.5f, 0.192f, 0.018f, cyan, Paint.Align.CENTER)
+        drawAssetCentered(canvas, "UI Elements/Star Icon.png", viewW * 0.42f, viewH * 0.225f, minDim * 0.035f)
+        drawText(canvas, "COINS  " + coinBalance(), 0.53f, 0.233f, 0.024f, gold, Paint.Align.LEFT)
+
+        val accents = intArrayOf(cyan, pink, gold, cyan, pink)
+        shopItems.forEachIndexed { index, item ->
+            val slot = shopCardSlots[index]
+            val left = slot[0]; val top = slot[1]; val right = slot[2]; val bottom = slot[3]
+            val rect = RectF(left * viewW, top * viewH, right * viewW, bottom * viewH)
+            val accent = accents[index]
+            paint.style = Paint.Style.FILL
+            paint.color = Color.argb(205, 7, 17, 35)
+            canvas.drawRoundRect(rect, density * 12f, density * 12f, paint)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = max(1.5f, density * 1.5f)
+            paint.color = Color.argb(235, Color.red(accent), Color.green(accent), Color.blue(accent))
+            paint.setShadowLayer(density * 7f, 0f, 0f, accent)
+            canvas.drawRoundRect(rect, density * 12f, density * 12f, paint)
+            paint.clearShadowLayer()
+            paint.style = Paint.Style.FILL
+
+            val current = upgradeLevel(item.id).coerceAtMost(item.maxLevel)
+            val lockedByNova = item.id == "pulse_core" && upgradeLevel("nova") == 0
+            drawText(canvas, item.title, (left + right) / 2f, top + 0.047f, 0.020f, Color.WHITE, Paint.Align.CENTER)
+            drawAssetCentered(canvas, item.iconPath, rect.centerX(), viewH * (top + 0.096f), minDim * 0.052f, if (lockedByNova) 105 else 255)
+            drawText(canvas, item.description, (left + right) / 2f, top + 0.142f, 0.014f, muted, Paint.Align.CENTER)
+
+            val status = when {
+                lockedByNova -> "UNLOCK NOVA FIRST"
+                current >= item.maxLevel -> "MAX LEVEL  •  " + current
+                else -> "LV " + current + " → " + (current + 1) + "  •  " + nextShopCost(item, current) + " COINS"
+            }
+            drawText(canvas, status, (left + right) / 2f, top + 0.183f, 0.014f,
+                if (lockedByNova) muted else if (current >= item.maxLevel) cyan else accent, Paint.Align.CENTER)
+            if (lockedByNova) {
+                paint.style = Paint.Style.FILL
+                paint.color = Color.argb(70, 0, 0, 0)
+                canvas.drawRoundRect(rect, density * 12f, density * 12f, paint)
+            }
+        }
+        drawButton(canvas, 0.24f, 0.805f, 0.76f, 0.895f,
+            if (shopReturnScreen == GameScreen.PLAYING) "BACK TO BATTLE" else "BACK TO MENU", cyan)
+        drawText(canvas, "PERMANENT UPGRADES ARE SAVED ON THIS DEVICE", 0.5f, 0.945f, 0.014f, muted, Paint.Align.CENTER)
+    }
+
     private fun drawWorldSelect(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         drawText(canvas,"CHOOSE YOUR WORLD",0.5f,0.285f,0.058f,Color.WHITE,Paint.Align.CENTER)
@@ -1466,9 +1694,18 @@ private class GameView(context: Context) : View(context) {
             RectF(bladePx - bladeSize / 2f, bladePy - bladeSize / 2f,
                 bladePx + bladeSize / 2f, bladePy + bladeSize / 2f), 255)
         canvas.restore()
+        drawNovaFlash(canvas)
 
         drawText(canvas, "DRAG UP OR DOWN TO MOVE THE LEFT SHIELD",
             0.5f, 0.965f, 0.018f, cyan, Paint.Align.CENTER)
+        if (screen == GameScreen.PLAYING) {
+            val novaLabel = when {
+                upgradeLevel("nova") == 0 -> "BLADE SHOP"
+                novaCooldownRemaining <= 0f -> "NOVA READY"
+                else -> "NOVA " + (novaCooldownRemaining + 0.99f).toInt() + "s"
+            }
+            drawButton(canvas, 0.805f, 0.805f, 0.975f, 0.92f, novaLabel, gold, true)
+        }
         if (System.nanoTime() < messageUntil && message.isNotBlank()) {
             drawText(canvas, message, 0.5f, 0.885f, 0.020f, gold, Paint.Align.CENTER)
         }
@@ -1717,7 +1954,8 @@ private class GameView(context: Context) : View(context) {
             drawText(canvas, "★".repeat(earnedStars) + "☆".repeat(3 - earnedStars), 0.5f, 0.465f, 0.050f, gold, Paint.Align.CENTER)
             drawText(canvas, "SCORE " + score + " • TIME " + formatTime(levelElapsedSeconds) + " • BEST COMBO x" + bestCombo, 0.5f, 0.490f, 0.014f, muted, Paint.Align.CENTER)
             val bestShots = prefs.getInt(bestShotsKey(levelId), shotsUsed)
-            drawText(canvas, "BEST: " + prefs.getInt(bestStarsKey(levelId), earnedStars) + "/3 STARS • FEWEST SHOTS: " + bestShots, 0.5f, 0.510f, 0.013f, muted, Paint.Align.CENTER)
+            drawText(canvas, "BEST: " + prefs.getInt(bestStarsKey(levelId), earnedStars) + "/3 STARS • SHOTS: " + bestShots + " • +" + lastCoinsEarned + " COINS",
+                0.5f, 0.510f, 0.013f, gold, Paint.Align.CENTER)
         }
     }
 
@@ -1790,9 +2028,16 @@ private class GameView(context: Context) : View(context) {
         // Use the actual button artwork as-is. Its visible size is constrained by
         // the layout rectangle while its original proportions are preserved.
         val hitRect = RectF(left * viewW, top * viewH, right * viewW, bottom * viewH)
+        // Slightly enlarge the button artwork without stretching or changing hit bounds.
+        val artBounds = RectF(
+            hitRect.left - hitRect.width() * 0.03f,
+            hitRect.top - hitRect.height() * 0.03f,
+            hitRect.right + hitRect.width() * 0.03f,
+            hitRect.bottom + hitRect.height() * 0.03f
+        )
         val buttonBitmap = bitmapAsset("UI Elements/Button.png")
-        val visualRect = buttonBitmap?.let { fitAssetRect(it, hitRect) } ?: hitRect
-        drawAsset(canvas, "UI Elements/Button.png", hitRect, if (enabled) 255 else 125)
+        val visualRect = buttonBitmap?.let { fitAssetRect(it, artBounds) } ?: artBounds
+        drawAsset(canvas, "UI Elements/Button.png", artBounds, if (enabled) 255 else 125)
 
         val iconPath = when {
             label == "Ⅱ" -> "UI Elements/Pause Icon.png"
@@ -1800,10 +2045,11 @@ private class GameView(context: Context) : View(context) {
             label.startsWith("PLAY") || label == "RESUME" || label.startsWith("NEXT LEVEL") -> "UI Elements/Play Icon.png"
             label.startsWith("RESTART") || label == "RETRY" -> "UI Elements/Restart Icon.png"
             label.contains("LEVEL SELECT") || label == "MAIN MENU" -> "UI Elements/Home Icon.png"
+            label.contains("SHOP") -> "UI Elements/Star Icon.png"
             else -> null
         }
         if (iconPath != null) {
-            val iconSize = min(visualRect.height() * 0.56f, minDim * 0.042f)
+            val iconSize = min(visualRect.height() * 0.58f, minDim * 0.050f)
             val iconX = if (label == "Ⅱ") visualRect.centerX() else visualRect.left + iconSize * 0.82f
             drawAssetCentered(canvas, iconPath, iconX, visualRect.centerY(), iconSize, if (enabled) 255 else 120)
             if (label == "Ⅱ") return
@@ -1814,7 +2060,7 @@ private class GameView(context: Context) : View(context) {
             label,
             (visualRect.centerX() + shift) / viewW,
             visualRect.centerY() / viewH + 0.010f,
-            if (label.length > 18) 0.017f else 0.022f,
+            if (label.length > 18) 0.019f else 0.024f,
             if (enabled) color else muted,
             Paint.Align.CENTER
         )
@@ -1877,10 +2123,25 @@ private class GameView(context: Context) : View(context) {
                 when (screen) {
                     GameScreen.MENU -> {
                         when {
-                            inRect(nx, ny, 0.18f, 0.52f, 0.82f, 0.585f) -> screen = GameScreen.DIFFICULTY
-                            inRect(nx, ny, 0.18f, 0.595f, 0.82f, 0.66f) -> screen = GameScreen.WORLDS
-                            inRect(nx, ny, 0.18f, 0.67f, 0.82f, 0.735f) -> screen = GameScreen.HELP
-                            inRect(nx, ny, 0.18f, 0.745f, 0.82f, 0.81f) -> screen = GameScreen.SETTINGS
+                            inRect(nx, ny, 0.14f, 0.465f, 0.86f, 0.522f) -> screen = GameScreen.DIFFICULTY
+                            inRect(nx, ny, 0.14f, 0.532f, 0.86f, 0.589f) -> screen = GameScreen.WORLDS
+                            inRect(nx, ny, 0.14f, 0.599f, 0.86f, 0.656f) -> screen = GameScreen.HELP
+                            inRect(nx, ny, 0.14f, 0.666f, 0.86f, 0.723f) -> openShop(GameScreen.MENU)
+                            inRect(nx, ny, 0.14f, 0.733f, 0.86f, 0.790f) -> screen = GameScreen.SETTINGS
+                        }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.SHOP -> {
+                        if (inRect(nx, ny, 0.24f, 0.805f, 0.76f, 0.895f)) {
+                            screen = shopReturnScreen
+                            if (screen == GameScreen.PLAYING) lastFrame = System.nanoTime()
+                        } else {
+                            val itemIndex = shopCardSlots.indices.firstOrNull { index ->
+                                val slot = shopCardSlots[index]
+                                inRect(nx, ny, slot[0], slot[1], slot[2], slot[3])
+                            }
+                            if (itemIndex != null) purchaseShopItem(itemIndex)
                         }
                         invalidate()
                         return true
@@ -1988,6 +2249,12 @@ private class GameView(context: Context) : View(context) {
                         return true
                     }
                     GameScreen.PLAYING -> {
+                        if (inRect(nx, ny, 0.805f, 0.805f, 0.975f, 0.92f)) {
+                            touchingAbility = true
+                            if (upgradeLevel("nova") > 0) activateNovaPulse() else openShop(GameScreen.PLAYING)
+                            invalidate()
+                            return true
+                        }
                         if (inRect(nx, ny, 0.81f, 0.065f, 0.94f, 0.115f)) {
                             screen = GameScreen.PAUSED
                             slowMotion = false
@@ -2012,6 +2279,7 @@ private class GameView(context: Context) : View(context) {
                 }
             }
             MotionEvent.ACTION_MOVE -> {
+                if (touchingAbility) return true
                 if (event.pointerCount > 1) slowMotion = true
                 if (wallGuardMode && screen == GameScreen.PLAYING) {
                     guardPaddleY = clampGuardPaddleY(ny)
@@ -2026,6 +2294,11 @@ private class GameView(context: Context) : View(context) {
                 return true
             }
             MotionEvent.ACTION_UP -> {
+                if (touchingAbility) {
+                    touchingAbility = false
+                    invalidate()
+                    return true
+                }
                 if (screen == GameScreen.PLAYING && aiming && !flying) {
                     aiming = false
                     slowMotion = false
@@ -2055,6 +2328,7 @@ private class GameView(context: Context) : View(context) {
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
+                touchingAbility = false
                 aiming = false
                 slowMotion = false
                 invalidate()
