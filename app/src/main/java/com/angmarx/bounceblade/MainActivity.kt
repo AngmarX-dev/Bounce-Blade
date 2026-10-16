@@ -2685,8 +2685,8 @@ private class GameView(context: Context) : View(context) {
     private fun drawStats(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         val seconds = prefs.getLong("total_play_seconds", 0L)
-        drawText(canvas, playerName, 0.5f, 0.18f, 0.060f, Color.WHITE, Paint.Align.CENTER)
-        drawText(canvas, "BLADE RUNNER  •  OFFLINE PROFILE", 0.5f, 0.245f, 0.021f, cyan, Paint.Align.CENTER)
+        drawText(canvas, playerName, 0.5f, 0.16f, 0.055f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "LOCAL PROFILE • OFFLINE SAVE", 0.5f, 0.22f, 0.019f, cyan, Paint.Align.CENTER)
         val lines = listOf(
             "RUNS STARTED  " + prefs.getInt("total_runs", 0),
             "STAGES CLEARED  " + prefs.getInt("total_clears", 0),
@@ -2695,10 +2695,13 @@ private class GameView(context: Context) : View(context) {
             "BEST STARS  " + totalBestStarsAfter(0, 0) + "/" + (levels.size * 3),
             "COINS  " + coinBalance() + "    BEST COMBO  " + max(bestCombo, prefs.getInt("all_time_best_combo", 0))
         )
-        lines.forEachIndexed { i, text -> drawText(canvas, text, 0.18f, 0.34f + i * 0.065f, 0.021f, if (i % 2 == 0) Color.WHITE else muted) }
-        drawText(canvas, "Cloud profile sync needs a configured online service.", 0.5f, 0.77f, 0.015f, muted, Paint.Align.CENTER)
-        drawButton(canvas, 0.24f, 0.77f, 0.76f, 0.835f, "EDIT PROFILE NAME", gold)
-        drawButton(canvas, 0.24f, 0.85f, 0.76f, 0.915f, "BACK", cyan)
+        lines.forEachIndexed { i, text -> drawText(canvas, text, 0.18f, 0.29f + i * 0.052f, 0.019f, if (i % 2 == 0) Color.WHITE else muted) }
+        drawButton(canvas, 0.10f, 0.625f, 0.48f, 0.69f, "EDIT PROFILE NAME", gold)
+        drawButton(canvas, 0.52f, 0.625f, 0.90f, 0.69f, "EXPORT SAVE", cyan)
+        drawButton(canvas, 0.10f, 0.705f, 0.48f, 0.77f, "IMPORT SAVE", pink)
+        drawButton(canvas, 0.52f, 0.705f, 0.90f, 0.77f, "BACK", gold)
+        drawText(canvas, "Export sends a JSON backup; import accepts that JSON from clipboard.", 0.5f, 0.825f, 0.015f, muted, Paint.Align.CENTER)
+        drawText(canvas, "Manual transfer works with your chosen cloud drive; no account is uploaded by the game.", 0.5f, 0.875f, 0.013f, muted, Paint.Align.CENTER)
     }
 
     private fun drawCustomize(canvas: Canvas) {
@@ -2841,6 +2844,73 @@ private class GameView(context: Context) : View(context) {
             drawButton(canvas, 0.12f, top, 0.88f, top + 0.072f, label, if (i % 2 == 0) cyan else gold)
         }
         drawButton(canvas, 0.24f, 0.76f, 0.76f, 0.845f, "BACK", pink)
+    }
+
+    private fun exportSaveBackup() {
+        try {
+            val payload = org.json.JSONObject()
+            payload.put("format", "bounce-blade-save")
+            payload.put("version", 1)
+            val values = org.json.JSONObject()
+            prefs.all.forEach { (key, value) ->
+                when (value) {
+                    is String -> values.put(key, value)
+                    is Boolean -> values.put(key, value)
+                    is Int -> values.put(key, value)
+                    is Long -> values.put(key, value)
+                    is Float -> values.put(key, value.toDouble())
+                    is Double -> values.put(key, value)
+                    is Set<*> -> values.put(key, org.json.JSONArray(value.map { it.toString() }))
+                }
+            }
+            payload.put("preferences", values)
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "application/json"
+                putExtra(android.content.Intent.EXTRA_SUBJECT, "Bounce Blade save backup")
+                putExtra(android.content.Intent.EXTRA_TEXT, payload.toString(2))
+            }
+            context.startActivity(android.content.Intent.createChooser(intent, "Export save backup"))
+            showMessage("SAVE BACKUP READY TO SHARE")
+        } catch (_: Exception) {
+            showMessage("COULD NOT EXPORT SAVE")
+        }
+    }
+
+    private fun importSaveBackupFromClipboard() {
+        try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+            val raw = clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+            val root = org.json.JSONObject(raw)
+            require(root.optString("format") == "bounce-blade-save") { "Unsupported save format" }
+            val values = root.getJSONObject("preferences")
+            val editor = prefs.edit()
+            val iterator = values.keys()
+            while (iterator.hasNext()) {
+                val key = iterator.next()
+                val value = values.get(key)
+                when (value) {
+                    is Boolean -> editor.putBoolean(key, value)
+                    is Int -> editor.putInt(key, value)
+                    is Long -> editor.putLong(key, value)
+                    is Double -> {
+                        val number = value
+                        if (number % 1.0 == 0.0 && number >= Int.MIN_VALUE && number <= Int.MAX_VALUE) editor.putInt(key, number.toInt())
+                        else editor.putFloat(key, number.toFloat())
+                    }
+                    is String -> editor.putString(key, value)
+                    is org.json.JSONArray -> {
+                        val set = mutableSetOf<String>()
+                        for (index in 0 until value.length()) set.add(value.optString(index))
+                        editor.putStringSet(key, set)
+                    }
+                }
+            }
+            editor.apply()
+            showMessage("SAVE IMPORTED • RESTART GAME TO REFRESH ALL SCREENS")
+        } catch (_: Exception) {
+            showMessage("COPY A BOUNCE BLADE SAVE JSON BEFORE IMPORTING")
+        }
+        invalidate()
     }
 
     private fun drawLocalScores(canvas: Canvas) {
@@ -3298,7 +3368,7 @@ private class GameView(context: Context) : View(context) {
                     }
                     GameScreen.STATS -> {
                         when {
-                            inRect(nx, ny, 0.24f, 0.77f, 0.76f, 0.835f) -> {
+                            inRect(nx, ny, 0.10f, 0.625f, 0.48f, 0.69f) -> {
                                 val field = android.widget.EditText(context).apply {
                                     setText(playerName)
                                     setSingleLine(true)
@@ -3315,7 +3385,9 @@ private class GameView(context: Context) : View(context) {
                                     .setNegativeButton("Cancel", null)
                                     .show()
                             }
-                            inRect(nx, ny, 0.24f, 0.85f, 0.76f, 0.915f) -> screen = GameScreen.FEATURES
+                            inRect(nx, ny, 0.52f, 0.625f, 0.90f, 0.69f) -> exportSaveBackup()
+                            inRect(nx, ny, 0.10f, 0.705f, 0.48f, 0.77f) -> importSaveBackupFromClipboard()
+                            inRect(nx, ny, 0.52f, 0.705f, 0.90f, 0.77f) -> screen = GameScreen.FEATURES
                         }
                         invalidate()
                         return true
