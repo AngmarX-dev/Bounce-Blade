@@ -2342,6 +2342,172 @@ private class GameView(context: Context) : View(context) {
         drawButton(canvas, 0.24f, 0.81f, 0.76f, 0.89f, "BACK", cyan)
     }
 
+
+    private fun saveReplayTrace() {
+        if (runTrace.size < 2) return
+        val encoded = runTrace.joinToString(";") { point -> point.x.toString() + "," + point.y.toString() }
+        prefs.edit().putString("replay_trace_last", encoded)
+            .putString("replay_trace_" + levelId, encoded)
+            .putInt("replay_last_level", levelId).apply()
+    }
+
+    private fun readReplayTrace(): List<PointF> {
+        return prefs.getString("replay_trace_last", "").orEmpty().split(';').mapNotNull { token ->
+            val coords = token.split(',')
+            if (coords.size != 2) null else {
+                val x = coords[0].toFloatOrNull()
+                val y = coords[1].toFloatOrNull()
+                if (x == null || y == null) null else PointF(x.coerceIn(0f, 1f), y.coerceIn(0f, 1f))
+            }
+        }
+    }
+
+    private fun shareReplayTrace() {
+        val trace = prefs.getString("replay_trace_last", "").orEmpty()
+        if (trace.isBlank()) { showMessage("CLEAR A LEVEL TO CREATE A REPLAY"); return }
+        val payload = "Bounce Blade replay • level " + prefs.getInt("replay_last_level", 1) + "\n" + trace
+        try {
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(android.content.Intent.EXTRA_SUBJECT, "Bounce Blade replay trace")
+                putExtra(android.content.Intent.EXTRA_TEXT, payload)
+            }
+            context.startActivity(android.content.Intent.createChooser(intent, "Export replay"))
+        } catch (_: Exception) { showMessage("REPLAY IS SAVED LOCALLY") }
+    }
+
+    private fun savePhoto(): Boolean {
+        val bitmap = Bitmap.createBitmap(width.coerceAtLeast(1), height.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+        return try {
+            drawWallGuardGame(Canvas(bitmap))
+            val fileName = "BounceBlade_" + System.currentTimeMillis() + ".png"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Bounce Blade")
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+                val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return false
+                val output = context.contentResolver.openOutputStream(uri) ?: return false
+                output.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                values.clear()
+                values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                context.contentResolver.update(uri, values, null, null)
+                true
+            } else {
+                val directory = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES) ?: context.filesDir, "BounceBlade")
+                if (!directory.exists() && !directory.mkdirs()) return false
+                FileOutputStream(File(directory, fileName)).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                true
+            }
+        } catch (_: Exception) { false } finally { bitmap.recycle() }
+    }
+
+    private fun drawExtras(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "EXTRAS & COMMUNITY", 0.5f, 0.19f, 0.056f, Color.WHITE, Paint.Align.CENTER)
+        val items = listOf("LOCAL LEADERBOARD", "REPLAY / GHOST TRACE", "PHOTO MODE", "SEASONAL EVENT / PASS", "ONLINE SERVICES / CLOUD")
+        items.forEachIndexed { i, label ->
+            val top = 0.26f + i * 0.092f
+            drawButton(canvas, 0.12f, top, 0.88f, top + 0.072f, label, if (i % 2 == 0) cyan else gold)
+        }
+        drawButton(canvas, 0.24f, 0.76f, 0.76f, 0.845f, "BACK", pink)
+    }
+
+    private fun drawLocalScores(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "LOCAL LEADERBOARD", 0.5f, 0.18f, 0.055f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "OFFLINE • DEVICE ONLY • " + difficultyLabel(), 0.5f, 0.235f, 0.018f, cyan, Paint.Align.CENTER)
+        val scores = (1..levels.size).map { id ->
+            Triple(id, prefs.getInt("best_score_" + id + "_difficulty_" + difficulty, 0), prefs.getInt(bestStarsKey(id), 0))
+        }.filter { it.second > 0 }.sortedByDescending { it.second }.take(8)
+        if (scores.isEmpty()) drawText(canvas, "FINISH A STAGE TO SET YOUR FIRST SCORE.", 0.5f, 0.47f, 0.024f, muted, Paint.Align.CENTER)
+        else scores.forEachIndexed { index, row ->
+            val y = 0.31f + index * 0.052f
+            drawText(canvas, (index + 1).toString().padStart(2, '0') + "   STAGE " + row.first, 0.15f, y, 0.020f, Color.WHITE)
+            drawText(canvas, row.second.toString() + " PTS", 0.63f, y, 0.020f, gold, Paint.Align.RIGHT)
+            drawText(canvas, "★".repeat(row.third), 0.84f, y, 0.020f, cyan, Paint.Align.RIGHT)
+        }
+        drawButton(canvas, 0.24f, 0.82f, 0.76f, 0.90f, "BACK", cyan)
+    }
+
+    private fun difficultyLabel(): String = when (difficulty) { 1 -> "EASY"; 3 -> "HARD"; else -> "NORMAL" }
+
+    private fun drawReplays(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "REPLAY / GHOST TRACE", 0.5f, 0.16f, 0.052f, Color.WHITE, Paint.Align.CENTER)
+        val points = readReplayTrace()
+        val replayLevel = prefs.getInt("replay_last_level", 0)
+        drawText(canvas, if (points.size >= 2) "LAST RUN • STAGE " + replayLevel + " • " + points.size + " TRACE POINTS" else "NO REPLAY SAVED YET",
+            0.5f, 0.215f, 0.017f, cyan, Paint.Align.CENTER)
+        val area = RectF(viewW * 0.08f, viewH * 0.27f, viewW * 0.92f, viewH * 0.70f)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = max(1.5f, density * 1.5f)
+        paint.color = Color.argb(190, Color.red(cyan), Color.green(cyan), Color.blue(cyan))
+        canvas.drawRoundRect(area, density * 12f, density * 12f, paint)
+        if (points.size >= 2) {
+            val path = Path()
+            points.forEachIndexed { index, point ->
+                val x = area.left + point.x * area.width()
+                val y = area.top + point.y * area.height()
+                if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            paint.color = gold
+            paint.strokeWidth = max(2.5f, density * 2.5f)
+            canvas.drawPath(path, paint)
+            val end = points.last()
+            canvas.drawCircle(area.left + end.x * area.width(), area.top + end.y * area.height(), density * 4f, paint)
+        }
+        paint.style = Paint.Style.FILL
+        drawButton(canvas, 0.10f, 0.745f, 0.48f, 0.82f, "EXPORT TRACE", gold)
+        drawButton(canvas, 0.52f, 0.745f, 0.90f, 0.82f, "BACK", cyan)
+        drawText(canvas, "Ghost path is saved locally; export shares the trace data.", 0.5f, 0.865f, 0.015f, muted, Paint.Align.CENTER)
+    }
+
+    private fun drawPhotoMode(canvas: Canvas) {
+        drawWallGuardGame(canvas)
+        paint.style = Paint.Style.FILL
+        paint.color = Color.argb(205, 3, 6, 18)
+        canvas.drawRoundRect(viewW * 0.22f, viewH * 0.68f, viewW * 0.78f, viewH * 0.94f, density * 14f, density * 14f, paint)
+        drawText(canvas, "PHOTO MODE", 0.5f, 0.725f, 0.032f, Color.WHITE, Paint.Align.CENTER)
+        drawButton(canvas, 0.25f, 0.755f, 0.49f, 0.835f, "SAVE PHOTO", gold)
+        drawButton(canvas, 0.51f, 0.755f, 0.75f, 0.835f, "BACK", cyan)
+        drawText(canvas, "Saves a PNG in Pictures / Bounce Blade.", 0.5f, 0.885f, 0.014f, muted, Paint.Align.CENTER)
+    }
+
+    private fun drawSeasonal(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        val month = java.util.Calendar.getInstance().get(java.util.Calendar.MONTH)
+        val season = when (month) { 11, 0, 1 -> "FROST CIRCUIT"; 2, 3, 4 -> "NEON BLOOM"; 5, 6, 7 -> "SOLAR RUSH"; else -> "CRIMSON HARVEST" }
+        val clears = prefs.getInt("total_clears", 0)
+        val claimed = prefs.getBoolean("season_reward_claimed", false)
+        drawText(canvas, "SEASONAL EVENT", 0.5f, 0.20f, 0.058f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, season, 0.5f, 0.29f, 0.035f, gold, Paint.Align.CENTER)
+        drawText(canvas, "CLEAR STAGES TO ADVANCE THE LOCAL SEASON PASS", 0.5f, 0.37f, 0.018f, cyan, Paint.Align.CENTER)
+        drawText(canvas, "PASS LEVEL  " + (clears / 5) + "   •   TOTAL CLEARS  " + clears, 0.5f, 0.445f, 0.023f, Color.WHITE, Paint.Align.CENTER)
+        drawButton(canvas, 0.15f, 0.52f, 0.85f, 0.61f, "PLAY EVENT STAGE", pink)
+        drawButton(canvas, 0.15f, 0.635f, 0.85f, 0.725f, if (claimed) "REWARD CLAIMED" else "CLAIM 100 BONUS COINS (5 CLEARS)", gold, !claimed && clears >= 5)
+        drawButton(canvas, 0.24f, 0.80f, 0.76f, 0.88f, "BACK", cyan)
+    }
+
+    private fun drawOnlineFeatures(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "ONLINE / PLATFORM SERVICES", 0.5f, 0.17f, 0.050f, Color.WHITE, Paint.Align.CENTER)
+        val lines = listOf(
+            "ONLINE LEADERBOARD      NEEDS SERVER",
+            "DAILY CHALLENGE SERVER   NEEDS SERVER",
+            "CLOUD SAVE / DEVICE SYNC NEEDS AUTH",
+            "CROSS-PLATFORM SAVES     NEEDS BACKEND",
+            "ADS / IN-APP PURCHASES   NEEDS STORE SETUP",
+            "ANALYTICS / CRASH REPORT NEEDS SDK",
+            "BETA CHANNEL / ASSET PACKS NEEDS CONFIG"
+        )
+        lines.forEachIndexed { i, line -> drawText(canvas, line, 0.10f, 0.265f + i * 0.060f, 0.016f, if (i % 2 == 0) gold else muted) }
+        drawText(canvas, "These services need credentials, policy configuration and backend infrastructure.", 0.5f, 0.72f, 0.014f, pink, Paint.Align.CENTER)
+        drawButton(canvas, 0.24f, 0.80f, 0.76f, 0.88f, "BACK", cyan)
+    }
+
     private fun drawSettings(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         drawText(canvas, "SETTINGS", 0.5f, 0.29f, 0.07f, Color.WHITE, Paint.Align.CENTER)
