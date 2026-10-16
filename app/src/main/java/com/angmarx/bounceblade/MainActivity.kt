@@ -2165,8 +2165,14 @@ private class GameView(context: Context) : View(context) {
                 novaCooldownRemaining <= 0f -> "NOVA READY"
                 else -> "NOVA " + (novaCooldownRemaining + 0.99f).toInt() + "s"
             }
-            if (leftHandedMode) drawButton(canvas, 0.02f, 0.790f, 0.225f, 0.935f, novaLabel, gold, true)
-            else drawButton(canvas, 0.775f, 0.790f, 0.98f, 0.935f, novaLabel, gold, true)
+            val novaLeft = if (oneHandedMode) 0.01f else 0.02f
+            val novaRight = if (oneHandedMode) 0.275f else 0.225f
+            val novaTop = if (oneHandedMode) 0.755f else 0.790f
+            val novaBottom = if (oneHandedMode) 0.945f else 0.935f
+            val novaLeftRight = if (oneHandedMode) 0.725f else 0.775f
+            val novaRightRight = if (oneHandedMode) 0.99f else 0.98f
+            if (leftHandedMode) drawButton(canvas, novaLeft, novaTop, novaRight, novaBottom, novaLabel, gold, true)
+            else drawButton(canvas, novaLeftRight, novaTop, novaRightRight, novaBottom, novaLabel, gold, true)
         }
         if (System.nanoTime() < messageUntil && message.isNotBlank()) {
             drawText(canvas, message, 0.5f, 0.885f, 0.020f, gold, Paint.Align.CENTER)
@@ -3668,8 +3674,14 @@ private class GameView(context: Context) : View(context) {
                         return true
                     }
                     GameScreen.PLAYING -> {
-                        if (if (leftHandedMode) inRect(nx, ny, 0.02f, 0.790f, 0.225f, 0.935f)
-                            else inRect(nx, ny, 0.775f, 0.790f, 0.98f, 0.935f)) {
+                        val abilityHit = if (oneHandedMode) {
+                            if (leftHandedMode) inRect(nx, ny, 0.01f, 0.755f, 0.275f, 0.945f)
+                            else inRect(nx, ny, 0.725f, 0.755f, 0.99f, 0.945f)
+                        } else {
+                            if (leftHandedMode) inRect(nx, ny, 0.02f, 0.790f, 0.225f, 0.935f)
+                            else inRect(nx, ny, 0.775f, 0.790f, 0.98f, 0.935f)
+                        }
+                        if (abilityHit) {
                             touchingAbility = true
                             if (upgradeLevel("nova") > 0) activateNovaPulse() else openShop(GameScreen.PLAYING)
                             invalidate()
