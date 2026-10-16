@@ -306,7 +306,7 @@ private class GameView(context: Context) : View(context) {
             }
             GameScreen.CAMPAIGN_COMPLETE -> {
                 drawMenuBackdrop(canvas)
-                drawAsset(canvas, "Backgrounds & Environments/Victory Background.png", RectF(0f, 0f, viewW, viewH), 238)
+                drawAssetCover(canvas, "Backgrounds & Environments/Victory Background.png", RectF(0f, 0f, viewW, viewH), 238)
                 drawAsset(canvas, "Banners & Text/Victory Banner.png", RectF(viewW * 0.12f, viewH * 0.27f, viewW * 0.88f, viewH * 0.43f), 255)
                 drawText(canvas, "You conquered all five worlds.", 0.5f, 0.48f, 0.024f, Color.WHITE, Paint.Align.CENTER)
                 drawButton(canvas, 0.20f, 0.57f, 0.80f, 0.66f, "PLAY AGAIN", cyan)
@@ -1008,6 +1008,23 @@ private class GameView(context: Context) : View(context) {
         }
     }
 
+    // Keep every sprite's original aspect ratio. Ordinary UI/game assets are fitted
+    // inside their layout bounds, never stretched to fill them.
+    private fun fitAssetRect(bitmap: Bitmap, bounds: RectF): RectF {
+        if (bitmap.width <= 0 || bitmap.height <= 0 || bounds.width() <= 0f || bounds.height() <= 0f) {
+            return RectF(bounds)
+        }
+        val scale = min(bounds.width() / bitmap.width.toFloat(), bounds.height() / bitmap.height.toFloat())
+        val fittedWidth = bitmap.width * scale
+        val fittedHeight = bitmap.height * scale
+        return RectF(
+            bounds.centerX() - fittedWidth / 2f,
+            bounds.centerY() - fittedHeight / 2f,
+            bounds.centerX() + fittedWidth / 2f,
+            bounds.centerY() + fittedHeight / 2f
+        )
+    }
+
     private fun drawAsset(canvas: Canvas, path: String, rect: RectF, alpha: Int = 255) {
         val bitmap = bitmapAsset(path) ?: return
         val oldAlpha = paint.alpha
@@ -1016,7 +1033,36 @@ private class GameView(context: Context) : View(context) {
         paint.alpha = alpha.coerceIn(0, 255)
         paint.isFilterBitmap = true
         paint.style = Paint.Style.FILL
-        canvas.drawBitmap(bitmap, null, rect, paint)
+        canvas.drawBitmap(bitmap, null, fitAssetRect(bitmap, rect), paint)
+        paint.alpha = oldAlpha
+        paint.isFilterBitmap = oldFilter
+        paint.style = oldStyle
+    }
+
+    // Large scenery backgrounds fill their viewport by cropping the overflow rather
+    // than distorting the source artwork.
+    private fun drawAssetCover(canvas: Canvas, path: String, rect: RectF, alpha: Int = 255) {
+        val bitmap = bitmapAsset(path) ?: return
+        if (bitmap.width <= 0 || bitmap.height <= 0 || rect.width() <= 0f || rect.height() <= 0f) return
+        val scale = max(rect.width() / bitmap.width.toFloat(), rect.height() / bitmap.height.toFloat())
+        val scaledWidth = bitmap.width * scale
+        val scaledHeight = bitmap.height * scale
+        val target = RectF(
+            rect.centerX() - scaledWidth / 2f,
+            rect.centerY() - scaledHeight / 2f,
+            rect.centerX() + scaledWidth / 2f,
+            rect.centerY() + scaledHeight / 2f
+        )
+        val oldAlpha = paint.alpha
+        val oldFilter = paint.isFilterBitmap
+        val oldStyle = paint.style
+        paint.alpha = alpha.coerceIn(0, 255)
+        paint.isFilterBitmap = true
+        paint.style = Paint.Style.FILL
+        canvas.save()
+        canvas.clipRect(rect)
+        canvas.drawBitmap(bitmap, null, target, paint)
+        canvas.restore()
         paint.alpha = oldAlpha
         paint.isFilterBitmap = oldFilter
         paint.style = oldStyle
@@ -1142,7 +1188,7 @@ private class GameView(context: Context) : View(context) {
         drawBackground(canvas)
         val image = if (screen == GameScreen.MENU) "UI Elements/Main Menu Background.png"
             else "Backgrounds & Environments/Menu Background.png"
-        drawAsset(canvas, image, RectF(0f, 0f, viewW, viewH), 235)
+        drawAssetCover(canvas, image, RectF(0f, 0f, viewW, viewH), 235)
         paint.style = Paint.Style.FILL
         paint.color = Color.argb(62, 3, 6, 18)
         canvas.drawRect(0f, 0f, viewW, viewH, paint)
@@ -1213,7 +1259,7 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas,"COMBO x"+comboCount,0.80f,0.092f,0.018f,pink,Paint.Align.RIGHT)
         drawAsset(canvas, "UI Elements/Combo Icon.png", RectF(viewW * 0.815f, viewH * 0.077f, viewW * 0.855f, viewH * 0.11f), 240)
         val rect = RectF(viewW * 0.05f, viewH * 0.13f, viewW * 0.95f, viewH * 0.94f)
-        drawAsset(canvas, "Backgrounds & Environments/Gameplay Background.png", rect, 220)
+        drawAssetCover(canvas, "Backgrounds & Environments/Gameplay Background.png", rect, 220)
         drawAsset(canvas, "UI Elements/UI Panel.png", RectF(viewW * 0.03f, viewH * 0.012f, viewW * 0.97f, viewH * 0.125f), 105)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(2f, density * 2f)
@@ -1280,7 +1326,7 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas, "SAVE STREAK $comboCount", 0.92f, 0.092f, 0.016f, cyan, Paint.Align.RIGHT)
 
         val arena = RectF(viewW * 0.035f, viewH * 0.135f, viewW * 0.965f, viewH * 0.94f)
-        drawAsset(canvas, "Backgrounds & Environments/Gameplay Background.png", arena, 230)
+        drawAssetCover(canvas, "Backgrounds & Environments/Gameplay Background.png", arena, 230)
         drawAsset(canvas, "UI Elements/UI Panel.png",
             RectF(viewW * 0.025f, viewH * 0.012f, viewW * 0.975f, viewH * 0.125f), 115)
         paint.style = Paint.Style.STROKE
@@ -1571,7 +1617,7 @@ private class GameView(context: Context) : View(context) {
 
     private fun drawOverlay(canvas: Canvas, title: String, subtitle: String) {
         if (screen == GameScreen.WON) drawAsset(canvas, "Backgrounds & Environments/Victory Background.png", RectF(0f, 0f, viewW, viewH), 238)
-        else if (screen == GameScreen.FAILED) drawAsset(canvas, "Backgrounds & Environments/Game Over Background.png", RectF(0f, 0f, viewW, viewH), 238)
+        else if (screen == GameScreen.FAILED) drawAssetCover(canvas, "Backgrounds & Environments/Game Over Background.png", RectF(0f, 0f, viewW, viewH), 238)
         paint.style = Paint.Style.FILL
         paint.color = Color.argb(228, 3, 6, 18)
         canvas.drawRoundRect(viewW * 0.08f, viewH * 0.30f, viewW * 0.92f, viewH * 0.75f, density * 18f, density * 18f, paint)
@@ -1656,18 +1702,13 @@ private class GameView(context: Context) : View(context) {
         color: Int,
         enabled: Boolean = true
     ) {
-        val rect = RectF(left * viewW, top * viewH, right * viewW, bottom * viewH)
-        paint.style = Paint.Style.FILL
-        paint.color = if (enabled) Color.argb(142, 12, 23, 42) else Color.argb(100, 15, 21, 34)
-        canvas.drawRoundRect(rect, density * 11f, density * 11f, paint)
-        drawAsset(canvas, "UI Elements/Button.png", rect, if (enabled) 155 else 90)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = max(1.5f, density * 1.5f)
-        paint.color = if (enabled) color else muted
-        if (enabled) paint.setShadowLayer(density * 7f, 0f, 0f, color)
-        canvas.drawRoundRect(rect, density * 11f, density * 11f, paint)
-        paint.clearShadowLayer()
-        paint.style = Paint.Style.FILL
+        // Use the actual button artwork as-is. Its visible size is constrained by
+        // the layout rectangle while its original proportions are preserved.
+        val hitRect = RectF(left * viewW, top * viewH, right * viewW, bottom * viewH)
+        val buttonBitmap = bitmapAsset("UI Elements/Button.png")
+        val visualRect = buttonBitmap?.let { fitAssetRect(it, hitRect) } ?: hitRect
+        drawAsset(canvas, "UI Elements/Button.png", hitRect, if (enabled) 255 else 125)
+
         val iconPath = when {
             label == "Ⅱ" -> "UI Elements/Pause Icon.png"
             label.contains("BACK") -> "UI Elements/Back Icon.png"
@@ -1677,14 +1718,21 @@ private class GameView(context: Context) : View(context) {
             else -> null
         }
         if (iconPath != null) {
-            val iconSize = min(rect.height() * 0.56f, minDim * 0.042f)
-            val iconX = if (label == "Ⅱ") rect.centerX() else rect.left + iconSize * 0.82f
-            drawAssetCentered(canvas, iconPath, iconX, rect.centerY(), iconSize, if (enabled) 255 else 120)
+            val iconSize = min(visualRect.height() * 0.56f, minDim * 0.042f)
+            val iconX = if (label == "Ⅱ") visualRect.centerX() else visualRect.left + iconSize * 0.82f
+            drawAssetCentered(canvas, iconPath, iconX, visualRect.centerY(), iconSize, if (enabled) 255 else 120)
             if (label == "Ⅱ") return
         }
         val shift = if (iconPath == null) 0f else minDim * 0.018f
-        drawText(canvas, label, (left + right) / 2f + shift / viewW, (top + bottom) / 2f + 0.010f,
-            if (label.length > 18) 0.019f else 0.024f, if (enabled) color else muted, Paint.Align.CENTER)
+        drawText(
+            canvas,
+            label,
+            (visualRect.centerX() + shift) / viewW,
+            visualRect.centerY() / viewH + 0.010f,
+            if (label.length > 18) 0.017f else 0.022f,
+            if (enabled) color else muted,
+            Paint.Align.CENTER
+        )
     }
 
     private fun addBurst(x: Float, y: Float, color: Int, count: Int) {
