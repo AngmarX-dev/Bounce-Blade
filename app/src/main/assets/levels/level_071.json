@@ -1,0 +1,72 @@
+{
+  "id": 71,
+  "name": "QUANTUM ABYSS • Dark Matter 1",
+  "world": "Quantum Abyss",
+  "maxBounces": 19,
+  "playerSpawn": {
+    "x": 0.14,
+    "y": 0.8
+  },
+  "exit": {
+    "x": 0.87,
+    "y": 0.18
+  },
+  "switch": {
+    "x": 0.78,
+    "y": 0.75
+  },
+  "enemies": [
+    {
+      "x": 0.345,
+      "y": 0.267
+    },
+    {
+      "x": 0.515,
+      "y": 0.397
+    },
+    {
+      "x": 0.685,
+      "y": 0.527
+    },
+    {
+      "x": 0.325,
+      "y": 0.657
+    },
+    {
+      "x": 0.495,
+      "y": 0.247
+    }
+  ],
+  "crates": [
+    {
+      "x": 0.45,
+      "y": 0.45
+    },
+    {
+      "x": 0.66,
+      "y": 0.59
+    },
+    {
+      "x": 0.45,
+      "y": 0.73
+    }
+  ],
+  "hazards": [
+    {
+      "type": "teleporter",
+      "x": 0.2,
+      "y": 0.34,
+      "width": 0.075,
+      "height": 0.075
+    },
+    {
+      "type": "teleporter",
+      "x": 0.79,
+      "y": 0.67,
+      "width": 0.075,
+      "height": 0.075
+    }
+  ],
+  "requiresAllTargets": true,
+  "requiresSwitch": true
+}
