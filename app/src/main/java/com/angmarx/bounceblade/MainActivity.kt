@@ -2976,6 +2976,63 @@ private class GameView(context: Context) : View(context) {
         drawButton(canvas, 0.52f, 0.78f, 0.90f, 0.87f, "BACK", cyan)
     }
 
+    private fun localizeButtonLabel(label: String): String {
+        if (!persianLanguage) return label
+        return when (label) {
+            "PLAY CAMPAIGN" -> "شروع کمپین"
+            "LEVEL SELECT" -> "انتخاب مرحله"
+            "MORE FEATURES" -> "قابلیت‌های بیشتر"
+            "BLADE SHOP" -> "فروشگاه تیغه"
+            "SETTINGS" -> "تنظیمات"
+            "HELP" -> "راهنما"
+            "BACK" -> "بازگشت"
+            "BACK TO FEATURES" -> "بازگشت به قابلیت‌ها"
+            "RESUME" -> "ادامه"
+            "RESTART LEVEL" -> "شروع دوباره"
+            "MAIN MENU" -> "منوی اصلی"
+            "NEXT LEVEL" -> "مرحله بعد"
+            "RETRY" -> "تلاش دوباره"
+            "NOVA READY" -> "نوا آماده"
+            "JUKEBOX" -> "پخش موسیقی"
+            else -> label
+        }
+    }
+
+    private fun localizeUiText(text: String): String {
+        if (!persianLanguage) return text
+        return when (text) {
+            "BOUNCE BLADE" -> "باونس بلید"
+            "BOUNCE OFF ENEMIES  •  GUARD THE LEFT WALL" -> "به دشمنان بزن • سپر را حرکت بده"
+            "SETTINGS" -> "تنظیمات"
+            "CHOOSE DIFFICULTY" -> "انتخاب درجه سختی"
+            "HELP & CONTROLS" -> "راهنما و کنترل‌ها"
+            "BLADE FORGE" -> "کارگاه تیغه"
+            "FEATURE HUB" -> "مرکز قابلیت‌ها"
+            "GAME MODES" -> "حالت‌های بازی"
+            "CHALLENGES" -> "چالش‌ها"
+            "ACHIEVEMENTS" -> "دستاوردها"
+            "LOCAL PROFILE" -> "پروفایل محلی"
+            "BLADE & SHIELD LAB" -> "آزمایشگاه تیغه و سپر"
+            "LEVEL LAB" -> "سازنده مرحله"
+            "ACCESSIBILITY & PERFORMANCE" -> "دسترس‌پذیری و کارایی"
+            "SOUNDTRACK PLAYER" -> "پخش‌کننده موسیقی"
+            "EXTRAS & COMMUNITY" -> "امکانات بیشتر"
+            "LOCAL LEADERBOARD" -> "جدول امتیاز محلی"
+            "REPLAY / GHOST TRACE" -> "بازپخش مسیر"
+            "PHOTO MODE" -> "حالت عکس"
+            "SEASONAL EVENT" -> "رویداد فصلی"
+            "ONLINE / PLATFORM SERVICES" -> "خدمات آنلاین و پلتفرم"
+            else -> when {
+                text.startsWith("SCORE ") -> "امتیاز " + text.removePrefix("SCORE ")
+                text.startsWith("COINS ") -> "سکه " + text.removePrefix("COINS ")
+                text.startsWith("TARGETS ") -> "هدف‌ها " + text.removePrefix("TARGETS ")
+                text.startsWith("LEVEL ") -> "مرحله " + text.removePrefix("LEVEL ")
+                text.startsWith("TIME ") -> "زمان " + text.removePrefix("TIME ")
+                else -> text
+            }
+        }
+    }
+
     private fun drawText(
         canvas: Canvas,
         text: String,
