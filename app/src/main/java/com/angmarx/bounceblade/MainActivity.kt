@@ -2795,6 +2795,63 @@ private class GameView(context: Context) : View(context) {
                         invalidate()
                         return true
                     }
+
+                    GameScreen.EXTRAS -> {
+                        when {
+                            inRect(nx, ny, 0.12f, 0.26f, 0.88f, 0.332f) -> screen = GameScreen.LOCAL_SCORES
+                            inRect(nx, ny, 0.12f, 0.352f, 0.88f, 0.424f) -> screen = GameScreen.REPLAYS
+                            inRect(nx, ny, 0.12f, 0.444f, 0.88f, 0.516f) -> screen = GameScreen.PHOTO_MODE
+                            inRect(nx, ny, 0.12f, 0.536f, 0.88f, 0.608f) -> screen = GameScreen.SEASONAL
+                            inRect(nx, ny, 0.12f, 0.628f, 0.88f, 0.700f) -> screen = GameScreen.ONLINE_FEATURES
+                            inRect(nx, ny, 0.24f, 0.76f, 0.76f, 0.845f) -> screen = GameScreen.FEATURES
+                        }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.LOCAL_SCORES -> {
+                        if (inRect(nx, ny, 0.24f, 0.82f, 0.76f, 0.90f)) screen = GameScreen.EXTRAS
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.REPLAYS -> {
+                        when {
+                            inRect(nx, ny, 0.10f, 0.745f, 0.48f, 0.82f) -> shareReplayTrace()
+                            inRect(nx, ny, 0.52f, 0.745f, 0.90f, 0.82f) -> screen = GameScreen.EXTRAS
+                        }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.PHOTO_MODE -> {
+                        when {
+                            inRect(nx, ny, 0.25f, 0.755f, 0.49f, 0.835f) -> showMessage(if (savePhoto()) "PHOTO SAVED" else "COULD NOT SAVE PHOTO")
+                            inRect(nx, ny, 0.51f, 0.755f, 0.75f, 0.835f) -> screen = GameScreen.EXTRAS
+                        }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.SEASONAL -> {
+                        when {
+                            inRect(nx, ny, 0.15f, 0.52f, 0.85f, 0.61f) -> {
+                                gameMode = "seasonal"
+                                prefs.edit().putString("game_mode", gameMode).apply()
+                                startLevel(prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size))
+                            }
+                            inRect(nx, ny, 0.15f, 0.635f, 0.85f, 0.725f) -> {
+                                if (!prefs.getBoolean("season_reward_claimed", false) && prefs.getInt("total_clears", 0) >= 5) {
+                                    prefs.edit().putBoolean("season_reward_claimed", true).putInt("coins", coinBalance() + 100).apply()
+                                    showMessage("100 SEASON COINS CLAIMED")
+                                }
+                            }
+                            inRect(nx, ny, 0.24f, 0.80f, 0.76f, 0.88f) -> screen = GameScreen.EXTRAS
+                        }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.ONLINE_FEATURES -> {
+                        if (inRect(nx, ny, 0.24f, 0.80f, 0.76f, 0.88f)) screen = GameScreen.EXTRAS
+                        invalidate()
+                        return true
+                    }
                     GameScreen.SHOP -> {
                         if (inRect(nx, ny, 0.24f, 0.805f, 0.76f, 0.895f)) {
                             screen = shopReturnScreen
