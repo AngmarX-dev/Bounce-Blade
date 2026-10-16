@@ -1087,6 +1087,16 @@ private class GameView(context: Context) : View(context) {
                 playSfx("Optional - Extra Sounds/Shield Break.wav")
                 break
             }
+            if (enemy.kind == 9 && enemy.shieldHits > 0) {
+                enemy.shieldHits--
+                val shieldHitFromLeft = velocityX > 0f
+                velocityX = if (shieldHitFromLeft) -abs(velocityX) else abs(velocityX)
+                px = if (shieldHitFromLeft) ex - hitRadius else ex + hitRadius
+                addBurst(ex, ey, cyan, 14)
+                showMessage("ENERGY SHIELD BLOCKED HIT • " + enemy.shieldHits + " CHARGES")
+                playSfx("Optional - Extra Sounds/Shield Break.wav")
+                break
+            }
             val cameFromLeft = velocityX > 0f
             enemy.health -= 1
             if (enemy.health <= 0) {
@@ -2373,6 +2383,16 @@ private class GameView(context: Context) : View(context) {
             paint.setShadowLayer(density * 8f, 0f, 0f, enemySkinColor())
             canvas.drawCircle(x, y, drawSize * 0.68f, paint)
             paint.clearShadowLayer()
+        }
+        if (enemy.kind == 9 && enemy.shieldHits > 0) {
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = max(2f, density * 2.5f)
+            paint.color = cyan
+            paint.setShadowLayer(density * 12f, 0f, 0f, cyan)
+            canvas.drawCircle(x, y, drawSize * 0.78f, paint)
+            paint.clearShadowLayer()
+            drawText(canvas, "SHIELD " + enemy.shieldHits, x / viewW,
+                (y - drawSize * 0.68f) / viewH, 0.013f, cyan, Paint.Align.CENTER)
         }
         if (isTurret) {
             paint.style = Paint.Style.STROKE
