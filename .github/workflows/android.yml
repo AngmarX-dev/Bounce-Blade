@@ -125,7 +125,7 @@ jobs:
                   point = data[point_name]
                   if not all(key in point and 0 <= float(point[key]) <= 1 for key in ("x", "y")):
                       sys.exit(f"{path}: {point_name} must use normalized x/y coordinates")
-              supported_hazards = {"spikes", "laser", "moving_hazard", "sticky_wall", "teleporter", "power_up"}
+              supported_hazards = {"spikes", "laser", "moving_hazard", "sticky_wall", "teleporter", "power_up", "moving_spikes", "rotating_laser", "gravity_well", "conveyor_belt", "breakable_wall", "switch", "key", "door"}
               for hazard in data["hazards"]:
                   if hazard.get("type") not in supported_hazards:
                       sys.exit(f"{path}: unsupported hazard type {hazard.get('type')!r}")
