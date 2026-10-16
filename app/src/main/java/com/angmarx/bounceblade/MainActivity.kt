@@ -199,6 +199,7 @@ private class GameView(context: Context) : View(context) {
     private var difficulty = prefs.getInt("difficulty_stars", 2).coerceIn(1, 3)
     private var screen = GameScreen.MENU
     private var shopReturnScreen = GameScreen.MENU
+    private var menuSelection = 0
     private var gameMode = prefs.getString("game_mode", "campaign") ?: "campaign"
     private var bladeSkin = prefs.getInt("blade_skin", 0).coerceIn(0, 5)
     private var shieldSkin = prefs.getInt("shield_skin", 0).coerceIn(0, 5)
@@ -1951,11 +1952,11 @@ private class GameView(context: Context) : View(context) {
         drawAsset(canvas, "App Icon & Logo/Game Logo.png", RectF(viewW * 0.16f, viewH * 0.13f, viewW * 0.84f, viewH * 0.29f), 255)
         drawText(canvas, "BOUNCE OFF ENEMIES  •  GUARD THE LEFT WALL", 0.5f, 0.435f, 0.020f, muted, Paint.Align.CENTER)
         drawText(canvas, "◈ " + coinBalance(), 0.91f, 0.105f, 0.026f, gold, Paint.Align.RIGHT)
-        drawButton(canvas, 0.10f, 0.456f, 0.90f, 0.523f, "PLAY CAMPAIGN", cyan)
-        drawButton(canvas, 0.10f, 0.532f, 0.90f, 0.599f, "LEVEL SELECT", gold)
-        drawButton(canvas, 0.10f, 0.608f, 0.90f, 0.675f, "MORE FEATURES", pink)
-        drawButton(canvas, 0.10f, 0.684f, 0.90f, 0.751f, "BLADE SHOP", gold)
-        drawButton(canvas, 0.10f, 0.760f, 0.90f, 0.827f, "SETTINGS", cyan)
+        drawButton(canvas, 0.10f, 0.456f, 0.90f, 0.523f, "PLAY CAMPAIGN", if (menuSelection == 0) gold else cyan)
+        drawButton(canvas, 0.10f, 0.532f, 0.90f, 0.599f, "LEVEL SELECT", if (menuSelection == 1) pink else gold)
+        drawButton(canvas, 0.10f, 0.608f, 0.90f, 0.675f, "MORE FEATURES", if (menuSelection == 2) cyan else pink)
+        drawButton(canvas, 0.10f, 0.684f, 0.90f, 0.751f, "BLADE SHOP", if (menuSelection == 3) pink else gold)
+        drawButton(canvas, 0.10f, 0.760f, 0.90f, 0.827f, "SETTINGS", if (menuSelection == 4) gold else cyan)
         val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
         val bestTotal = totalBestStarsAfter(0, 0)
         drawText(canvas, "UNLOCKED  " + unlocked + "/" + levels.size + "     BEST STARS  " + bestTotal + "/" + (levels.size * 3),
