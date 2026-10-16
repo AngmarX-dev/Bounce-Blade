@@ -528,7 +528,21 @@ private class GameView(context: Context) : View(context) {
         else -> 3
     }
 
+    private fun enemyKindForCampaignLevel(id: Int, index: Int): Int {
+        if (id <= 50) return enemyKindForLevel(id)
+        val roster = when (id) {
+            in 51..60 -> intArrayOf(8, 4, 0, 3)
+            in 61..70 -> intArrayOf(5, 0, 8, 1)
+            in 71..80 -> intArrayOf(6, 0, 2, 3)
+            in 81..90 -> intArrayOf(7, 1, 5, 8)
+            else -> intArrayOf(8, 4, 5, 6, 7)
+        }
+        return roster[index % roster.size]
+    }
+
     private fun enemyHealthForLevel(id: Int, index: Int): Int = when {
+        id in 91..100 -> 5 + (index % 3)
+        id in 51..90 -> if (index % 4 == 0) 4 else 2
         id in 21..30 || id >= 41 -> 3
         else -> 1
     }
@@ -591,12 +605,48 @@ private class GameView(context: Context) : View(context) {
                         enemy.jumpTime = (enemy.jumpTime - dt).coerceAtLeast(0f)
                     }
                 }
-                1, 3 -> {
-                    // Turrets are durable but deliberately slower than drones.
-                    val turretSpeed = if (enemy.kind == 1) 0.014f else 0.011f
+                1, 3, 7, 8 -> {
+                    // Turrets, snipers and armored guards trade speed for durability.
+                    val turretSpeed = when (enemy.kind) { 1 -> 0.014f; 7 -> 0.008f; 8 -> 0.0075f; else -> 0.011f }
                     enemy.x -= turretSpeed * difficultyScale * dt
-                    val verticalStep = turretSpeed * 0.52f * dt
+                    val verticalStep = turretSpeed * (if (enemy.kind == 7) 1.2f else 0.52f) * dt
+                    if (enemy.kind == 7) {
+                        enemy.y += sin(animationTime * 1.6f + index) * 0.012f * dt
+                    } else enemy.y += (targetY - enemy.y).coerceIn(-verticalStep, verticalStep)
+                }
+                4 -> {
+                    // Healers move slowly and periodically restore a nearby ally.
+                    enemy.x -= 0.009f * difficultyScale * dt
+                    enemy.y += (targetY - enemy.y).coerceIn(-0.01f * dt, 0.01f * dt)
+                    enemy.fireCooldown -= dt
+                    if (enemy.fireCooldown <= 0f) {
+                        val ally = enemies.filter { it.alive && it !== enemy }
+                            .minByOrNull { distanceSquared(it.x, it.y, enemy.x, enemy.y) }
+                        if (ally != null && distanceSquared(ally.x, ally.y, enemy.x, enemy.y) < 0.18f * 0.18f) {
+                            ally.health = min(ally.health + 1, 8)
+                            addBurst(ally.x * viewW, ally.y * viewH, Color.rgb(90, 255, 150), 5)
+                            showMessage("HEALER RESTORED AN ENEMY")
+                        }
+                        enemy.fireCooldown = 2.6f
+                    }
+                }
+                5 -> {
+                    // Explosive enemies make a fast, direct approach to the shield.
+                    enemy.x -= 0.026f * difficultyScale * dt
+                    val verticalStep = 0.025f * difficultyScale * dt
                     enemy.y += (targetY - enemy.y).coerceIn(-verticalStep, verticalStep)
+                }
+                6 -> {
+                    // Teleporters periodically blink between arena coordinates.
+                    enemy.fireCooldown -= dt
+                    if (enemy.fireCooldown <= 0f && enemy.x < 0.84f) {
+                        enemy.x = (0.52f + ((index * 17 + levelId * 3) % 31) / 100f).coerceIn(0.52f, 0.83f)
+                        enemy.y = (0.22f + ((index * 11 + levelId) % 56) / 100f).coerceIn(0.22f, 0.78f)
+                        enemy.fireCooldown = 2.1f
+                        addBurst(enemy.x * viewW, enemy.y * viewH, cyan, 8)
+                    }
+                    enemy.x -= 0.010f * difficultyScale * dt
+                    enemy.y += (targetY - enemy.y).coerceIn(-0.009f * dt, 0.009f * dt)
                 }
             }
 
@@ -609,6 +659,10 @@ private class GameView(context: Context) : View(context) {
                 val reason = when (enemy.kind) {
                     0 -> "DRONE HIT THE WALL — YOU BURNED"
                     2 -> "SLIME REACHED THE WALL — YOU BURNED"
+                    4 -> "HEALER REACHED THE WALL — YOU BURNED"
+                    5 -> "EXPLOSIVE BREACHED THE WALL — YOU BURNED"
+                    6 -> "TELEPORTER REACHED THE WALL — YOU BURNED"
+                    7 -> "SNIPER BREACHED THE WALL — YOU BURNED"
                     else -> "TURRET BREACHED THE WALL — YOU BURNED"
                 }
                 showMessage(reason)
@@ -896,6 +950,7 @@ private class GameView(context: Context) : View(context) {
             }
         }
 
+        val pendingSpawns = mutableListOf<EnemyState>()
         for ((index, enemy) in enemies.withIndex()) {
             if (!enemy.alive) continue
             val center = enemyCenter(enemy, index)
@@ -908,7 +963,19 @@ private class GameView(context: Context) : View(context) {
             enemy.health -= 1
             if (enemy.health <= 0) {
                 enemy.alive = false
-                registerTargetHit(if (enemy.kind == 3) 250 else 100, ex, ey, pink)
+                registerTargetHit(if (enemy.kind == 3) 500 else if (enemy.kind == 5) 300 else 100, ex, ey, pink)
+                if (enemy.kind == 2 && enemy.canSplit) {
+                    pendingSpawns.add(EnemyState((enemy.x - 0.03f).coerceIn(0.12f, 0.90f), (enemy.y - 0.035f).coerceIn(0.18f, 0.82f), true, 2, 1, 8f, false))
+                    pendingSpawns.add(EnemyState((enemy.x + 0.03f).coerceIn(0.12f, 0.90f), (enemy.y + 0.035f).coerceIn(0.18f, 0.82f), true, 2, 1, 8f, false))
+                }
+                if (enemy.kind == 5) {
+                    enemies.filter { it.alive && it !== enemy && distanceSquared(it.x, it.y, enemy.x, enemy.y) < 0.13f * 0.13f }
+                        .forEach { nearby ->
+                            nearby.health -= 2
+                            if (nearby.health <= 0) nearby.alive = false
+                        }
+                    addBurst(ex, ey, Color.rgb(255, 95, 25), 22)
+                }
                 playSfx(
                     if (index % 2 == 0) "Core Gameplay SFX/Enemy Slice (Variation 1).wav"
                     else "Core Gameplay SFX/Enemy Slice (Variation 2).wav"
@@ -941,6 +1008,7 @@ private class GameView(context: Context) : View(context) {
             break
         }
 
+        enemies.addAll(pendingSpawns)
         bladeX = (px / viewW).coerceIn(0f, 1f)
         bladeY = (py / viewH).coerceIn(0f, 1f)
         bladeTrail.add(PointF(px, py))
@@ -1292,8 +1360,10 @@ private class GameView(context: Context) : View(context) {
         }
         enemies = activeEnemyPoints.mapIndexed { index, point ->
             val bossRush = gameMode == "boss_rush"
-            EnemyState(point.x, point.y, true, if (bossRush) 3 else enemyKindForLevel(levelId),
-                if (bossRush) 10 + index * 2 else enemyHealthForLevel(levelId, index),
+            val finalBoss = levelId == levels.size && index == 0
+            val kind = if (bossRush || finalBoss) 3 else enemyKindForCampaignLevel(levelId, index)
+            EnemyState(point.x, point.y, true, kind,
+                if (bossRush) 10 + index * 2 else if (finalBoss) 18 else enemyHealthForLevel(levelId, index),
                 1.2f + (index % 3) * 0.6f, true)
         }.toMutableList()
         pickups.clear()
@@ -2123,15 +2193,24 @@ private class GameView(context: Context) : View(context) {
     private fun drawEnemy(canvas: Canvas, enemy: EnemyState, index: Int) {
         val c = enemyCenter(enemy, index)
         val x = c.x * viewW; val y = c.y * viewH
-        val r = minDim * when (enemy.kind) { 1 -> 0.033f; 2 -> if (enemy.canSplit) 0.031f else 0.020f; 3 -> 0.052f; else -> 0.030f }
+        val r = minDim * when (enemy.kind) {
+            1, 7 -> 0.033f
+            2 -> if (enemy.canSplit) 0.031f else 0.020f
+            3 -> 0.052f
+            5 -> 0.038f
+            6 -> 0.034f
+            8 -> 0.040f
+            else -> 0.030f
+        }
         val path = when (enemy.kind) {
-            1 -> "Gameplay Sprites/Enemy Turret.png"
+            1, 7, 8 -> "Gameplay Sprites/Enemy Turret.png"
             2 -> "Gameplay Sprites/Enemy Slime.png"
             3 -> "Gameplay Sprites/Enemy Turret.png"
+            6 -> "Gameplay Sprites/Portal.png"
             else -> "Gameplay Sprites/Enemy Drone.png"
         }
-        val drawSize = if (enemy.kind == 3) r * 3.2f else r * 2.35f
-        val isTurret = enemy.kind == 1 || enemy.kind == 3
+        val drawSize = when (enemy.kind) { 3 -> r * 3.2f; 5 -> r * 2.7f; 6 -> r * 2.8f; 8 -> r * 2.6f; else -> r * 2.35f }
+        val isTurret = enemy.kind == 1 || enemy.kind == 3 || enemy.kind == 7 || enemy.kind == 8
         if (enemySkin > 0) {
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = max(2f, density * 2.2f)
