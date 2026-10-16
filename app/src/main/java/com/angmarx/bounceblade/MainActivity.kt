@@ -429,7 +429,7 @@ private class GameView(context: Context) : View(context) {
 
     private fun frameDelayMillis(): Long {
         if (batterySaver) return 33L
-        val refreshRate = display?.refreshRate ?: resources.displayMetrics.refreshRate
+        val refreshRate = display?.refreshRate ?: 60f
         return (1000f / refreshRate.coerceIn(30f, 144f)).toLong().coerceIn(6L, 33L)
     }
 
