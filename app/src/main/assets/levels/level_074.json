@@ -1,0 +1,61 @@
+{
+  "id": 74,
+  "name": "QUANTUM ABYSS • Quantum Split 4",
+  "world": "Quantum Abyss",
+  "maxBounces": 19,
+  "playerSpawn": {
+    "x": 0.14,
+    "y": 0.8
+  },
+  "exit": {
+    "x": 0.87,
+    "y": 0.18
+  },
+  "switch": {
+    "x": 0.78,
+    "y": 0.75
+  },
+  "enemies": [
+    {
+      "x": 0.45,
+      "y": 0.348
+    },
+    {
+      "x": 0.62,
+      "y": 0.478
+    },
+    {
+      "x": 0.79,
+      "y": 0.608
+    },
+    {
+      "x": 0.43,
+      "y": 0.738
+    },
+    {
+      "x": 0.6,
+      "y": 0.328
+    }
+  ],
+  "crates": [
+    {
+      "x": 0.42,
+      "y": 0.45
+    },
+    {
+      "x": 0.63,
+      "y": 0.59
+    }
+  ],
+  "hazards": [
+    {
+      "type": "laser",
+      "x": 0.5,
+      "y": 0.47,
+      "width": 0.64,
+      "height": 0.016
+    }
+  ],
+  "requiresAllTargets": true,
+  "requiresSwitch": true
+}
