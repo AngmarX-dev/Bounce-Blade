@@ -106,8 +106,8 @@ jobs:
 
           folder = pathlib.Path("app/src/main/assets/levels")
           files = sorted(folder.glob("level_[0-9][0-9][0-9].json"))
-          if len(files) < 50:
-              sys.exit(f"Expected at least 50 level files, found {len(files)}")
+          if len(files) < 100:
+              sys.exit(f"Expected at least 100 level files, found {len(files)}")
           required = {"id", "name", "world", "maxBounces", "playerSpawn", "exit", "switch", "enemies", "crates", "hazards", "requiresAllTargets", "requiresSwitch"}
           for path in files:
               data = json.loads(path.read_text(encoding="utf-8"))
@@ -132,9 +132,9 @@ jobs:
                   if not all(key in hazard and 0 <= float(hazard[key]) <= 1
                              for key in ("x", "y", "width", "height")):
                       sys.exit(f"{path}: hazard data must use normalized coordinates/sizes")
-          if len(files) != 50:
-              sys.exit(f"Expected exactly 50 campaign levels, found {len(files)}")
-          worlds = ["Neon Grid", "Crimson Circuit", "Azure Vault", "Magenta Maze", "Golden Core"]
+          if len(files) != 100:
+              sys.exit(f"Expected exactly 100 campaign levels, found {len(files)}")
+          worlds = ["Neon Grid", "Crimson Circuit", "Azure Vault", "Magenta Maze", "Golden Core", "Obsidian Rift", "Solar Flare", "Quantum Abyss", "Storm Citadel", "Celestial Forge"]
           for path in files:
               data = json.loads(path.read_text(encoding="utf-8"))
               expected_world = worlds[(data["id"] - 1) // 10]
