@@ -1,0 +1,68 @@
+{
+  "id": 80,
+  "name": "QUANTUM ABYSS • Final Echo 10",
+  "world": "Quantum Abyss",
+  "maxBounces": 12,
+  "playerSpawn": {
+    "x": 0.14,
+    "y": 0.8
+  },
+  "exit": {
+    "x": 0.87,
+    "y": 0.18
+  },
+  "switch": {
+    "x": 0.78,
+    "y": 0.75
+  },
+  "enemies": [
+    {
+      "x": 0.31,
+      "y": 0.321
+    },
+    {
+      "x": 0.48,
+      "y": 0.451
+    },
+    {
+      "x": 0.65,
+      "y": 0.581
+    },
+    {
+      "x": 0.82,
+      "y": 0.711
+    },
+    {
+      "x": 0.46,
+      "y": 0.301
+    }
+  ],
+  "crates": [
+    {
+      "x": 0.36,
+      "y": 0.45
+    },
+    {
+      "x": 0.57,
+      "y": 0.59
+    }
+  ],
+  "hazards": [
+    {
+      "type": "laser",
+      "x": 0.5,
+      "y": 0.47,
+      "width": 0.64,
+      "height": 0.016
+    },
+    {
+      "type": "power_up",
+      "x": 0.46,
+      "y": 0.76,
+      "width": 0.055,
+      "height": 0.055
+    }
+  ],
+  "requiresAllTargets": true,
+  "requiresSwitch": true
+}

@@ -1,0 +1,64 @@
+{
+  "id": 100,
+  "name": "CELESTIAL FORGE • Final Echo 10",
+  "world": "Celestial Forge",
+  "maxBounces": 14,
+  "playerSpawn": {
+    "x": 0.14,
+    "y": 0.8
+  },
+  "exit": {
+    "x": 0.87,
+    "y": 0.18
+  },
+  "switch": {
+    "x": 0.78,
+    "y": 0.75
+  },
+  "enemies": [
+    {
+      "x": 0.31,
+      "y": 0.294
+    },
+    {
+      "x": 0.48,
+      "y": 0.424
+    },
+    {
+      "x": 0.65,
+      "y": 0.554
+    },
+    {
+      "x": 0.82,
+      "y": 0.684
+    }
+  ],
+  "crates": [
+    {
+      "x": 0.36,
+      "y": 0.4
+    },
+    {
+      "x": 0.57,
+      "y": 0.54
+    }
+  ],
+  "hazards": [
+    {
+      "type": "sticky_wall",
+      "x": 0.75,
+      "y": 0.53,
+      "width": 0.085,
+      "height": 0.21
+    },
+    {
+      "type": "power_up",
+      "x": 0.46,
+      "y": 0.76,
+      "width": 0.055,
+      "height": 0.055
+    }
+  ],
+  "requiresAllTargets": true,
+  "requiresSwitch": true
+}

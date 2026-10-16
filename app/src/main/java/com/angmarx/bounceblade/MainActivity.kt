@@ -1,7 +1,9 @@
 package com.angmarx.bounceblade
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
+import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -16,6 +18,13 @@ import android.media.MediaPlayer
 import android.media.SoundPool
 import android.media.ToneGenerator
 import android.os.Bundle
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.view.InputDevice
+import android.view.KeyEvent
+import java.io.File
+import java.io.FileOutputStream
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
@@ -70,7 +79,7 @@ private data class PointN(val x: Float, val y: Float)
 private data class EnemyState(
     var x: Float, var y: Float, var alive: Boolean = true, val kind: Int = 0,
     var health: Int = 1, var fireCooldown: Float = 1.6f, val canSplit: Boolean = true,
-    var jumpTime: Float = 0f, var jumpCooldown: Float = 1.4f
+    var jumpTime: Float = 0f, var jumpCooldown: Float = 1.4f, var shieldHits: Int = 0
 )
 private data class TurretProjectile(var x: Float, var y: Float, var vx: Float, var vy: Float, var life: Float)
 private data class CrateState(val x: Float, val y: Float, var alive: Boolean = true)
@@ -94,6 +103,7 @@ private data class GameLevel(
     val requiresAllTargets: Boolean = true,
     val requiresSwitch: Boolean = true
 )
+private data class PickupState(val type: String, val x: Float, val y: Float, var active: Boolean = true)
 private data class Particle(
     var x: Float,
     var y: Float,
@@ -103,7 +113,7 @@ private data class Particle(
     val color: Int,
     val radius: Float
 )
-private enum class GameScreen { MENU, WORLDS, LEVELS, PLAYING, PAUSED, SETTINGS, HELP, DIFFICULTY, SHOP, WON, FAILED, CAMPAIGN_COMPLETE }
+private enum class GameScreen { MENU, WORLDS, LEVELS, PLAYING, PAUSED, SETTINGS, HELP, DIFFICULTY, SHOP, FEATURES, MODES, CHALLENGES, ACHIEVEMENTS, STATS, CUSTOMIZE, EDITOR, ACCESSIBILITY, JUKEBOX, EXTRAS, LOCAL_SCORES, REPLAYS, PHOTO_MODE, SEASONAL, ONLINE_FEATURES, WON, FAILED, CAMPAIGN_COMPLETE }
 
 private data class ShopItem(
     val id: String,
@@ -120,9 +130,12 @@ private class GameView(context: Context) : View(context) {
     private val minDim get() = min(viewW, viewH)
     private val wallGuardMode = true
     private var guardPaddleY = 0.5f
+    private var secondGuardPaddleY = 0.5f
+    private var primaryPointerId = -1
+    private var secondPointerId = -1
     private var viewW = 1f
     private var viewH = 1f
-    private var themeId = prefs.getInt("theme_id", 0).coerceIn(0, 2)
+    private var themeId = prefs.getInt("theme_id", 0).coerceIn(0, 5)
     private var cyan = Color.rgb(45, 235, 255)
     private var pink = Color.rgb(255, 65, 150)
     private var gold = Color.rgb(255, 199, 83)
@@ -186,6 +199,42 @@ private class GameView(context: Context) : View(context) {
     private var difficulty = prefs.getInt("difficulty_stars", 2).coerceIn(1, 3)
     private var screen = GameScreen.MENU
     private var shopReturnScreen = GameScreen.MENU
+    private var menuSelection = 0
+    private var gameMode = prefs.getString("game_mode", "campaign") ?: "campaign"
+    private var bladeSkin = prefs.getInt("blade_skin", 0).coerceIn(0, 5)
+    private var shieldSkin = prefs.getInt("shield_skin", 0).coerceIn(0, 5)
+    private var enemySkin = prefs.getInt("enemy_skin", 0).coerceIn(0, 3)
+    private var highContrast = prefs.getBoolean("high_contrast", false)
+    private var colorblindMode = prefs.getBoolean("colorblind_mode", false)
+    private var hapticLevel = prefs.getInt("haptic_level", 2).coerceIn(0, 3)
+    private var keyMoveUp = prefs.getInt("key_move_up", KeyEvent.KEYCODE_DPAD_UP)
+    private var keyMoveDown = prefs.getInt("key_move_down", KeyEvent.KEYCODE_DPAD_DOWN)
+    private var keyPause = prefs.getInt("key_pause", KeyEvent.KEYCODE_SPACE)
+    private var playerName = prefs.getString("player_name", "BLADE RUNNER") ?: "BLADE RUNNER"
+    private var traceTimer = 0f
+    private val runTrace = mutableListOf<PointF>()
+    private var reducedMotion = prefs.getBoolean("reduced_motion", false)
+    private var leftHandedMode = prefs.getBoolean("left_handed", false)
+    private var oneHandedMode = prefs.getBoolean("one_handed_mode", false)
+    private var persianLanguage = prefs.getBoolean("persian_language", false)
+    private var largeUi = prefs.getBoolean("large_ui", false)
+    private var batterySaver = prefs.getBoolean("battery_saver", false)
+    private var dynamicDifficulty = prefs.getBoolean("dynamic_difficulty", true)
+    private var jukeboxTrackId = prefs.getInt("jukebox_track", 0).coerceIn(0, 3)
+    private var editorTargetCount = prefs.getInt("editor_target_count", 6).coerceIn(1, 12)
+    private var editorHazardId = prefs.getInt("editor_hazard", 0).coerceIn(0, 5)
+    private val pickups = mutableListOf<PickupState>()
+    private val activeEffects = mutableMapOf<String, Float>()
+    private var extraLifeUsed = false
+    private var multiCatchCharges = 0
+    private var hasLevelKey = false
+    private val musicTracks = listOf(
+        "Music & Ambience/Main Menu Theme.wav",
+        "Music & Ambience/Gameplay Background.wav",
+        "Music & Ambience/Victory Theme.wav",
+        "Music & Ambience/Game Over Theme.wav"
+    )
+    private val editorHazards = listOf("NONE", "SPIKES", "LASER", "MOVING HAZARD", "PORTAL PAIR", "STICKY WALL")
     private var touchingAbility = false
     private var novaCooldownRemaining = 0f
     private var novaFlashUntil = 0L
@@ -257,14 +306,18 @@ private class GameView(context: Context) : View(context) {
         loadLevel(1)
         screen = GameScreen.MENU
         isFocusable = true
+        isFocusableInTouchMode = true
         isClickable = true
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+        contentDescription = "Bounce Blade game. Main menu."
+        requestFocus()
     }
 
     fun handleBack(): Boolean {
         playSfx("UI & Feedback SFX/Button Back.wav")
         when (screen) {
             GameScreen.PLAYING -> screen = GameScreen.PAUSED
-            GameScreen.PAUSED, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY -> screen = GameScreen.MENU
+            GameScreen.PAUSED, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.EDITOR, GameScreen.ACCESSIBILITY, GameScreen.JUKEBOX, GameScreen.EXTRAS, GameScreen.LOCAL_SCORES, GameScreen.REPLAYS, GameScreen.PHOTO_MODE, GameScreen.SEASONAL, GameScreen.ONLINE_FEATURES -> screen = if (screen == GameScreen.FEATURES) GameScreen.MENU else if (screen == GameScreen.EXTRAS) GameScreen.FEATURES else GameScreen.EXTRAS
             GameScreen.SHOP -> {
                 screen = shopReturnScreen
                 if (screen == GameScreen.PLAYING) lastFrame = System.nanoTime()
@@ -309,6 +362,16 @@ private class GameView(context: Context) : View(context) {
         super.onDraw(canvas)
         viewW = width.toFloat().coerceAtLeast(1f)
         viewH = height.toFloat().coerceAtLeast(1f)
+        contentDescription = when (screen) {
+            GameScreen.MENU -> "Bounce Blade main menu. Campaign progress " + prefs.getInt("unlocked_level", 1) + " of " + levels.size + "."
+            GameScreen.WORLDS -> "World selection. Choose an unlocked world."
+            GameScreen.LEVELS -> "Stage selection for " + CampaignWorlds.worldName(selectedWorld) + "."
+            GameScreen.PLAYING -> "Playing stage " + levelId + ". Score " + score + ". Drag vertically to move the shield."
+            GameScreen.PAUSED -> "Game paused. Resume, restart, or return to the menu."
+            GameScreen.WON -> "Stage complete. Score " + score + ". Stars earned " + earnedStars + "."
+            GameScreen.FAILED -> "Run ended. " + message
+            else -> "Bounce Blade " + screen.name.lowercase().replace('_', ' ') + "."
+        }
         advanceFrame()
         updateMusicForScreen()
         updateBladeIdleLoop()
@@ -329,6 +392,21 @@ private class GameView(context: Context) : View(context) {
             GameScreen.HELP -> drawHelp(canvas)
             GameScreen.DIFFICULTY -> drawDifficulty(canvas)
             GameScreen.SHOP -> drawShop(canvas)
+            GameScreen.FEATURES -> drawFeatures(canvas)
+            GameScreen.MODES -> drawModes(canvas)
+            GameScreen.CHALLENGES -> drawChallenges(canvas)
+            GameScreen.ACHIEVEMENTS -> drawAchievements(canvas)
+            GameScreen.STATS -> drawStats(canvas)
+            GameScreen.CUSTOMIZE -> drawCustomize(canvas)
+            GameScreen.EDITOR -> drawEditor(canvas)
+            GameScreen.ACCESSIBILITY -> drawAccessibility(canvas)
+            GameScreen.JUKEBOX -> drawJukebox(canvas)
+            GameScreen.EXTRAS -> drawExtras(canvas)
+            GameScreen.LOCAL_SCORES -> drawLocalScores(canvas)
+            GameScreen.REPLAYS -> drawReplays(canvas)
+            GameScreen.PHOTO_MODE -> drawPhotoMode(canvas)
+            GameScreen.SEASONAL -> drawSeasonal(canvas)
+            GameScreen.ONLINE_FEATURES -> drawOnlineFeatures(canvas)
             GameScreen.WON -> {
                 drawGame(canvas)
                 drawOverlay(canvas, "LEVEL CLEARED", "Nice shot! The exit is open.")
@@ -345,12 +423,18 @@ private class GameView(context: Context) : View(context) {
                 drawMenuBackdrop(canvas)
                 drawAssetCover(canvas, "Backgrounds & Environments/Victory Background.png", RectF(0f, 0f, viewW, viewH), 238)
                 drawAsset(canvas, "Banners & Text/Victory Banner.png", RectF(viewW * 0.12f, viewH * 0.27f, viewW * 0.88f, viewH * 0.43f), 255)
-                drawText(canvas, "You conquered all five worlds.", 0.5f, 0.48f, 0.024f, Color.WHITE, Paint.Align.CENTER)
+                drawText(canvas, "You conquered all ten worlds.", 0.5f, 0.48f, 0.024f, Color.WHITE, Paint.Align.CENTER)
                 drawButton(canvas, 0.15f, 0.565f, 0.85f, 0.665f, "PLAY AGAIN", cyan)
                 drawButton(canvas, 0.15f, 0.680f, 0.85f, 0.780f, "LEVEL SELECT", gold)
             }
         }
-        if (screen == GameScreen.PLAYING || flying || particles.isNotEmpty() || turretProjectiles.isNotEmpty()) postInvalidateDelayed(16L)
+        if (screen == GameScreen.PLAYING || flying || particles.isNotEmpty() || turretProjectiles.isNotEmpty() || screen == GameScreen.JUKEBOX) postInvalidateDelayed(frameDelayMillis())
+    }
+
+    private fun frameDelayMillis(): Long {
+        if (batterySaver) return 33L
+        val refreshRate = display?.refreshRate ?: 60f
+        return (1000f / refreshRate.coerceIn(30f, 144f)).toLong().coerceIn(6L, 33L)
     }
 
     private fun advanceFrame() {
@@ -359,7 +443,24 @@ private class GameView(context: Context) : View(context) {
         lastFrame = now
         animationTime += rawDt
         if (screen == GameScreen.PLAYING) {
+            traceTimer += rawDt
+            if (traceTimer >= 0.06f && runTrace.size < 1000) {
+                runTrace.add(PointF(bladeX.coerceIn(0f, 1f), bladeY.coerceIn(0f, 1f)))
+                traceTimer = 0f
+            }
+        }
+        if (screen == GameScreen.PLAYING) {
+            val effectIterator = activeEffects.entries.iterator()
+            while (effectIterator.hasNext()) {
+                val entry = effectIterator.next()
+                entry.setValue((entry.value - rawDt).coerceAtLeast(0f))
+                if (entry.value <= 0f) effectIterator.remove()
+            }
             levelElapsedSeconds += rawDt
+            if (gameMode == "time_attack" && levelElapsedSeconds >= 60f) {
+                fail("TIME ATTACK OVER — 60 SECONDS")
+                return
+            }
             comboWindow = (comboWindow - rawDt).coerceAtLeast(0f)
             if (comboWindow <= 0f) comboCount = 0
             teleportCooldown = (teleportCooldown - rawDt).coerceAtLeast(0f)
@@ -377,7 +478,7 @@ private class GameView(context: Context) : View(context) {
             }
         }
         if (screen == GameScreen.PLAYING && flying) {
-            val timeScale = if (slowMotion && slowMeter > 0f) 0.28f else 1f
+            val timeScale = if ((slowMotion && slowMeter > 0f) || (activeEffects["slow_time"] ?: 0f) > 0f) 0.28f else 1f
             val dt = rawDt * timeScale
             if (slowMotion && slowMeter > 0f) slowMeter = (slowMeter - rawDt * 0.20f).coerceAtLeast(0f)
             else slowMeter = (slowMeter + rawDt * 0.075f).coerceAtMost(1f)
@@ -438,7 +539,9 @@ private class GameView(context: Context) : View(context) {
     private fun registerTargetHit(points: Int, x: Float, y: Float, color: Int) {
         comboCount = if (comboWindow > 0f) comboCount + 1 else 1
         comboWindow = 2.25f; bestCombo = max(bestCombo, comboCount)
-        score += points * comboCount
+        if (bestCombo > prefs.getInt("all_time_best_combo", 0)) prefs.edit().putInt("all_time_best_combo", bestCombo).apply()
+        val multiplier = (if ((activeEffects["score_multiplier"] ?: 0f) > 0f) 2 else 1) * (if (comboCount >= 5) 2 else 1)
+        score += points * comboCount * multiplier
         lastImpactX = x; lastImpactY = y; impactUntil = System.nanoTime() + 320_000_000L
         addBurst(x, y, color, if (comboCount >= 3) 20 else 13)
         if (comboCount >= 2) { showMessage("COMBO x" + comboCount); playSfx("UI & Feedback SFX/Combo - Streak.wav") }
@@ -451,7 +554,21 @@ private class GameView(context: Context) : View(context) {
         else -> 3
     }
 
+    private fun enemyKindForCampaignLevel(id: Int, index: Int): Int {
+        if (id <= 50) return enemyKindForLevel(id)
+        val roster = when (id) {
+            in 51..60 -> intArrayOf(8, 4, 0, 3)
+            in 61..70 -> intArrayOf(5, 0, 8, 1)
+            in 71..80 -> intArrayOf(6, 0, 2, 3)
+            in 81..90 -> intArrayOf(7, 1, 5, 8)
+            else -> intArrayOf(8, 4, 5, 6, 7, 9)
+        }
+        return roster[index % roster.size]
+    }
+
     private fun enemyHealthForLevel(id: Int, index: Int): Int = when {
+        id in 91..100 -> 5 + (index % 3)
+        id in 51..90 -> if (index % 4 == 0) 4 else 2
         id in 21..30 || id >= 41 -> 3
         else -> 1
     }
@@ -483,7 +600,8 @@ private class GameView(context: Context) : View(context) {
         if (screen != GameScreen.PLAYING || !wallGuardMode || dt <= 0f) return
         val breachX = 0.108f
         val targetY = guardPaddleY.coerceIn(0.18f, 0.82f)
-        val difficultyScale = 1f + (difficulty - 1) * 0.18f
+        val adaptiveScale = if (dynamicDifficulty) 1f + min(prefs.getInt("total_clears", 0), 60) * 0.0025f else 1f
+        val difficultyScale = (1f + (difficulty - 1) * 0.18f) * adaptiveScale
 
         for ((index, enemy) in enemies.withIndex()) {
             if (!enemy.alive) continue
@@ -513,12 +631,48 @@ private class GameView(context: Context) : View(context) {
                         enemy.jumpTime = (enemy.jumpTime - dt).coerceAtLeast(0f)
                     }
                 }
-                1, 3 -> {
-                    // Turrets are durable but deliberately slower than drones.
-                    val turretSpeed = if (enemy.kind == 1) 0.014f else 0.011f
+                1, 3, 7, 8, 9 -> {
+                    // Turrets, snipers and armored guards trade speed for durability.
+                    val turretSpeed = when (enemy.kind) { 1 -> 0.014f; 7 -> 0.008f; 8 -> 0.0075f; 9 -> 0.012f; else -> 0.011f }
                     enemy.x -= turretSpeed * difficultyScale * dt
-                    val verticalStep = turretSpeed * 0.52f * dt
+                    val verticalStep = turretSpeed * (if (enemy.kind == 7) 1.2f else 0.52f) * dt
+                    if (enemy.kind == 7) {
+                        enemy.y += sin(animationTime * 1.6f + index) * 0.012f * dt
+                    } else enemy.y += (targetY - enemy.y).coerceIn(-verticalStep, verticalStep)
+                }
+                4 -> {
+                    // Healers move slowly and periodically restore a nearby ally.
+                    enemy.x -= 0.009f * difficultyScale * dt
+                    enemy.y += (targetY - enemy.y).coerceIn(-0.01f * dt, 0.01f * dt)
+                    enemy.fireCooldown -= dt
+                    if (enemy.fireCooldown <= 0f) {
+                        val ally = enemies.filter { it.alive && it !== enemy }
+                            .minByOrNull { distanceSquared(it.x, it.y, enemy.x, enemy.y) }
+                        if (ally != null && distanceSquared(ally.x, ally.y, enemy.x, enemy.y) < 0.18f * 0.18f) {
+                            ally.health = min(ally.health + 1, 8)
+                            addBurst(ally.x * viewW, ally.y * viewH, Color.rgb(90, 255, 150), 5)
+                            showMessage("HEALER RESTORED AN ENEMY")
+                        }
+                        enemy.fireCooldown = 2.6f
+                    }
+                }
+                5 -> {
+                    // Explosive enemies make a fast, direct approach to the shield.
+                    enemy.x -= 0.026f * difficultyScale * dt
+                    val verticalStep = 0.025f * difficultyScale * dt
                     enemy.y += (targetY - enemy.y).coerceIn(-verticalStep, verticalStep)
+                }
+                6 -> {
+                    // Teleporters periodically blink between arena coordinates.
+                    enemy.fireCooldown -= dt
+                    if (enemy.fireCooldown <= 0f && enemy.x < 0.84f) {
+                        enemy.x = (0.52f + ((index * 17 + levelId * 3) % 31) / 100f).coerceIn(0.52f, 0.83f)
+                        enemy.y = (0.22f + ((index * 11 + levelId) % 56) / 100f).coerceIn(0.22f, 0.78f)
+                        enemy.fireCooldown = 2.1f
+                        addBurst(enemy.x * viewW, enemy.y * viewH, cyan, 8)
+                    }
+                    enemy.x -= 0.010f * difficultyScale * dt
+                    enemy.y += (targetY - enemy.y).coerceIn(-0.009f * dt, 0.009f * dt)
                 }
             }
 
@@ -531,6 +685,10 @@ private class GameView(context: Context) : View(context) {
                 val reason = when (enemy.kind) {
                     0 -> "DRONE HIT THE WALL — YOU BURNED"
                     2 -> "SLIME REACHED THE WALL — YOU BURNED"
+                    4 -> "HEALER REACHED THE WALL — YOU BURNED"
+                    5 -> "EXPLOSIVE BREACHED THE WALL — YOU BURNED"
+                    6 -> "TELEPORTER REACHED THE WALL — YOU BURNED"
+                    7 -> "SNIPER BREACHED THE WALL — YOU BURNED"
                     else -> "TURRET BREACHED THE WALL — YOU BURNED"
                 }
                 showMessage(reason)
@@ -698,16 +856,50 @@ private class GameView(context: Context) : View(context) {
     private fun simulateWallGuardStep(dt: Float) {
         val radius = minDim * 0.022f
         val leftContact = viewW * 0.098f + radius
-        val right = viewW * 0.955f - radius
+        val rightContact = viewW * 0.902f - radius
+        val leftWall = viewW * 0.045f + radius
+        val rightWall = viewW * 0.955f - radius
         val top = viewH * 0.145f + radius
         val bottom = viewH * 0.935f - radius
+        val worldIndex = CampaignWorlds.indexForLevel(levelId)
+        when (worldIndex) {
+            2 -> {
+                // Azure Vault's icy surface preserves drift and adds a subtle slide.
+                velocityY += sin(animationTime * 1.35f + levelId * 0.17f) * minDim * 0.018f * dt
+            }
+            3 -> {
+                // Magenta Maze wind shifts the blade vertically in gusts.
+                velocityY += cos(animationTime * 1.1f + levelId) * minDim * 0.032f * dt
+            }
+            7 -> {
+                // Quantum Abyss water-like fields dampen momentum.
+                velocityX *= (1f - 0.06f * dt).coerceAtLeast(0.90f)
+                velocityY *= (1f - 0.045f * dt).coerceAtLeast(0.92f)
+            }
+            8 -> {
+                // Storm Citadel gusts change direction over time.
+                velocityY += sin(animationTime * 2.2f + levelId * 0.3f) * minDim * 0.035f * dt
+            }
+            9 -> {
+                // Low gravity in Celestial Forge softens vertical acceleration.
+                velocityY *= (1f - 0.025f * dt).coerceAtLeast(0.95f)
+            }
+        }
         var px = bladeX * viewW + velocityX * dt
         var py = bladeY * viewH + velocityY * dt
+        if (worldIndex == 6 && py > viewH * 0.86f && sin(animationTime * 1.2f) > 0.78f) {
+            fail("LAVA SURGE — STAY ABOVE THE HOT ZONE")
+            return
+        }
 
         var wallHit = false
-        if (px > right) {
-            px = right
+        if (!leftHandedMode && px > rightWall) {
+            px = rightWall
             velocityX = -abs(velocityX)
+            wallHit = true
+        } else if (leftHandedMode && px < leftWall) {
+            px = leftWall
+            velocityX = abs(velocityX)
             wallHit = true
         }
         if (py < top) {
@@ -724,25 +916,149 @@ private class GameView(context: Context) : View(context) {
             playNextRicochet()
         }
 
-        if (px < leftContact) {
+        for ((hazardIndex, hazard) in level.hazards.withIndex()) {
+            if (hazardIndex in collectedPowerUps &&
+                hazard.type in setOf("power_up", "breakable_wall", "switch", "key", "door")) continue
+            val center = hazardCenter(hazard, hazardIndex)
+            val hx = center.x * viewW
+            val hy = center.y * viewH
+            val halfW = max(hazard.width * viewW * 0.5f, radius)
+            val halfH = max(hazard.height * viewH * 0.5f, radius)
+            val hit = if (hazard.type == "rotating_laser") {
+                val angle = animationTime * 1.35f + hazardIndex * 0.4f
+                val lineX = cos(angle) * halfW
+                val lineY = sin(angle) * halfW
+                val edge = radius + max(density * 2f, hazard.height * viewH)
+                pointToSegmentDistanceSquared(px, py, hx - lineX, hy - lineY, hx + lineX, hy + lineY) <= edge * edge
+            } else {
+                px + radius >= hx - halfW && px - radius <= hx + halfW &&
+                    py + radius >= hy - halfH && py - radius <= hy + halfH
+            }
+            if (!hit) continue
+            when (hazard.type) {
+                "teleporter" -> {
+                    if (teleportCooldown <= 0f) {
+                        val destination = level.hazards.withIndex().firstOrNull {
+                            it.index != hazardIndex && it.value.type == "teleporter"
+                        }
+                        if (destination != null) {
+                            px = destination.value.x * viewW
+                            py = destination.value.y * viewH
+                            teleportCooldown = 0.85f
+                            addBurst(px, py, cyan, 12)
+                            playSfx("Optional - Extra Sounds/Teleport - Warp.wav")
+                            showMessage("PORTAL WARP")
+                        }
+                    }
+                }
+                "power_up" -> {
+                    if (collectedPowerUps.add(hazardIndex)) {
+                        bouncesLeft += 2
+                        score += 250
+                        activeEffects["score_multiplier"] = 8f
+                        addBurst(hx, hy, gold, 16)
+                        playSfx("Optional - Extra Sounds/Power-Up Collect.wav")
+                        showMessage("POWER-UP • +2 RETURNS")
+                    }
+                }
+                "switch" -> {
+                    collectedPowerUps.add(hazardIndex)
+                    switchActivated = true
+                    addBurst(hx, hy, gold, 12)
+                    playSfx("Core Gameplay SFX/Switch Activation.wav")
+                    showMessage("SWITCH ACTIVATED")
+                }
+                "key" -> {
+                    collectedPowerUps.add(hazardIndex)
+                    hasLevelKey = true
+                    addBurst(hx, hy, gold, 12)
+                    playSfx("Optional - Extra Sounds/Power-Up Collect.wav")
+                    showMessage("KEY COLLECTED")
+                }
+                "door" -> {
+                    if (hasLevelKey) {
+                        collectedPowerUps.add(hazardIndex)
+                        addBurst(hx, hy, cyan, 14)
+                        showMessage("DOOR UNLOCKED")
+                    } else {
+                        velocityX = -velocityX * 0.82f
+                        velocityY = -velocityY * 0.82f
+                        showMessage("DOOR LOCKED • FIND THE KEY")
+                    }
+                }
+                "breakable_wall" -> {
+                    collectedPowerUps.add(hazardIndex)
+                    addBurst(hx, hy, gold, 18)
+                    playSfx("Core Gameplay SFX/Crate Break.wav")
+                    showMessage("WALL BROKEN")
+                }
+                "gravity_well" -> {
+                    val dx = hx - px
+                    val dy = hy - py
+                    val distance = sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
+                    velocityX += dx / distance * minDim * 0.20f * dt
+                    velocityY += dy / distance * minDim * 0.20f * dt
+                    showMessage("GRAVITY WELL PULL")
+                }
+                "conveyor_belt" -> {
+                    velocityX += (if (px < hx) -1f else 1f) * minDim * 0.05f * dt
+                    showMessage("CONVEYOR BELT")
+                }
+                "rotating_laser" -> {
+                    fail("ROTATING LASER HIT")
+                    return
+                }
+                "sticky_wall" -> {
+                    fail("STICKY WALL — BLADE STUCK")
+                    return
+                }
+                else -> {
+                    fail(if (hazard.type.contains("spike")) "SPIKES HIT" else "HAZARD HIT")
+                    return
+                }
+            }
+            if (screen != GameScreen.PLAYING) return
+        }
+
+        if ((!leftHandedMode && px < leftContact) || (leftHandedMode && px > rightContact)) {
             val paddleCenter = guardPaddleY * viewH
+            val secondCenter = secondGuardPaddleY * viewH
             val paddleHalf = guardPaddleHalf()
-            if (abs(py - paddleCenter) <= paddleHalf + radius) {
-                px = leftContact
-                val offset = ((py - paddleCenter) / (paddleHalf + radius)).coerceIn(-1f, 1f)
+            val shieldContact = if (leftHandedMode) rightContact else leftContact
+            val firstCatch = abs(py - paddleCenter) <= paddleHalf + radius
+            val secondCatch = gameMode == "local_coop" && abs(py - secondCenter) <= paddleHalf + radius
+            val autoCatch = !firstCatch && !secondCatch && multiCatchCharges > 0
+            if (firstCatch || secondCatch || autoCatch) {
+                if (autoCatch) {
+                    multiCatchCharges--
+                    showMessage("MULTI-CATCH SAVE • " + multiCatchCharges + " LEFT")
+                }
+                px = shieldContact
+                val catchCenter = if (!firstCatch && secondCatch) secondCenter else if (autoCatch) py else paddleCenter
+                val offset = ((py - catchCenter) / (paddleHalf + radius)).coerceIn(-1f, 1f)
+                if (secondCatch && !firstCatch) showMessage("PLAYER 2 SAVE!")
                 val oldSpeed = sqrt(velocityX * velocityX + velocityY * velocityY)
                 val speed = (oldSpeed * 1.035f).coerceIn(
                     minDim * 0.46f * bladeSpeedScale(),
                     minDim * 0.90f * bladeSpeedScale()
                 )
                 val bounceAngle = offset * 1.10f
-                velocityX = abs(cos(bounceAngle) * speed).coerceAtLeast(minDim * 0.32f)
+                velocityX = (if (leftHandedMode) -1f else 1f) * abs(cos(bounceAngle) * speed).coerceAtLeast(minDim * 0.32f)
                 velocityY = sin(bounceAngle) * speed
                 comboCount = (comboCount + 1).coerceAtMost(99)
                 bestCombo = max(bestCombo, comboCount)
+                if (bestCombo > prefs.getInt("all_time_best_combo", 0)) prefs.edit().putInt("all_time_best_combo", bestCombo).apply()
                 comboWindow = 2.0f
                 addBurst(px, py, gold, 12)
                 showMessage("WALL SAVE!")
+                if (abs(offset) <= 0.16f) {
+                    val perfectCount = prefs.getInt("perfect_catches", 0) + 1
+                    prefs.edit().putInt("perfect_catches", perfectCount).apply()
+                    val bonus = 150 * max(comboCount, 1)
+                    score += bonus
+                    showMessage("PERFECT CATCH + " + bonus)
+                    addBurst(px, py, gold, 18)
+                }
                 playNextRicochet()
                 haptic()
             } else {
@@ -753,6 +1069,7 @@ private class GameView(context: Context) : View(context) {
             }
         }
 
+        val pendingSpawns = mutableListOf<EnemyState>()
         for ((index, enemy) in enemies.withIndex()) {
             if (!enemy.alive) continue
             val center = enemyCenter(enemy, index)
@@ -761,11 +1078,43 @@ private class GameView(context: Context) : View(context) {
             val hitRadius = radius + minDim * (if (enemy.kind == 3) 0.055f else 0.035f)
             if (distanceSquared(px, py, ex, ey) > hitRadius * hitRadius) continue
 
+            if (enemy.kind == 9 && enemy.shieldHits > 0) {
+                enemy.shieldHits--
+                val cameFromLeft = velocityX > 0f
+                velocityX = if (cameFromLeft) -abs(velocityX) else abs(velocityX)
+                px = if (cameFromLeft) ex - hitRadius else ex + hitRadius
+                addBurst(ex, ey, cyan, 14)
+                showMessage("ENERGY SHIELD BLOCKED HIT • " + enemy.shieldHits + " CHARGES")
+                playSfx("Optional - Extra Sounds/Shield Break.wav")
+                break
+            }
+            if (enemy.kind == 9 && enemy.shieldHits > 0) {
+                enemy.shieldHits--
+                val shieldHitFromLeft = velocityX > 0f
+                velocityX = if (shieldHitFromLeft) -abs(velocityX) else abs(velocityX)
+                px = if (shieldHitFromLeft) ex - hitRadius else ex + hitRadius
+                addBurst(ex, ey, cyan, 14)
+                showMessage("ENERGY SHIELD BLOCKED HIT • " + enemy.shieldHits + " CHARGES")
+                playSfx("Optional - Extra Sounds/Shield Break.wav")
+                break
+            }
             val cameFromLeft = velocityX > 0f
             enemy.health -= 1
             if (enemy.health <= 0) {
                 enemy.alive = false
-                registerTargetHit(if (enemy.kind == 3) 250 else 100, ex, ey, pink)
+                registerTargetHit(if (enemy.kind == 3) 500 else if (enemy.kind == 5) 300 else 100, ex, ey, pink)
+                if (enemy.kind == 2 && enemy.canSplit) {
+                    pendingSpawns.add(EnemyState((enemy.x - 0.03f).coerceIn(0.12f, 0.90f), (enemy.y - 0.035f).coerceIn(0.18f, 0.82f), true, 2, 1, 8f, false))
+                    pendingSpawns.add(EnemyState((enemy.x + 0.03f).coerceIn(0.12f, 0.90f), (enemy.y + 0.035f).coerceIn(0.18f, 0.82f), true, 2, 1, 8f, false))
+                }
+                if (enemy.kind == 5) {
+                    enemies.filter { it.alive && it !== enemy && distanceSquared(it.x, it.y, enemy.x, enemy.y) < 0.13f * 0.13f }
+                        .forEach { nearby ->
+                            nearby.health -= 2
+                            if (nearby.health <= 0) nearby.alive = false
+                        }
+                    addBurst(ex, ey, Color.rgb(255, 95, 25), 22)
+                }
                 playSfx(
                     if (index % 2 == 0) "Core Gameplay SFX/Enemy Slice (Variation 1).wav"
                     else "Core Gameplay SFX/Enemy Slice (Variation 2).wav"
@@ -782,21 +1131,51 @@ private class GameView(context: Context) : View(context) {
                     minDim * 0.46f * bladeSpeedScale(),
                     minDim * 0.90f * bladeSpeedScale()
                 )
-            velocityX = if (cameFromLeft) -abs(velocityX) else abs(velocityX)
+            val piercing = (activeEffects["piercing"] ?: 0f) > 0f
+            if (!piercing) velocityX = if (cameFromLeft) -abs(velocityX) else abs(velocityX)
             velocityY += ((py - ey) / hitRadius).coerceIn(-1f, 1f) * minDim * 0.16f
             val adjustedSpeed = sqrt(velocityX * velocityX + velocityY * velocityY).coerceAtLeast(1f)
             velocityX *= speed / adjustedSpeed
             velocityY *= speed / adjustedSpeed
-            px = if (cameFromLeft) ex - hitRadius else ex + hitRadius
+            px = if (piercing) {
+                if (cameFromLeft) ex + hitRadius else ex - hitRadius
+            } else {
+                if (cameFromLeft) ex - hitRadius else ex + hitRadius
+            }
             addBurst(ex, ey, pink, 14)
             haptic()
             break
         }
 
+        enemies.addAll(pendingSpawns)
         bladeX = (px / viewW).coerceIn(0f, 1f)
         bladeY = (py / viewH).coerceIn(0f, 1f)
         bladeTrail.add(PointF(px, py))
         while (bladeTrail.size > 24) bladeTrail.removeAt(0)
+
+        for (pickup in pickups) {
+            if (!pickup.active) continue
+            val cx = pickup.x * viewW
+            val cy = pickup.y * viewH
+            val pickupRadius = radius + minDim * 0.026f
+            if (distanceSquared(px, py, cx, cy) > pickupRadius * pickupRadius) continue
+            pickup.active = false
+            when (pickup.type) {
+                "shield_expand" -> activeEffects["shield_expand"] = 12f
+                "slow_time" -> activeEffects["slow_time"] = 8f
+                "score_multiplier" -> activeEffects["score_multiplier"] = 12f
+                "multi_catch" -> multiCatchCharges = (multiCatchCharges + 2).coerceAtMost(6)
+                "piercing" -> activeEffects["piercing"] = 8f
+                "extra_life" -> { activeEffects["extra_life"] = 30f; extraLifeUsed = false }
+                "blade_speed" -> activeEffects["blade_speed"] = 10f
+                "magnet" -> { score += 200; prefs.edit().putInt("coins", coinBalance() + 25).apply() }
+            }
+            if (pickup.type == "slow_time") { velocityX *= 0.72f; velocityY *= 0.72f }
+            if (pickup.type == "blade_speed") { velocityX *= 1.2f; velocityY *= 1.2f }
+            addBurst(cx, cy, gold, 18)
+            showMessage("POWER-UP: " + pickup.type.replace('_', ' ').uppercase())
+            playSfx("Optional - Extra Sounds/Power-Up Collect.wav")
+        }
 
         if (enemies.none { it.alive }) {
             completeLevel()
@@ -814,7 +1193,7 @@ private class GameView(context: Context) : View(context) {
         1 -> 0.105f
         3 -> 0.065f
         else -> 0.085f
-    } * (1f + upgradeLevel("shield_mod").coerceAtMost(2) * 0.14f)
+    } * (1f + upgradeLevel("shield_mod").coerceAtMost(2) * 0.14f) * (if ((activeEffects["shield_expand"] ?: 0f) > 0f) 1.55f else 1f)
 
     private fun clampGuardPaddleY(y: Float): Float {
         val half = guardPaddleHalf()
@@ -999,6 +1378,8 @@ private class GameView(context: Context) : View(context) {
         val bestShotsKey = bestShotsKey(levelId)
         val previousBestShots = prefs.getInt(bestShotsKey, Int.MAX_VALUE)
         prefs.edit()
+            .putInt("total_clears", prefs.getInt("total_clears", 0) + 1)
+            .putLong("total_play_seconds", prefs.getLong("total_play_seconds", 0L) + levelElapsedSeconds.toLong())
             .putInt("unlocked_level", newUnlocked)
             .putInt("coins", updatedCoinBalance)
             .putInt(starsKey, max(previousBest, earnedStars))
@@ -1007,6 +1388,10 @@ private class GameView(context: Context) : View(context) {
             .putInt("campaign_best_stars_difficulty_" + difficulty,
                 totalBestStarsAfter(levelId, max(previousBest, earnedStars)))
             .apply()
+        if (gameMode == "daily") prefs.edit().putInt("daily_best_score", max(prefs.getInt("daily_best_score", 0), score)).apply()
+        if (gameMode == "weekly") prefs.edit().putInt("weekly_best_score", max(prefs.getInt("weekly_best_score", 0), score)).apply()
+        saveReplayTrace()
+        if (gameMode == "speedrun") prefs.edit().putFloat("best_speedrun_seconds", min(prefs.getFloat("best_speedrun_seconds", Float.MAX_VALUE), levelElapsedSeconds)).apply()
         screen = if (levelId >= levels.size) GameScreen.CAMPAIGN_COMPLETE else GameScreen.WON
         playSfx("Core Gameplay SFX/Level Complete.wav")
         if (earnedStars > previousBest) playSfx("UI & Feedback SFX/Star - Score Earned.wav")
@@ -1015,6 +1400,28 @@ private class GameView(context: Context) : View(context) {
 
     private fun fail(reason: String) {
         if (screen != GameScreen.PLAYING) return
+        if (gameMode == "zen" || gameMode == "practice") {
+            flying = false
+            aiming = false
+            velocityX = 0f
+            velocityY = 0f
+            bladeX = 0.145f
+            bladeY = guardPaddleY
+            showMessage("PRACTICE RESET • NO RUN LOST")
+            launchWallGuardBlade()
+            return
+        }
+        if (!extraLifeUsed && (activeEffects["extra_life"] ?: 0f) > 0f) {
+            extraLifeUsed = true
+            activeEffects.remove("extra_life")
+            enemies.filter { it.alive && it.x < 0.18f }.forEach { it.x = 0.78f; it.y = guardPaddleY }
+            flying = false
+            launchWallGuardBlade()
+            showMessage("EXTRA LIFE USED")
+            return
+        }
+        saveReplayTrace()
+        prefs.edit().putInt("total_fails", prefs.getInt("total_fails", 0) + 1).apply()
         flying = false
         aiming = false
         velocityX = 0f
@@ -1032,7 +1439,7 @@ private class GameView(context: Context) : View(context) {
         if (wallGuardMode) {
             // Make every campaign stage playable in the arcade format, even
             // when its legacy puzzle JSON did not define any enemies.
-            val targetCount = (3 + (levelId - 1) / 2).coerceAtMost(12)
+            val targetCount = (if (gameMode == "editor_test") editorTargetCount else if (gameMode == "boss_rush") 3 else (3 + (levelId - 1) / 2)).coerceAtMost(12)
             val points = (0 until targetCount).map { index ->
                 val column = index % 4
                 val row = index / 4
@@ -1047,15 +1454,89 @@ private class GameView(context: Context) : View(context) {
                 spawn = PointN(0.145f, 0.5f),
                 enemies = points,
                 crates = emptyList(),
-                hazards = emptyList(),
+                hazards = level.hazards,
                 requiresAllTargets = true,
                 requiresSwitch = false
             )
             guardPaddleY = 0.5f
+            secondGuardPaddleY = 0.5f
+            secondPointerId = -1
+            primaryPointerId = -1
         }
-        enemies = level.enemies.mapIndexed { index, point ->
-            EnemyState(point.x, point.y, true, enemyKindForLevel(levelId), enemyHealthForLevel(levelId, index), 1.2f + (index % 3) * 0.6f, true)
+        if (gameMode == "editor_test") {
+            val draftHazards = when (editorHazardId) {
+                1 -> listOf(HazardState("spikes", 0.50f, 0.86f, 0.62f, 0.035f))
+                2 -> listOf(HazardState("laser", 0.50f, 0.48f, 0.64f, 0.018f))
+                3 -> listOf(HazardState("moving_hazard", 0.50f, 0.62f, 0.38f, 0.03f))
+                4 -> listOf(
+                    HazardState("teleporter", 0.22f, 0.34f, 0.075f, 0.075f),
+                    HazardState("teleporter", 0.78f, 0.66f, 0.075f, 0.075f)
+                )
+                5 -> listOf(HazardState("sticky_wall", 0.75f, 0.53f, 0.085f, 0.21f))
+                else -> emptyList()
+            }
+            level = level.copy(hazards = draftHazards)
+        }
+        if (gameMode == "procedural") {
+            val hazardRandom = kotlin.random.Random(levelId * 997 + prefs.getInt("procedural_seed", 23) + 41)
+            val generatedHazards = mutableListOf<HazardState>()
+            val hazardOptions = listOf("spikes", "moving_spikes", "laser", "rotating_laser", "moving_hazard", "sticky_wall", "gravity_well", "conveyor_belt", "breakable_wall", "power_up")
+            repeat(2) { index ->
+                val type = hazardOptions[hazardRandom.nextInt(hazardOptions.size)]
+                generatedHazards.add(
+                    HazardState(type,
+                        0.32f + hazardRandom.nextFloat() * 0.40f,
+                        0.28f + hazardRandom.nextFloat() * 0.48f,
+                        when (type) { "spikes", "laser", "moving_hazard" -> 0.28f + hazardRandom.nextFloat() * 0.28f; else -> 0.05f + hazardRandom.nextFloat() * 0.06f },
+                        when (type) { "sticky_wall" -> 0.14f; "laser" -> 0.018f; "spikes", "moving_hazard" -> 0.025f; else -> 0.055f }
+                    )
+                )
+            }
+            if (hazardRandom.nextBoolean()) {
+                generatedHazards.add(HazardState("teleporter", 0.22f, 0.35f, 0.075f, 0.075f))
+                generatedHazards.add(HazardState("teleporter", 0.78f, 0.67f, 0.075f, 0.075f))
+            }
+            level = level.copy(hazards = generatedHazards)
+        }
+
+        val activeEnemyPoints = when {
+            gameMode == "procedural" -> {
+                val seeded = kotlin.random.Random(levelId * 739 + prefs.getInt("procedural_seed", 23))
+                (0 until (3 + seeded.nextInt(10))).map {
+                    PointN(0.38f + seeded.nextFloat() * 0.52f, 0.20f + seeded.nextFloat() * 0.62f)
+                }
+            }
+            gameMode == "editor_test" -> (0 until editorTargetCount).map { i ->
+                PointN(0.42f + (i % 4) * 0.13f, 0.22f + (i / 4) * 0.22f)
+            }
+            else -> level.enemies
+        }
+        enemies = activeEnemyPoints.mapIndexed { index, point ->
+            val bossRush = gameMode == "boss_rush"
+            val finalBoss = levelId == levels.size && index == 0
+            val kind = if (bossRush || finalBoss) 3 else enemyKindForCampaignLevel(levelId, index)
+            EnemyState(point.x, point.y, true, kind,
+                if (bossRush) 10 + index * 2 else if (finalBoss) 18 else enemyHealthForLevel(levelId, index),
+                1.2f + (index % 3) * 0.6f, true, shieldHits = if (kind == 9) 2 else 0)
         }.toMutableList()
+        pickups.clear()
+        activeEffects.clear()
+        extraLifeUsed = false
+        multiCatchCharges = 0
+        hasLevelKey = false
+        val pickupTypes = listOf("shield_expand", "slow_time", "multi_catch", "score_multiplier", "extra_life", "blade_speed", "magnet", "piercing")
+        val pickupCount = when {
+            gameMode == "editor_test" -> 0
+            gameMode == "procedural" -> 2
+            levelId % 2 == 0 -> 1
+            else -> 0
+        }
+        repeat(pickupCount) { i ->
+            val type = if (gameMode == "editor_test" && editorHazardId > 0)
+                when (editorHazardId) { 1 -> "score_multiplier"; 2 -> "slow_time"; 3 -> "blade_speed"; 4 -> "magnet"; else -> "shield_expand" }
+            else pickupTypes[(levelId + i) % pickupTypes.size]
+            pickups.add(PickupState(type, 0.885f, if (i % 2 == 0) 0.22f else 0.79f))
+        }
         crates = level.crates.map { CrateState(it.x, it.y) }.toMutableList()
         bladeX = if (wallGuardMode) 0.145f else level.spawn.x
         bladeY = if (wallGuardMode) guardPaddleY else level.spawn.y
@@ -1098,6 +1579,9 @@ private class GameView(context: Context) : View(context) {
             showMessage("CLEAR PREVIOUS LEVELS TO UNLOCK THIS")
             return
         }
+        prefs.edit().putInt("total_runs", prefs.getInt("total_runs", 0) + 1).apply()
+        runTrace.clear()
+        traceTimer = 0f
         loadLevel(id)
         screen = GameScreen.PLAYING
         if (wallGuardMode) launchWallGuardBlade()
@@ -1143,37 +1627,51 @@ private class GameView(context: Context) : View(context) {
     }
 
     private fun applyTheme() {
-        when (themeId.coerceIn(0, 2)) {
+        when (themeId.coerceIn(0, 5)) {
             1 -> {
-                cyan = Color.rgb(75, 255, 150)
-                pink = Color.rgb(255, 105, 75)
-                gold = Color.rgb(220, 255, 90)
-                dark = Color.rgb(5, 18, 18)
-                muted = Color.rgb(90, 146, 128)
-                grid = Color.rgb(17, 50, 47)
+                cyan = Color.rgb(75, 255, 150); pink = Color.rgb(255, 105, 75)
+                gold = Color.rgb(220, 255, 90); dark = Color.rgb(5, 18, 18)
+                muted = Color.rgb(90, 146, 128); grid = Color.rgb(17, 50, 47)
             }
             2 -> {
-                cyan = Color.rgb(180, 130, 255)
-                pink = Color.rgb(255, 90, 190)
-                gold = Color.rgb(255, 190, 100)
-                dark = Color.rgb(13, 7, 25)
-                muted = Color.rgb(132, 112, 165)
-                grid = Color.rgb(41, 25, 63)
+                cyan = Color.rgb(180, 130, 255); pink = Color.rgb(255, 90, 190)
+                gold = Color.rgb(255, 190, 100); dark = Color.rgb(13, 7, 25)
+                muted = Color.rgb(132, 112, 165); grid = Color.rgb(41, 25, 63)
+            }
+            3 -> {
+                cyan = Color.rgb(255, 115, 90); pink = Color.rgb(255, 65, 85)
+                gold = Color.rgb(255, 206, 95); dark = Color.rgb(24, 7, 14)
+                muted = Color.rgb(165, 98, 112); grid = Color.rgb(58, 18, 30)
+            }
+            4 -> {
+                cyan = Color.rgb(255, 205, 70); pink = Color.rgb(255, 125, 35)
+                gold = Color.rgb(255, 237, 160); dark = Color.rgb(22, 12, 4)
+                muted = Color.rgb(155, 125, 88); grid = Color.rgb(58, 37, 12)
+            }
+            5 -> {
+                cyan = Color.rgb(70, 210, 190); pink = Color.rgb(55, 145, 255)
+                gold = Color.rgb(120, 235, 255); dark = Color.rgb(3, 13, 27)
+                muted = Color.rgb(90, 137, 165); grid = Color.rgb(14, 39, 60)
             }
             else -> {
-                cyan = Color.rgb(45, 235, 255)
-                pink = Color.rgb(255, 65, 150)
-                gold = Color.rgb(255, 199, 83)
-                dark = Color.rgb(7, 10, 22)
-                muted = Color.rgb(94, 120, 150)
-                grid = Color.rgb(22, 35, 58)
+                cyan = Color.rgb(45, 235, 255); pink = Color.rgb(255, 65, 150)
+                gold = Color.rgb(255, 199, 83); dark = Color.rgb(7, 10, 22)
+                muted = Color.rgb(94, 120, 150); grid = Color.rgb(22, 35, 58)
             }
+        }
+        if (colorblindMode) {
+            cyan = Color.rgb(0, 114, 178)
+            pink = Color.rgb(230, 159, 0)
+            gold = Color.rgb(240, 228, 66)
         }
     }
 
     private fun themeName(): String = when (themeId) {
         1 -> "GREEN"
         2 -> "VIOLET"
+        3 -> "CRIMSON"
+        4 -> "SOLAR"
+        5 -> "OCEAN"
         else -> "CYAN"
     }
 
@@ -1358,11 +1856,13 @@ private class GameView(context: Context) : View(context) {
 
     private fun updateMusicForScreen() {
         val target = when (screen) {
-            GameScreen.MENU, GameScreen.WORLDS, GameScreen.LEVELS, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY, GameScreen.SHOP ->
+            GameScreen.MENU, GameScreen.WORLDS, GameScreen.LEVELS, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY, GameScreen.SHOP, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.EDITOR, GameScreen.ACCESSIBILITY, GameScreen.EXTRAS, GameScreen.LOCAL_SCORES, GameScreen.REPLAYS, GameScreen.SEASONAL, GameScreen.ONLINE_FEATURES ->
                 "Music & Ambience/Main Menu Theme.wav"
             GameScreen.PLAYING, GameScreen.PAUSED -> "Music & Ambience/Gameplay Background.wav"
             GameScreen.WON, GameScreen.CAMPAIGN_COMPLETE -> "Music & Ambience/Victory Theme.wav"
             GameScreen.FAILED -> "Music & Ambience/Game Over Theme.wav"
+            GameScreen.JUKEBOX -> musicTracks[jukeboxTrackId]
+            GameScreen.PHOTO_MODE -> "Music & Ambience/Gameplay Background.wav"
         }
         if (!soundEnabled || audioLifecyclePaused) {
             if (musicPrepared) try { musicPlayer?.pause() } catch (_: IllegalStateException) { }
@@ -1452,11 +1952,11 @@ private class GameView(context: Context) : View(context) {
         drawAsset(canvas, "App Icon & Logo/Game Logo.png", RectF(viewW * 0.16f, viewH * 0.13f, viewW * 0.84f, viewH * 0.29f), 255)
         drawText(canvas, "BOUNCE OFF ENEMIES  •  GUARD THE LEFT WALL", 0.5f, 0.435f, 0.020f, muted, Paint.Align.CENTER)
         drawText(canvas, "◈ " + coinBalance(), 0.91f, 0.105f, 0.026f, gold, Paint.Align.RIGHT)
-        drawButton(canvas, 0.10f, 0.456f, 0.90f, 0.523f, "PLAY CAMPAIGN", cyan)
-        drawButton(canvas, 0.10f, 0.532f, 0.90f, 0.599f, "LEVEL SELECT", gold)
-        drawButton(canvas, 0.10f, 0.608f, 0.90f, 0.675f, "HELP", pink)
-        drawButton(canvas, 0.10f, 0.684f, 0.90f, 0.751f, "BLADE SHOP", gold)
-        drawButton(canvas, 0.10f, 0.760f, 0.90f, 0.827f, "SETTINGS", cyan)
+        drawButton(canvas, 0.10f, 0.456f, 0.90f, 0.523f, "PLAY CAMPAIGN", if (menuSelection == 0) gold else cyan)
+        drawButton(canvas, 0.10f, 0.532f, 0.90f, 0.599f, "LEVEL SELECT", if (menuSelection == 1) pink else gold)
+        drawButton(canvas, 0.10f, 0.608f, 0.90f, 0.675f, "MORE FEATURES", if (menuSelection == 2) cyan else pink)
+        drawButton(canvas, 0.10f, 0.684f, 0.90f, 0.751f, "BLADE SHOP", if (menuSelection == 3) pink else gold)
+        drawButton(canvas, 0.10f, 0.760f, 0.90f, 0.827f, "SETTINGS", if (menuSelection == 4) gold else cyan)
         val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
         val bestTotal = totalBestStarsAfter(0, 0)
         drawText(canvas, "UNLOCKED  " + unlocked + "/" + levels.size + "     BEST STARS  " + bestTotal + "/" + (levels.size * 3),
@@ -1514,7 +2014,7 @@ private class GameView(context: Context) : View(context) {
     private fun drawWorldSelect(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         drawText(canvas,"CHOOSE YOUR WORLD",0.5f,0.285f,0.058f,Color.WHITE,Paint.Align.CENTER)
-        drawText(canvas,"50 LEVELS  •  5 WORLDS  •  OFFLINE CAMPAIGN",0.5f,0.335f,0.019f,muted,Paint.Align.CENTER)
+        drawText(canvas,"100 LEVELS  •  10 WORLDS  •  OFFLINE CAMPAIGN",0.5f,0.335f,0.019f,muted,Paint.Align.CENTER)
         val unlocked=prefs.getInt("unlocked_level",1).coerceIn(1,levels.size)
         for(w in 0 until CampaignWorlds.WORLD_COUNT){
             val first=CampaignWorlds.firstLevelForWorld(w); val available=unlocked>=first; val top=0.375f+w*0.088f
@@ -1592,6 +2092,22 @@ private class GameView(context: Context) : View(context) {
             drawAsset(canvas, "Effects & Particles/Combo Text.png", RectF(viewW * 0.34f, viewH * 0.82f, viewW * 0.66f, viewH * 0.89f), 240)
         }
         if (aiming && !flying) drawAim(canvas)
+        for (pickup in pickups) if (pickup.active) {
+            val px = pickup.x * viewW
+            val py = pickup.y * viewH
+            paint.style = Paint.Style.FILL
+            paint.color = gold
+            paint.setShadowLayer(density * 12f, 0f, 0f, gold)
+            canvas.drawCircle(px, py, minDim * 0.024f, paint)
+            paint.clearShadowLayer()
+            paint.color = dark
+            paint.textAlign = Paint.Align.CENTER
+            paint.textSize = minDim * 0.023f
+            canvas.drawText(when (pickup.type) {
+                "shield_expand" -> "S"; "slow_time" -> "T"; "multi_catch" -> "M"; "piercing" -> "P"
+                "score_multiplier" -> "2x"; "extra_life" -> "+"; "blade_speed" -> "B"; else -> "C"
+            }, px, py + paint.textSize * 0.34f, paint)
+        }
         val bladePx = bladeX * viewW
         val bladePy = bladeY * viewH
         canvas.save()
@@ -1623,7 +2139,8 @@ private class GameView(context: Context) : View(context) {
     private fun drawWallGuardGame(canvas: Canvas) {
         drawText(canvas, "BOUNCE BLADE", 0.07f, 0.047f, 0.025f, Color.WHITE)
         drawText(canvas, "LEVEL " + levelId + "/" + levels.size, 0.49f, 0.047f, 0.022f, cyan, Paint.Align.CENTER)
-        drawButton(canvas, 0.825f, 0.027f, 0.97f, 0.110f, "Ⅱ", pink)
+        if (leftHandedMode) drawButton(canvas, 0.03f, 0.027f, 0.175f, 0.110f, "Ⅱ", pink)
+        else drawButton(canvas, 0.825f, 0.027f, 0.97f, 0.110f, "Ⅱ", pink)
         drawText(canvas, "SCORE $score", 0.07f, 0.092f, 0.019f, gold)
         drawText(canvas, "TARGETS " + enemies.count { it.alive }, 0.50f, 0.092f, 0.019f, pink, Paint.Align.CENTER)
         drawText(canvas, "SAVE STREAK $comboCount", 0.78f, 0.092f, 0.016f, cyan, Paint.Align.RIGHT)
@@ -1632,6 +2149,7 @@ private class GameView(context: Context) : View(context) {
         drawAssetCover(canvas, "Backgrounds & Environments/Gameplay Background.png", arena, 230)
         drawAsset(canvas, "UI Elements/UI Panel.png",
             RectF(viewW * 0.025f, viewH * 0.012f, viewW * 0.975f, viewH * 0.125f), 115)
+        drawEnvironmentEffects(canvas)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(2f, density * 2f)
         paint.color = cyan
@@ -1650,6 +2168,7 @@ private class GameView(context: Context) : View(context) {
         }
         paint.style = Paint.Style.FILL
 
+        drawHazards(canvas)
         drawBladeTrail(canvas)
         drawParticles(canvas)
         val now = System.nanoTime()
@@ -1662,20 +2181,20 @@ private class GameView(context: Context) : View(context) {
         // Player-controlled barrier occupying a short segment of the left wall.
         val paddleHalf = guardPaddleHalf()
         val paddleCenter = guardPaddleY * viewH
-        val paddle = RectF(
-            viewW * 0.043f,
-            paddleCenter - paddleHalf,
-            viewW * 0.098f,
-            paddleCenter + paddleHalf
+        val paddle = if (leftHandedMode) RectF(
+            viewW * 0.902f, paddleCenter - paddleHalf, viewW * 0.957f, paddleCenter + paddleHalf
+        ) else RectF(
+            viewW * 0.043f, paddleCenter - paddleHalf, viewW * 0.098f, paddleCenter + paddleHalf
         )
         paint.style = Paint.Style.FILL
-        paint.color = Color.argb(105, Color.red(cyan), Color.green(cyan), Color.blue(cyan))
-        paint.setShadowLayer(density * 13f, 0f, 0f, cyan)
+        val shieldColor = shieldSkinColor()
+        paint.color = Color.argb(105, Color.red(shieldColor), Color.green(shieldColor), Color.blue(shieldColor))
+        paint.setShadowLayer(density * 13f, 0f, 0f, shieldColor)
         canvas.drawRoundRect(paddle, density * 8f, density * 8f, paint)
         paint.clearShadowLayer()
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(2f, density * 2.5f)
-        paint.color = cyan
+        paint.color = shieldSkinColor()
         canvas.drawRoundRect(paddle, density * 8f, density * 8f, paint)
         paint.style = Paint.Style.FILL
         paint.color = Color.WHITE
@@ -1684,6 +2203,24 @@ private class GameView(context: Context) : View(context) {
                 paddle.centerX() + density, paddle.bottom - density * 7f),
             density, density, paint
         )
+        if (gameMode == "local_coop") {
+            val secondCenter = secondGuardPaddleY * viewH
+            val secondPaddle = if (leftHandedMode) RectF(viewW * 0.902f, secondCenter - paddleHalf,
+                viewW * 0.957f, secondCenter + paddleHalf)
+            else RectF(viewW * 0.043f, secondCenter - paddleHalf, viewW * 0.098f, secondCenter + paddleHalf)
+            paint.style = Paint.Style.FILL
+            paint.color = Color.argb(if (secondPointerId >= 0) 145 else 70, Color.red(pink), Color.green(pink), Color.blue(pink))
+            paint.setShadowLayer(density * 9f, 0f, 0f, pink)
+            canvas.drawRoundRect(secondPaddle, density * 8f, density * 8f, paint)
+            paint.clearShadowLayer()
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = max(2f, density * 2f)
+            paint.color = pink
+            canvas.drawRoundRect(secondPaddle, density * 8f, density * 8f, paint)
+            paint.style = Paint.Style.FILL
+            drawText(canvas, "P2", if (leftHandedMode) 0.88f else 0.12f,
+                (secondCenter - paddleHalf - density * 3f) / viewH, 0.014f, pink, Paint.Align.CENTER)
+        }
 
         val bladePx = bladeX * viewW
         val bladePy = bladeY * viewH
@@ -1704,21 +2241,101 @@ private class GameView(context: Context) : View(context) {
                 novaCooldownRemaining <= 0f -> "NOVA READY"
                 else -> "NOVA " + (novaCooldownRemaining + 0.99f).toInt() + "s"
             }
-            drawButton(canvas, 0.775f, 0.790f, 0.98f, 0.935f, novaLabel, gold, true)
+            val novaLeft = if (oneHandedMode) 0.01f else 0.02f
+            val novaRight = if (oneHandedMode) 0.275f else 0.225f
+            val novaTop = if (oneHandedMode) 0.755f else 0.790f
+            val novaBottom = if (oneHandedMode) 0.945f else 0.935f
+            val novaLeftRight = if (oneHandedMode) 0.725f else 0.775f
+            val novaRightRight = if (oneHandedMode) 0.99f else 0.98f
+            if (leftHandedMode) drawButton(canvas, novaLeft, novaTop, novaRight, novaBottom, novaLabel, gold, true)
+            else drawButton(canvas, novaLeftRight, novaTop, novaRightRight, novaBottom, novaLabel, gold, true)
         }
         if (System.nanoTime() < messageUntil && message.isNotBlank()) {
             drawText(canvas, message, 0.5f, 0.885f, 0.020f, gold, Paint.Align.CENTER)
         }
     }
 
+
+    private fun drawEnvironmentEffects(canvas: Canvas) {
+        val world = CampaignWorlds.indexForLevel(levelId)
+        paint.style = Paint.Style.FILL
+        when (world) {
+            5 -> {
+                paint.color = Color.argb(22, 100, 38, 150)
+                canvas.drawRect(viewW * 0.035f, viewH * 0.135f, viewW * 0.965f, viewH * 0.94f, paint)
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = max(1f, density)
+                paint.color = Color.argb(70, 177, 105, 255)
+                for (i in 0..5) {
+                    val x = viewW * (0.12f + i * 0.15f)
+                    val pulse = 0.018f + abs(sin(animationTime * 0.7f + i)) * 0.03f
+                    canvas.drawCircle(x, viewH * (0.3f + (i % 3) * 0.22f), minDim * pulse, paint)
+                }
+            }
+            6 -> {
+                paint.color = Color.argb(28, 250, 80, 12)
+                canvas.drawRect(viewW * 0.035f, viewH * 0.82f, viewW * 0.965f, viewH * 0.94f, paint)
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = max(1f, density)
+                paint.color = Color.argb(115, 255, 155, 50)
+                for (i in 0..8) {
+                    val x = viewW * (0.08f + i * 0.105f)
+                    val sway = sin(animationTime * 1.1f + i * 0.8f) * minDim * 0.018f
+                    canvas.drawLine(x, viewH * 0.90f, x + sway, viewH * (0.72f - (i % 3) * 0.04f), paint)
+                }
+            }
+            7 -> {
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = max(1f, density)
+                for (i in 0..2) {
+                    val cx = viewW * (0.32f + i * 0.28f)
+                    val cy = viewH * (0.33f + (i % 2) * 0.34f)
+                    val radius = minDim * (0.018f + ((animationTime * 0.05f + i * 0.02f) % 0.045f))
+                    paint.color = Color.argb(65, 70, 180, 255)
+                    canvas.drawCircle(cx, cy, radius, paint)
+                    canvas.drawCircle(cx, cy, radius * 1.6f, paint)
+                }
+            }
+            8 -> {
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = max(1f, density)
+                paint.color = Color.argb(80, 170, 210, 255)
+                for (i in 0..17) {
+                    val x = viewW * (((i * 53 + 17) % 997) / 997f)
+                    val phase = (animationTime * (0.35f + (i % 4) * 0.06f) + i * 0.071f) % 1f
+                    val y = viewH * (0.14f + phase * 0.77f)
+                    val drift = minDim * 0.018f
+                    canvas.drawLine(x, y, x - drift, y + minDim * 0.025f, paint)
+                }
+            }
+            9 -> {
+                paint.style = Paint.Style.FILL
+                for (i in 0..13) {
+                    val x = viewW * (((i * 73 + 11) % 991) / 991f)
+                    val y = viewH * (0.16f + ((i * 43 + 7) % 771) / 1000f)
+                    val alpha = (45 + 45 * (0.5f + 0.5f * sin(animationTime * 2f + i))).toInt().coerceIn(25, 90)
+                    paint.color = Color.argb(alpha, 255, 223, 133)
+                    canvas.drawCircle(x, y, max(1.2f * density, minDim * 0.002f), paint)
+                }
+            }
+        }
+        paint.style = Paint.Style.FILL
+    }
+
     private fun drawHazards(canvas: Canvas) {
         for((index,hazard) in level.hazards.withIndex()) {
-            if(hazard.type=="power_up" && index in collectedPowerUps) continue
+            if(index in collectedPowerUps && hazard.type in setOf("power_up","breakable_wall","switch","key","door")) continue
             val c=hazardCenter(hazard,index);val x=c.x*viewW;val y=c.y*viewH
             val hw=hazard.width*viewW/2f;val h=max(hazard.height*viewH,minDim*0.018f)
             when(hazard.type){
                 "teleporter"->{paint.style=Paint.Style.STROKE;paint.strokeWidth=max(2f,density*2f);paint.color=cyan;paint.setShadowLayer(density*10f,0f,0f,cyan);canvas.drawCircle(x,y,max(minDim*0.025f,hw),paint);canvas.drawCircle(x,y,max(minDim*0.014f,hw*0.55f),paint);paint.clearShadowLayer();drawAssetCentered(canvas,"Gameplay Sprites/Portal.png",x,y,max(minDim*0.075f,hw*2.0f))}
                 "power_up"->{paint.style=Paint.Style.FILL;paint.color=gold;paint.setShadowLayer(density*9f,0f,0f,gold);canvas.drawCircle(x,y,max(h,hw)*1.18f,paint);paint.clearShadowLayer();drawAssetCentered(canvas,"UI Elements/Star Icon.png",x,y,max(h,hw)*2.2f)}
+                "rotating_laser"->{val theta=animationTime*1.35f+index*0.4f;val dx=cos(theta)*hw;val dy=sin(theta)*hw;paint.style=Paint.Style.STROKE;paint.strokeWidth=max(3f,density*3f);paint.color=pink;paint.setShadowLayer(density*10f,0f,0f,pink);canvas.drawLine(x-dx,y-dy,x+dx,y+dy,paint);paint.clearShadowLayer()}
+                "gravity_well"->{paint.style=Paint.Style.STROKE;paint.strokeWidth=max(1.5f,density*1.5f);paint.color=Color.rgb(100,135,255);paint.setShadowLayer(density*9f,0f,0f,paint.color);canvas.drawCircle(x,y,max(hw,minDim*0.035f),paint);canvas.drawCircle(x,y,max(hw*1.6f,minDim*0.055f),paint);canvas.drawCircle(x,y,max(hw*2.1f,minDim*0.075f),paint);paint.clearShadowLayer()}
+                "conveyor_belt"->{paint.style=Paint.Style.FILL;paint.color=Color.rgb(45,70,95);canvas.drawRoundRect(x-hw,y-h,x+hw,y+h,density*5f,density*5f,paint);paint.color=cyan;for(i in 0..4){val ax=x-hw+(2f*hw)*(i+0.5f)/5f;canvas.drawLine(ax-density*3f,y-density*3f,ax+density*3f,y+density*3f,paint)}}
+                "switch"->{paint.style=Paint.Style.STROKE;paint.strokeWidth=max(2f,density*2f);paint.color=gold;canvas.drawCircle(x,y,max(minDim*0.025f,hw),paint);drawAssetCentered(canvas,"Gameplay Sprites/Switch.png",x,y,minDim*0.07f)}
+                "key"->{paint.style=Paint.Style.STROKE;paint.strokeWidth=max(2f,density*2f);paint.color=gold;paint.setShadowLayer(density*6f,0f,0f,gold);canvas.drawCircle(x,y,max(minDim*0.015f,hw*0.4f),paint);canvas.drawLine(x+hw*0.3f,y,x+hw*1.8f,y,paint);canvas.drawLine(x+hw*1.25f,y,x+hw*1.25f,y+h,paint);paint.clearShadowLayer()}
+                "door"->{paint.style=Paint.Style.FILL;paint.color=if(hasLevelKey) cyan else Color.rgb(115,65,70);canvas.drawRoundRect(x-hw,y-h*1.6f,x+hw,y+h*1.6f,density*4f,density*4f,paint);paint.color=gold;canvas.drawCircle(x+hw*0.5f,y,density*2f,paint)}
                 else->{paint.style=Paint.Style.FILL;paint.color=when(hazard.type){"sticky_wall"->Color.rgb(95,48,145);"moving_hazard"->Color.rgb(80,65,22);else->Color.rgb(80,22,51)};canvas.drawRoundRect(x-hw,y-h/2f,x+hw,y+h/2f,density*4f,density*4f,paint);paint.style=Paint.Style.STROKE;paint.color=when(hazard.type){"sticky_wall"->Color.rgb(190,105,255);"moving_hazard"->gold;else->pink};paint.strokeWidth=density*when(hazard.type){"laser"->3.5f;"sticky_wall"->4f;else->3f};paint.setShadowLayer(density*7f,0f,0f,paint.color);canvas.drawLine(x-hw,y,x+hw,y,paint);paint.clearShadowLayer();if(hazard.type.contains("spike")){paint.style=Paint.Style.FILL;paint.color=pink;val count=max(4,(hazard.width*22f).toInt());for(i in 0 until count){val sx=x-hw+2f*hw*i/count;val nx=min(x+hw,sx+max(density*6f,2f*hw/count));val p=Path();p.moveTo(sx,y+h/2f);p.lineTo((sx+nx)/2f,y-h/2f);p.lineTo(nx,y+h/2f);p.close();canvas.drawPath(p,paint)}}else if(hazard.type=="moving_hazard"){paint.style=Paint.Style.FILL;paint.color=gold;canvas.drawCircle(x,y,density*5f,paint)}}
             }
         }
@@ -1760,15 +2377,42 @@ private class GameView(context: Context) : View(context) {
     private fun drawEnemy(canvas: Canvas, enemy: EnemyState, index: Int) {
         val c = enemyCenter(enemy, index)
         val x = c.x * viewW; val y = c.y * viewH
-        val r = minDim * when (enemy.kind) { 1 -> 0.033f; 2 -> if (enemy.canSplit) 0.031f else 0.020f; 3 -> 0.052f; else -> 0.030f }
+        val r = minDim * when (enemy.kind) {
+            1, 7 -> 0.033f
+            2 -> if (enemy.canSplit) 0.031f else 0.020f
+            3 -> 0.052f
+            5 -> 0.038f
+            6 -> 0.034f
+            8 -> 0.040f
+            else -> 0.030f
+        }
         val path = when (enemy.kind) {
-            1 -> "Gameplay Sprites/Enemy Turret.png"
+            1, 7, 8, 9 -> "Gameplay Sprites/Enemy Turret.png"
             2 -> "Gameplay Sprites/Enemy Slime.png"
             3 -> "Gameplay Sprites/Enemy Turret.png"
+            6 -> "Gameplay Sprites/Portal.png"
             else -> "Gameplay Sprites/Enemy Drone.png"
         }
-        val drawSize = if (enemy.kind == 3) r * 3.2f else r * 2.35f
-        val isTurret = enemy.kind == 1 || enemy.kind == 3
+        val drawSize = when (enemy.kind) { 3 -> r * 3.2f; 5 -> r * 2.7f; 6 -> r * 2.8f; 8 -> r * 2.6f; else -> r * 2.35f }
+        val isTurret = enemy.kind == 1 || enemy.kind == 3 || enemy.kind == 7 || enemy.kind == 8 || enemy.kind == 9
+        if (enemySkin > 0) {
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = max(2f, density * 2.2f)
+            paint.color = enemySkinColor()
+            paint.setShadowLayer(density * 8f, 0f, 0f, enemySkinColor())
+            canvas.drawCircle(x, y, drawSize * 0.68f, paint)
+            paint.clearShadowLayer()
+        }
+        if (enemy.kind == 9 && enemy.shieldHits > 0) {
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = max(2f, density * 2.5f)
+            paint.color = cyan
+            paint.setShadowLayer(density * 12f, 0f, 0f, cyan)
+            canvas.drawCircle(x, y, drawSize * 0.78f, paint)
+            paint.clearShadowLayer()
+            drawText(canvas, "SHIELD " + enemy.shieldHits, x / viewW,
+                (y - drawSize * 0.68f) / viewH, 0.013f, cyan, Paint.Align.CENTER)
+        }
         if (isTurret) {
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = max(2f, density * 2f)
@@ -1805,8 +2449,8 @@ private class GameView(context: Context) : View(context) {
         path.lineTo(x - radius * 0.36f, y + radius * 0.90f)
         path.close()
         paint.style = Paint.Style.FILL
-        paint.color = cyan
-        paint.setShadowLayer(density * 15f, 0f, 0f, cyan)
+        paint.color = bladeSkinColor()
+        paint.setShadowLayer(density * 15f, 0f, 0f, bladeSkinColor())
         canvas.drawPath(path, paint)
         paint.clearShadowLayer()
         paint.color = Color.WHITE
@@ -1959,6 +2603,504 @@ private class GameView(context: Context) : View(context) {
         }
     }
 
+
+    private fun bladeSkinColor(): Int = when (bladeSkin) {
+        1 -> Color.rgb(255, 105, 120)
+        2 -> Color.rgb(118, 255, 138)
+        3 -> Color.rgb(255, 214, 90)
+        4 -> Color.rgb(190, 118, 255)
+        5 -> Color.rgb(255, 255, 255)
+        else -> cyan
+    }
+
+    private fun shieldSkinColor(): Int = when (shieldSkin) {
+        1 -> Color.rgb(255, 112, 112)
+        2 -> Color.rgb(116, 255, 145)
+        3 -> Color.rgb(255, 219, 90)
+        4 -> Color.rgb(184, 128, 255)
+        5 -> Color.rgb(255, 255, 255)
+        else -> cyan
+    }
+
+    private fun enemySkinColor(): Int = when (enemySkin) {
+        1 -> Color.rgb(255, 88, 90)
+        2 -> Color.rgb(170, 110, 255)
+        3 -> Color.rgb(255, 210, 80)
+        else -> cyan
+    }
+
+    private fun selectMode(mode: String, startImmediately: Boolean = true) {
+        gameMode = mode
+        prefs.edit().putString("game_mode", mode).apply()
+        if (startImmediately) {
+            val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
+            val startId = if (mode == "boss_rush" && unlocked >= 10) (unlocked / 10 * 10).coerceIn(10, levels.size) else unlocked
+            startLevel(startId)
+        } else screen = GameScreen.MENU
+    }
+
+    private fun startChallenge(weekly: Boolean) {
+        val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
+        val calendar = java.util.Calendar.getInstance()
+        val day = calendar.get(java.util.Calendar.DAY_OF_YEAR)
+        val seed = if (weekly) day / 7 + calendar.get(java.util.Calendar.YEAR) * 3 else day + calendar.get(java.util.Calendar.YEAR)
+        val stage = (seed % unlocked) + 1
+        gameMode = if (weekly) "weekly" else "daily"
+        prefs.edit().putString("game_mode", gameMode).apply()
+        startLevel(stage)
+    }
+
+    private fun saveEditorDraft(): String {
+        val hazard = editorHazards[editorHazardId]
+        val draft = "{\"name\":\"My Arena\",\"targets\":" + editorTargetCount +
+            ",\"hazard\":\"" + hazard + "\",\"seed\":" + prefs.getInt("procedural_seed", 23) + "}"
+        prefs.edit().putString("custom_level_draft", draft).putInt("editor_target_count", editorTargetCount)
+            .putInt("editor_hazard", editorHazardId).apply()
+        return draft
+    }
+
+    private fun showEditorSharingDialog() {
+        AlertDialog.Builder(context)
+            .setTitle("Custom level draft")
+            .setItems(arrayOf("Share / export draft", "Import draft from clipboard")) { _, choice ->
+                if (choice == 0) shareEditorDraft() else importEditorDraftFromClipboard()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun importEditorDraftFromClipboard() {
+        try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+            val text = clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+            val data = org.json.JSONObject(text)
+            editorTargetCount = data.optInt("targets", 6).coerceIn(1, 12)
+            editorHazardId = editorHazards.indexOf(data.optString("hazard", "NONE").uppercase()).coerceAtLeast(0)
+            val seed = data.optInt("seed", 23)
+            prefs.edit().putString("custom_level_draft", data.toString())
+                .putInt("editor_target_count", editorTargetCount).putInt("editor_hazard", editorHazardId)
+                .putInt("procedural_seed", seed).apply()
+            showMessage("CUSTOM DRAFT IMPORTED")
+            invalidate()
+        } catch (_: Exception) {
+            showMessage("COPY A BOUNCE BLADE DRAFT BEFORE IMPORTING")
+        }
+    }
+
+    private fun shareEditorDraft() {
+        val draft = saveEditorDraft()
+        try {
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(android.content.Intent.EXTRA_SUBJECT, "Bounce Blade custom arena")
+                putExtra(android.content.Intent.EXTRA_TEXT, draft)
+            }
+            context.startActivity(android.content.Intent.createChooser(intent, "Share custom arena"))
+        } catch (_: Exception) {
+            showMessage("DRAFT SAVED LOCALLY")
+        }
+    }
+
+    private fun drawFeatures(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "FEATURE HUB", 0.5f, 0.16f, 0.060f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "OFFLINE MODES • PROGRESSION • PERSONALIZATION", 0.5f, 0.205f, 0.017f, cyan, Paint.Align.CENTER)
+        val items = listOf("GAME MODES", "DAILY / WEEKLY CHALLENGE", "ACHIEVEMENTS", "PROFILE & STATS",
+            "BLADE / SHIELD COSMETICS", "LEVEL LAB & SHARE", "ACCESSIBILITY & AUDIO", "EXTRAS / SCORES / REPLAY")
+        items.forEachIndexed { i, label ->
+            val top = 0.235f + i * 0.065f
+            drawButton(canvas, 0.12f, top, 0.88f, top + 0.058f, label, if (i % 2 == 0) cyan else gold)
+        }
+        drawButton(canvas, 0.24f, 0.785f, 0.76f, 0.865f, "BACK", pink)
+    }
+
+    private fun drawModes(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "GAME MODES", 0.5f, 0.16f, 0.060f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "ACTIVE: " + gameMode.replace('_', ' ').uppercase(), 0.5f, 0.205f, 0.020f, gold, Paint.Align.CENTER)
+        val modes = listOf(
+            "campaign" to "CAMPAIGN • 100 STAGES",
+            "endless" to "ENDLESS • LOOP FOREVER",
+            "time_attack" to "TIME ATTACK • 60 SECONDS",
+            "zen" to "ZEN / PRACTICE • NO RUN LOST",
+            "boss_rush" to "BOSS RUSH • ARMORED TARGETS",
+            "speedrun" to "SPEEDRUN • TRACK YOUR TIME",
+            "procedural" to "PROCEDURAL • RANDOM ARENA",
+            "local_coop" to "LOCAL CO-OP • 2 TOUCHES"
+        )
+        modes.forEachIndexed { i, pair ->
+            val top = 0.245f + i * 0.067f
+            val label = (if (gameMode == pair.first) "✓  " else "") + pair.second
+            drawButton(canvas, 0.10f, top, 0.90f, top + 0.067f, label, if (i % 2 == 0) cyan else gold)
+        }
+        drawButton(canvas, 0.24f, 0.80f, 0.76f, 0.88f, "BACK", pink)
+    }
+
+    private fun drawChallenges(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        val calendar = java.util.Calendar.getInstance()
+        val day = calendar.get(java.util.Calendar.DAY_OF_YEAR)
+        drawText(canvas, "CHALLENGES", 0.5f, 0.22f, 0.060f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "TODAY'S ROTATION  #" + (day % 100 + 1), 0.5f, 0.30f, 0.022f, cyan, Paint.Align.CENTER)
+        drawButton(canvas, 0.15f, 0.365f, 0.85f, 0.455f, "START DAILY CHALLENGE", gold)
+        drawText(canvas, "BEST DAILY SCORE  " + prefs.getInt("daily_best_score", 0), 0.5f, 0.485f, 0.019f, muted, Paint.Align.CENTER)
+        drawButton(canvas, 0.15f, 0.525f, 0.85f, 0.615f, "START WEEKLY CHALLENGE", pink)
+        drawText(canvas, "BEST WEEKLY SCORE  " + prefs.getInt("weekly_best_score", 0), 0.5f, 0.645f, 0.019f, muted, Paint.Align.CENTER)
+        drawText(canvas, "Challenges are seeded locally; no server is required.", 0.5f, 0.71f, 0.016f, muted, Paint.Align.CENTER)
+        drawButton(canvas, 0.24f, 0.79f, 0.76f, 0.875f, "BACK", cyan)
+    }
+
+    private fun achievementLines(): List<Pair<String, Boolean>> = listOf(
+        "FIRST CLEAR" to (prefs.getInt("total_clears", 0) >= 1),
+        "TEN CLEARS" to (prefs.getInt("total_clears", 0) >= 10),
+        "FIFTY CLEARS" to (prefs.getInt("total_clears", 0) >= 50),
+        "STAR COLLECTOR" to (totalBestStarsAfter(0, 0) >= 50),
+        "COMBO MASTER" to (bestCombo >= 5 || prefs.getInt("all_time_best_combo", 0) >= 5),
+        "PERFECT CATCH" to (prefs.getInt("perfect_catches", 0) >= 1),
+        "TEN PERFECT CATCHES" to (prefs.getInt("perfect_catches", 0) >= 10),
+        "BLADE INVESTOR" to (shopItems.any { upgradeLevel(it.id) > 0 }),
+        "WORLD CONQUEROR" to (prefs.getInt("unlocked_level", 1) >= levels.size)
+    )
+
+    private fun drawAchievements(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "ACHIEVEMENTS", 0.5f, 0.19f, 0.060f, Color.WHITE, Paint.Align.CENTER)
+        achievementLines().forEachIndexed { i, entry ->
+            val y = 0.30f + i * 0.065f
+            drawText(canvas, if (entry.second) "✓  " + entry.first else "◇  " + entry.first,
+                0.18f, y, 0.023f, if (entry.second) gold else muted)
+            drawText(canvas, if (entry.second) "UNLOCKED" else "LOCKED", 0.82f, y, 0.017f,
+                if (entry.second) cyan else muted, Paint.Align.RIGHT)
+        }
+        drawText(canvas, "Achievements and best times are stored on this device.", 0.5f, 0.785f, 0.016f, muted, Paint.Align.CENTER)
+        drawButton(canvas, 0.24f, 0.82f, 0.76f, 0.90f, "BACK", cyan)
+    }
+
+    private fun drawStats(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        val seconds = prefs.getLong("total_play_seconds", 0L)
+        drawText(canvas, playerName, 0.5f, 0.16f, 0.055f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "LOCAL PROFILE • OFFLINE SAVE", 0.5f, 0.22f, 0.019f, cyan, Paint.Align.CENTER)
+        val lines = listOf(
+            "RUNS STARTED  " + prefs.getInt("total_runs", 0),
+            "STAGES CLEARED  " + prefs.getInt("total_clears", 0),
+            "FAILED RUNS  " + prefs.getInt("total_fails", 0),
+            "TOTAL PLAY TIME  " + formatTime(seconds.toFloat()),
+            "BEST STARS  " + totalBestStarsAfter(0, 0) + "/" + (levels.size * 3),
+            "COINS  " + coinBalance() + "    BEST COMBO  " + max(bestCombo, prefs.getInt("all_time_best_combo", 0))
+        )
+        lines.forEachIndexed { i, text -> drawText(canvas, text, 0.18f, 0.29f + i * 0.052f, 0.019f, if (i % 2 == 0) Color.WHITE else muted) }
+        drawButton(canvas, 0.10f, 0.625f, 0.48f, 0.69f, "EDIT PROFILE NAME", gold)
+        drawButton(canvas, 0.52f, 0.625f, 0.90f, 0.69f, "EXPORT SAVE", cyan)
+        drawButton(canvas, 0.10f, 0.705f, 0.48f, 0.77f, "IMPORT SAVE", pink)
+        drawButton(canvas, 0.52f, 0.705f, 0.90f, 0.77f, "BACK", gold)
+        drawText(canvas, "Export sends a JSON backup; import accepts that JSON from clipboard.", 0.5f, 0.825f, 0.015f, muted, Paint.Align.CENTER)
+        drawText(canvas, "Manual transfer works with your chosen cloud drive; no account is uploaded by the game.", 0.5f, 0.875f, 0.013f, muted, Paint.Align.CENTER)
+    }
+
+    private fun drawCustomize(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "BLADE & SHIELD LAB", 0.5f, 0.20f, 0.060f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "THEME  " + themeName(), 0.5f, 0.29f, 0.023f, cyan, Paint.Align.CENTER)
+        drawButton(canvas, 0.14f, 0.33f, 0.86f, 0.415f, "CYCLE THEME", cyan)
+        val nextBlade = (bladeSkin + 1) % 6
+        val bladeUnlocked = nextBlade == 0 || prefs.getBoolean("blade_skin_unlocked_" + nextBlade, false)
+        drawText(canvas, "BLADE SKIN  " + (bladeSkin + 1) + "/6", 0.5f, 0.455f, 0.021f, bladeSkinColor(), Paint.Align.CENTER)
+        drawButton(canvas, 0.14f, 0.475f, 0.86f, 0.545f, if (bladeUnlocked) "NEXT BLADE SKIN" else "UNLOCK BLADE SKIN • 150 COINS", gold)
+        val nextShield = (shieldSkin + 1) % 6
+        val shieldUnlocked = nextShield == 0 || prefs.getBoolean("shield_skin_unlocked_" + nextShield, false)
+        drawText(canvas, "SHIELD SKIN  " + (shieldSkin + 1) + "/6", 0.5f, 0.585f, 0.021f, shieldSkinColor(), Paint.Align.CENTER)
+        drawButton(canvas, 0.14f, 0.605f, 0.86f, 0.675f, if (shieldUnlocked) "NEXT SHIELD SKIN" else "UNLOCK SHIELD SKIN • 150 COINS", pink)
+        drawText(canvas, "ENEMY STYLE  " + (enemySkin + 1) + "/4", 0.5f, 0.715f, 0.021f, enemySkinColor(), Paint.Align.CENTER)
+        val nextEnemy = (enemySkin + 1) % 4
+        val enemyUnlocked = nextEnemy == 0 || prefs.getBoolean("enemy_skin_unlocked_" + nextEnemy, false)
+        drawButton(canvas, 0.14f, 0.735f, 0.86f, 0.80f, if (enemyUnlocked) "NEXT ENEMY STYLE" else "UNLOCK ENEMY STYLE • 200 COINS", cyan)
+        drawButton(canvas, 0.24f, 0.845f, 0.76f, 0.915f, "BACK", cyan)
+    }
+
+    private fun drawEditor(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "LEVEL LAB", 0.5f, 0.18f, 0.060f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "CREATE A LOCAL ARENA DRAFT", 0.5f, 0.245f, 0.020f, cyan, Paint.Align.CENTER)
+        drawButton(canvas, 0.15f, 0.29f, 0.85f, 0.365f, "TARGET COUNT: " + editorTargetCount + " (TAP TO CYCLE)", gold)
+        drawButton(canvas, 0.15f, 0.39f, 0.85f, 0.465f, "HAZARD: " + editorHazards[editorHazardId], pink)
+        drawButton(canvas, 0.15f, 0.50f, 0.85f, 0.575f, "SAVE DRAFT", cyan)
+        drawButton(canvas, 0.15f, 0.605f, 0.85f, 0.68f, "IMPORT / SHARE DRAFT", gold)
+        drawButton(canvas, 0.15f, 0.71f, 0.85f, 0.785f, "PLAY TEST", pink)
+        drawText(canvas, "Saved draft: " + if (prefs.contains("custom_level_draft")) "YES" else "NO", 0.5f, 0.815f, 0.017f, muted, Paint.Align.CENTER)
+        drawButton(canvas, 0.24f, 0.85f, 0.76f, 0.925f, "BACK", cyan)
+    }
+
+    private fun drawAccessibility(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "ACCESSIBILITY & PERFORMANCE", 0.5f, 0.15f, 0.048f, Color.WHITE, Paint.Align.CENTER)
+        val options = listOf(
+            "HIGH CONTRAST: " + if (highContrast) "ON" else "OFF",
+            "COLORBLIND PALETTE: " + if (colorblindMode) "ON" else "OFF",
+            "REDUCED MOTION: " + if (reducedMotion) "ON" else "OFF",
+            "LEFT-HANDED CONTROL: " + if (leftHandedMode) "ON" else "OFF",
+            "ONE-HANDED MODE: " + if (oneHandedMode) "ON" else "OFF",
+            "LARGE UI: " + if (largeUi) "ON" else "OFF",
+            "BATTERY SAVER: " + if (batterySaver) "ON" else "OFF",
+            "DYNAMIC DIFFICULTY: " + if (dynamicDifficulty) "ON" else "OFF",
+            "VIBRATION: " + if (vibrationEnabled) "ON" else "OFF"
+        )
+        options.forEachIndexed { i, label ->
+            val top = 0.185f + i * 0.046f
+            drawButton(canvas, 0.12f, top, 0.88f, top + 0.042f, label, if (i % 2 == 0) cyan else gold)
+        }
+        drawButton(canvas, 0.12f, 0.61f, 0.48f, 0.655f, "HAPTIC LEVEL: " + hapticLevel, pink)
+        drawButton(canvas, 0.52f, 0.61f, 0.88f, 0.655f, "LANGUAGE: " + if (persianLanguage) "فارسی" else "ENGLISH", gold)
+        drawButton(canvas, 0.12f, 0.665f, 0.48f, 0.71f, "JUKEBOX", pink)
+        drawButton(canvas, 0.52f, 0.665f, 0.88f, 0.71f, "HELP", cyan)
+        drawButton(canvas, 0.24f, 0.72f, 0.76f, 0.775f, "BACK TO FEATURES", gold)
+    }
+
+    private fun drawJukebox(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "SOUNDTRACK PLAYER", 0.5f, 0.22f, 0.060f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "TRACK " + (jukeboxTrackId + 1) + "/4", 0.5f, 0.34f, 0.025f, gold, Paint.Align.CENTER)
+        drawText(canvas, musicTracks[jukeboxTrackId].substringAfterLast('/').removeSuffix(".wav"), 0.5f, 0.42f, 0.024f, cyan, Paint.Align.CENTER)
+        drawButton(canvas, 0.15f, 0.50f, 0.85f, 0.59f, "NEXT TRACK", pink)
+        drawButton(canvas, 0.15f, 0.615f, 0.85f, 0.705f, "SOUND: " + if (soundEnabled) "ON" else "OFF", gold)
+        drawText(canvas, "The selected track previews while this screen is open.", 0.5f, 0.75f, 0.016f, muted, Paint.Align.CENTER)
+        drawButton(canvas, 0.24f, 0.81f, 0.76f, 0.89f, "BACK", cyan)
+    }
+
+
+    private fun saveReplayTrace() {
+        if (runTrace.size < 2) return
+        val encoded = runTrace.joinToString(";") { point -> point.x.toString() + "," + point.y.toString() }
+        prefs.edit().putString("replay_trace_last", encoded)
+            .putString("replay_trace_" + levelId, encoded)
+            .putInt("replay_last_level", levelId).apply()
+    }
+
+    private fun readReplayTrace(): List<PointF> {
+        return prefs.getString("replay_trace_last", "").orEmpty().split(';').mapNotNull { token ->
+            val coords = token.split(',')
+            if (coords.size != 2) null else {
+                val x = coords[0].toFloatOrNull()
+                val y = coords[1].toFloatOrNull()
+                if (x == null || y == null) null else PointF(x.coerceIn(0f, 1f), y.coerceIn(0f, 1f))
+            }
+        }
+    }
+
+    private fun shareReplayTrace() {
+        val trace = prefs.getString("replay_trace_last", "").orEmpty()
+        if (trace.isBlank()) { showMessage("CLEAR A LEVEL TO CREATE A REPLAY"); return }
+        val payload = "Bounce Blade replay • level " + prefs.getInt("replay_last_level", 1) + "\n" + trace
+        try {
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(android.content.Intent.EXTRA_SUBJECT, "Bounce Blade replay trace")
+                putExtra(android.content.Intent.EXTRA_TEXT, payload)
+            }
+            context.startActivity(android.content.Intent.createChooser(intent, "Export replay"))
+        } catch (_: Exception) { showMessage("REPLAY IS SAVED LOCALLY") }
+    }
+
+    private fun savePhoto(): Boolean {
+        val bitmap = Bitmap.createBitmap(width.coerceAtLeast(1), height.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+        return try {
+            drawWallGuardGame(Canvas(bitmap))
+            val fileName = "BounceBlade_" + System.currentTimeMillis() + ".png"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Bounce Blade")
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+                val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return false
+                val output = context.contentResolver.openOutputStream(uri) ?: return false
+                output.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                values.clear()
+                values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                context.contentResolver.update(uri, values, null, null)
+                true
+            } else {
+                val directory = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES) ?: context.filesDir, "BounceBlade")
+                if (!directory.exists() && !directory.mkdirs()) return false
+                FileOutputStream(File(directory, fileName)).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                true
+            }
+        } catch (_: Exception) { false } finally { bitmap.recycle() }
+    }
+
+    private fun drawExtras(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "EXTRAS & COMMUNITY", 0.5f, 0.19f, 0.056f, Color.WHITE, Paint.Align.CENTER)
+        val items = listOf("LOCAL LEADERBOARD", "REPLAY / GHOST TRACE", "PHOTO MODE", "SEASONAL EVENT / PASS", "ONLINE SERVICES / CLOUD")
+        items.forEachIndexed { i, label ->
+            val top = 0.26f + i * 0.092f
+            drawButton(canvas, 0.12f, top, 0.88f, top + 0.072f, label, if (i % 2 == 0) cyan else gold)
+        }
+        drawButton(canvas, 0.24f, 0.76f, 0.76f, 0.845f, "BACK", pink)
+    }
+
+    private fun exportSaveBackup() {
+        try {
+            val payload = org.json.JSONObject()
+            payload.put("format", "bounce-blade-save")
+            payload.put("version", 1)
+            val values = org.json.JSONObject()
+            prefs.all.forEach { (key, value) ->
+                when (value) {
+                    is String -> values.put(key, value)
+                    is Boolean -> values.put(key, value)
+                    is Int -> values.put(key, value)
+                    is Long -> values.put(key, value)
+                    is Float -> values.put(key, value.toDouble())
+                    is Double -> values.put(key, value)
+                    is Set<*> -> values.put(key, org.json.JSONArray(value.map { it.toString() }))
+                }
+            }
+            payload.put("preferences", values)
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "application/json"
+                putExtra(android.content.Intent.EXTRA_SUBJECT, "Bounce Blade save backup")
+                putExtra(android.content.Intent.EXTRA_TEXT, payload.toString(2))
+            }
+            context.startActivity(android.content.Intent.createChooser(intent, "Export save backup"))
+            showMessage("SAVE BACKUP READY TO SHARE")
+        } catch (_: Exception) {
+            showMessage("COULD NOT EXPORT SAVE")
+        }
+    }
+
+    private fun importSaveBackupFromClipboard() {
+        try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+            val raw = clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+            val root = org.json.JSONObject(raw)
+            require(root.optString("format") == "bounce-blade-save") { "Unsupported save format" }
+            val values = root.getJSONObject("preferences")
+            val editor = prefs.edit()
+            val iterator = values.keys()
+            while (iterator.hasNext()) {
+                val key = iterator.next()
+                val value = values.get(key)
+                when (value) {
+                    is Boolean -> editor.putBoolean(key, value)
+                    is Int -> editor.putInt(key, value)
+                    is Long -> editor.putLong(key, value)
+                    is Double -> {
+                        val number = value
+                        if (number % 1.0 == 0.0 && number >= Int.MIN_VALUE && number <= Int.MAX_VALUE) editor.putInt(key, number.toInt())
+                        else editor.putFloat(key, number.toFloat())
+                    }
+                    is String -> editor.putString(key, value)
+                    is org.json.JSONArray -> {
+                        val set = mutableSetOf<String>()
+                        for (index in 0 until value.length()) set.add(value.optString(index))
+                        editor.putStringSet(key, set)
+                    }
+                }
+            }
+            editor.apply()
+            showMessage("SAVE IMPORTED • RESTART GAME TO REFRESH ALL SCREENS")
+        } catch (_: Exception) {
+            showMessage("COPY A BOUNCE BLADE SAVE JSON BEFORE IMPORTING")
+        }
+        invalidate()
+    }
+
+    private fun drawLocalScores(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "LOCAL LEADERBOARD", 0.5f, 0.18f, 0.055f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "OFFLINE • DEVICE ONLY • " + difficultyLabel(), 0.5f, 0.235f, 0.018f, cyan, Paint.Align.CENTER)
+        val scores = (1..levels.size).map { id ->
+            Triple(id, prefs.getInt("best_score_" + id + "_difficulty_" + difficulty, 0), prefs.getInt(bestStarsKey(id), 0))
+        }.filter { it.second > 0 }.sortedByDescending { it.second }.take(8)
+        if (scores.isEmpty()) drawText(canvas, "FINISH A STAGE TO SET YOUR FIRST SCORE.", 0.5f, 0.47f, 0.024f, muted, Paint.Align.CENTER)
+        else scores.forEachIndexed { index, row ->
+            val y = 0.31f + index * 0.052f
+            drawText(canvas, (index + 1).toString().padStart(2, '0') + "   STAGE " + row.first, 0.15f, y, 0.020f, Color.WHITE)
+            drawText(canvas, row.second.toString() + " PTS", 0.63f, y, 0.020f, gold, Paint.Align.RIGHT)
+            drawText(canvas, "★".repeat(row.third), 0.84f, y, 0.020f, cyan, Paint.Align.RIGHT)
+        }
+        drawButton(canvas, 0.24f, 0.82f, 0.76f, 0.90f, "BACK", cyan)
+    }
+
+    private fun difficultyLabel(): String = when (difficulty) { 1 -> "EASY"; 3 -> "HARD"; else -> "NORMAL" }
+
+    private fun drawReplays(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "REPLAY / GHOST TRACE", 0.5f, 0.16f, 0.052f, Color.WHITE, Paint.Align.CENTER)
+        val points = readReplayTrace()
+        val replayLevel = prefs.getInt("replay_last_level", 0)
+        drawText(canvas, if (points.size >= 2) "LAST RUN • STAGE " + replayLevel + " • " + points.size + " TRACE POINTS" else "NO REPLAY SAVED YET",
+            0.5f, 0.215f, 0.017f, cyan, Paint.Align.CENTER)
+        val area = RectF(viewW * 0.08f, viewH * 0.27f, viewW * 0.92f, viewH * 0.70f)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = max(1.5f, density * 1.5f)
+        paint.color = Color.argb(190, Color.red(cyan), Color.green(cyan), Color.blue(cyan))
+        canvas.drawRoundRect(area, density * 12f, density * 12f, paint)
+        if (points.size >= 2) {
+            val path = Path()
+            points.forEachIndexed { index, point ->
+                val x = area.left + point.x * area.width()
+                val y = area.top + point.y * area.height()
+                if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            paint.color = gold
+            paint.strokeWidth = max(2.5f, density * 2.5f)
+            canvas.drawPath(path, paint)
+            val end = points.last()
+            canvas.drawCircle(area.left + end.x * area.width(), area.top + end.y * area.height(), density * 4f, paint)
+        }
+        paint.style = Paint.Style.FILL
+        drawButton(canvas, 0.10f, 0.745f, 0.48f, 0.82f, "EXPORT TRACE", gold)
+        drawButton(canvas, 0.52f, 0.745f, 0.90f, 0.82f, "BACK", cyan)
+        drawText(canvas, "Ghost path is saved locally; export shares the trace data.", 0.5f, 0.865f, 0.015f, muted, Paint.Align.CENTER)
+    }
+
+    private fun drawPhotoMode(canvas: Canvas) {
+        drawWallGuardGame(canvas)
+        paint.style = Paint.Style.FILL
+        paint.color = Color.argb(205, 3, 6, 18)
+        canvas.drawRoundRect(viewW * 0.22f, viewH * 0.68f, viewW * 0.78f, viewH * 0.94f, density * 14f, density * 14f, paint)
+        drawText(canvas, "PHOTO MODE", 0.5f, 0.725f, 0.032f, Color.WHITE, Paint.Align.CENTER)
+        drawButton(canvas, 0.25f, 0.755f, 0.49f, 0.835f, "SAVE PHOTO", gold)
+        drawButton(canvas, 0.51f, 0.755f, 0.75f, 0.835f, "BACK", cyan)
+        drawText(canvas, "Saves a PNG in Pictures / Bounce Blade.", 0.5f, 0.885f, 0.014f, muted, Paint.Align.CENTER)
+    }
+
+    private fun drawSeasonal(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        val month = java.util.Calendar.getInstance().get(java.util.Calendar.MONTH)
+        val season = when (month) { 11, 0, 1 -> "FROST CIRCUIT"; 2, 3, 4 -> "NEON BLOOM"; 5, 6, 7 -> "SOLAR RUSH"; else -> "CRIMSON HARVEST" }
+        val clears = prefs.getInt("total_clears", 0)
+        val claimed = prefs.getBoolean("season_reward_claimed", false)
+        drawText(canvas, "SEASONAL EVENT", 0.5f, 0.20f, 0.058f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, season, 0.5f, 0.29f, 0.035f, gold, Paint.Align.CENTER)
+        drawText(canvas, "CLEAR STAGES TO ADVANCE THE LOCAL SEASON PASS", 0.5f, 0.37f, 0.018f, cyan, Paint.Align.CENTER)
+        drawText(canvas, "PASS LEVEL  " + (clears / 5) + "   •   TOTAL CLEARS  " + clears, 0.5f, 0.445f, 0.023f, Color.WHITE, Paint.Align.CENTER)
+        drawButton(canvas, 0.15f, 0.52f, 0.85f, 0.61f, "PLAY EVENT STAGE", pink)
+        drawButton(canvas, 0.15f, 0.635f, 0.85f, 0.725f, if (claimed) "REWARD CLAIMED" else "CLAIM 100 BONUS COINS (5 CLEARS)", gold, !claimed && clears >= 5)
+        drawButton(canvas, 0.24f, 0.80f, 0.76f, 0.88f, "BACK", cyan)
+    }
+
+    private fun drawOnlineFeatures(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "ONLINE / PLATFORM SERVICES", 0.5f, 0.17f, 0.050f, Color.WHITE, Paint.Align.CENTER)
+        val lines = listOf(
+            "ONLINE LEADERBOARD      NEEDS SERVER",
+            "DAILY CHALLENGE SERVER   NEEDS SERVER",
+            "ONLINE MULTIPLAYER       NEEDS SERVER",
+            "CLOUD SAVE / DEVICE SYNC NEEDS AUTH",
+            "CROSS-PLATFORM SAVES     NEEDS BACKEND",
+            "ADS / IN-APP PURCHASES   NEEDS STORE SETUP",
+            "ANALYTICS / CRASH REPORT NEEDS SDK",
+            "BETA CHANNEL / ASSET PACKS NEEDS CONFIG"
+        )
+        lines.forEachIndexed { i, line -> drawText(canvas, line, 0.10f, 0.265f + i * 0.060f, 0.016f, if (i % 2 == 0) gold else muted) }
+        drawText(canvas, "These services need credentials, policy configuration and backend infrastructure.", 0.5f, 0.72f, 0.014f, pink, Paint.Align.CENTER)
+        drawButton(canvas, 0.24f, 0.80f, 0.76f, 0.88f, "BACK", cyan)
+    }
+
     private fun drawSettings(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         drawText(canvas, "SETTINGS", 0.5f, 0.29f, 0.07f, Color.WHITE, Paint.Align.CENTER)
@@ -1966,7 +3108,7 @@ private class GameView(context: Context) : View(context) {
         drawButton(canvas, 0.12f, 0.475f, 0.88f, 0.560f, "VIBRATION: " + if (vibrationEnabled) "ON" else "OFF", gold)
         drawButton(canvas, 0.12f, 0.570f, 0.88f, 0.655f, "THEME: " + themeName(), pink)
         drawButton(canvas, 0.12f, 0.680f, 0.88f, 0.765f, "BACK", cyan)
-        drawText(canvas, "Tap THEME to cycle through Cyan, Green and Violet.", 0.5f, 0.83f, 0.018f, muted, Paint.Align.CENTER)
+        drawText(canvas, "Tap THEME to cycle through Cyan, Green, Violet, Crimson, Solar and Ocean.", 0.5f, 0.83f, 0.018f, muted, Paint.Align.CENTER)
         drawText(canvas, "Settings are saved on this device.", 0.5f, 0.87f, 0.018f, muted, Paint.Align.CENTER)
     }
 
@@ -1993,8 +3135,66 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas, "4. Catch it on the left or you lose immediately.", 0.12f, 0.565f, 0.018f, pink)
         drawText(canvas, "5. Hit every enemy to clear the level.", 0.12f, 0.625f, 0.018f, Color.WHITE)
         drawText(canvas, "Easy gives a larger shield; Hard gives a smaller one.", 0.12f, 0.685f, 0.016f, gold)
-        drawText(canvas, "Tip: move early to meet the returning blade.", 0.5f, 0.735f, 0.017f, muted, Paint.Align.CENTER)
-        drawButton(canvas, 0.20f, 0.78f, 0.80f, 0.87f, "BACK", cyan)
+        drawText(canvas, "Keyboard, gamepad and custom key bindings are supported.", 0.5f, 0.735f, 0.016f, muted, Paint.Align.CENTER)
+        drawButton(canvas, 0.10f, 0.78f, 0.48f, 0.87f, "REMAP CONTROLS", gold)
+        drawButton(canvas, 0.52f, 0.78f, 0.90f, 0.87f, "BACK", cyan)
+    }
+
+    private fun localizeButtonLabel(label: String): String {
+        if (!persianLanguage) return label
+        return when (label) {
+            "PLAY CAMPAIGN" -> "شروع کمپین"
+            "LEVEL SELECT" -> "انتخاب مرحله"
+            "MORE FEATURES" -> "قابلیت‌های بیشتر"
+            "BLADE SHOP" -> "فروشگاه تیغه"
+            "SETTINGS" -> "تنظیمات"
+            "HELP" -> "راهنما"
+            "BACK" -> "بازگشت"
+            "BACK TO FEATURES" -> "بازگشت به قابلیت‌ها"
+            "RESUME" -> "ادامه"
+            "RESTART LEVEL" -> "شروع دوباره"
+            "MAIN MENU" -> "منوی اصلی"
+            "NEXT LEVEL" -> "مرحله بعد"
+            "RETRY" -> "تلاش دوباره"
+            "NOVA READY" -> "نوا آماده"
+            "JUKEBOX" -> "پخش موسیقی"
+            else -> label
+        }
+    }
+
+    private fun localizeUiText(text: String): String {
+        if (!persianLanguage) return text
+        return when (text) {
+            "BOUNCE BLADE" -> "باونس بلید"
+            "BOUNCE OFF ENEMIES  •  GUARD THE LEFT WALL" -> "به دشمنان بزن • سپر را حرکت بده"
+            "SETTINGS" -> "تنظیمات"
+            "CHOOSE DIFFICULTY" -> "انتخاب درجه سختی"
+            "HELP & CONTROLS" -> "راهنما و کنترل‌ها"
+            "BLADE FORGE" -> "کارگاه تیغه"
+            "FEATURE HUB" -> "مرکز قابلیت‌ها"
+            "GAME MODES" -> "حالت‌های بازی"
+            "CHALLENGES" -> "چالش‌ها"
+            "ACHIEVEMENTS" -> "دستاوردها"
+            "LOCAL PROFILE" -> "پروفایل محلی"
+            "BLADE & SHIELD LAB" -> "آزمایشگاه تیغه و سپر"
+            "LEVEL LAB" -> "سازنده مرحله"
+            "ACCESSIBILITY & PERFORMANCE" -> "دسترس‌پذیری و کارایی"
+            "SOUNDTRACK PLAYER" -> "پخش‌کننده موسیقی"
+            "EXTRAS & COMMUNITY" -> "امکانات بیشتر"
+            "LOCAL LEADERBOARD" -> "جدول امتیاز محلی"
+            "REPLAY / GHOST TRACE" -> "بازپخش مسیر"
+            "PHOTO MODE" -> "حالت عکس"
+            "SEASONAL EVENT" -> "رویداد فصلی"
+            "ONLINE / PLATFORM SERVICES" -> "خدمات آنلاین و پلتفرم"
+            else -> when {
+                text.startsWith("SCORE ") -> "امتیاز " + text.removePrefix("SCORE ")
+                text.startsWith("COINS ") -> "سکه " + text.removePrefix("COINS ")
+                text.startsWith("TARGETS ") -> "هدف‌ها " + text.removePrefix("TARGETS ")
+                text.startsWith("LEVEL ") -> "مرحله " + text.removePrefix("LEVEL ")
+                text.startsWith("TIME ") -> "زمان " + text.removePrefix("TIME ")
+                else -> text
+            }
+        }
     }
 
     private fun drawText(
@@ -2009,10 +3209,11 @@ private class GameView(context: Context) : View(context) {
         paint.clearShadowLayer()
         paint.style = Paint.Style.FILL
         paint.color = color
-        paint.textSize = (size * minDim).coerceAtLeast(8f * density)
+        paint.color = if (highContrast && color == muted) Color.WHITE else color
+        paint.textSize = (size * minDim * (if (largeUi) 1.16f else 1f)).coerceAtLeast(8f * density)
         paint.typeface = TypefaceFactory.bold
         paint.textAlign = align
-        canvas.drawText(text, x * viewW, y * viewH, paint)
+        canvas.drawText(localizeUiText(text), x * viewW, y * viewH, paint)
     }
 
     private fun drawButton(
@@ -2061,7 +3262,7 @@ private class GameView(context: Context) : View(context) {
         val shift = if (iconPath == null) 0f else minDim * 0.018f
         drawText(
             canvas,
-            label,
+            localizeButtonLabel(label),
             (visualRect.centerX() + shift) / viewW,
             visualRect.centerY() / viewH + 0.010f,
             if (label.length > 18) 0.022f else 0.028f,
@@ -2072,7 +3273,8 @@ private class GameView(context: Context) : View(context) {
 
     private fun addBurst(x: Float, y: Float, color: Int, count: Int) {
         val seed = (x.toInt() * 31 + y.toInt() * 17 + count * 13)
-        for (i in 0 until count) {
+        val particleCount = if (reducedMotion) (count / 4).coerceAtLeast(1) else count
+        for (i in 0 until particleCount) {
             val angle = ((i * 137 + seed) % 360) * Math.PI.toFloat() / 180f
             val speed = density * (35f + (i % 5) * 16f)
             particles.add(Particle(x, y, kotlin.math.cos(angle) * speed, kotlin.math.sin(angle) * speed,
@@ -2086,6 +3288,15 @@ private class GameView(context: Context) : View(context) {
         val allowedMax = 0.94f - hazard.width / 2f
         val drift = sin(animationTime * 1.7f + index * 1.3f) * min(0.15f, hazard.width * 0.35f)
         return PointF((hazard.x + drift).coerceIn(allowedMin, max(allowedMin, allowedMax)), hazard.y)
+    }
+
+    private fun pointToSegmentDistanceSquared(px: Float, py: Float, x1: Float, y1: Float, x2: Float, y2: Float): Float {
+        val dx = x2 - x1
+        val dy = y2 - y1
+        val lengthSquared = dx * dx + dy * dy
+        if (lengthSquared <= 0.0001f) return distanceSquared(px, py, x1, y1)
+        val t = (((px - x1) * dx + (py - y1) * dy) / lengthSquared).coerceIn(0f, 1f)
+        return distanceSquared(px, py, x1 + t * dx, y1 + t * dy)
     }
 
     private fun totalBestStarsAfter(updatedLevelId: Int, updatedValue: Int): Int =
@@ -2102,10 +3313,77 @@ private class GameView(context: Context) : View(context) {
     private fun showMessage(text: String) {
         message = text
         messageUntil = System.nanoTime() + 1_800_000_000L
+        if (importantForAccessibility == View.IMPORTANT_FOR_ACCESSIBILITY_YES) announceForAccessibility(text)
     }
 
     private fun haptic() {
-        if (vibrationEnabled) performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+        if (!vibrationEnabled || hapticLevel == 0) return
+        val feedback = when (hapticLevel) { 1 -> HapticFeedbackConstants.CLOCK_TICK; 2 -> HapticFeedbackConstants.VIRTUAL_KEY; else -> HapticFeedbackConstants.LONG_PRESS }
+        performHapticFeedback(feedback)
+    }
+
+    private fun showControlMappingDialog() {
+        val actions = arrayOf("Move shield up", "Move shield down", "Pause / resume")
+        AlertDialog.Builder(context).setTitle("Remap controls").setItems(actions) { _, action ->
+            val labels = arrayOf("Arrow Up", "W", "I", "Arrow Down", "S", "K", "Space", "P", "Enter")
+            val codes = intArrayOf(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_W, KeyEvent.KEYCODE_I,
+                KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_S, KeyEvent.KEYCODE_K,
+                KeyEvent.KEYCODE_SPACE, KeyEvent.KEYCODE_P, KeyEvent.KEYCODE_ENTER)
+            AlertDialog.Builder(context).setTitle("Choose a key").setItems(labels) { _, selection ->
+                val code = codes[selection]
+                when (action) {
+                    0 -> keyMoveUp = code
+                    1 -> keyMoveDown = code
+                    else -> keyPause = code
+                }
+                prefs.edit().putInt("key_move_up", keyMoveUp).putInt("key_move_down", keyMoveDown)
+                    .putInt("key_pause", keyPause).apply()
+                showMessage("KEY BINDING SAVED")
+            }.show()
+        }.setNegativeButton("Cancel", null).show()
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (screen == GameScreen.PLAYING && wallGuardMode) {
+            when (keyCode) {
+                keyMoveUp, KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_W, KeyEvent.KEYCODE_I -> {
+                    guardPaddleY = clampGuardPaddleY(guardPaddleY - 0.035f)
+                    invalidate()
+                    return true
+                }
+                keyMoveDown, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_S, KeyEvent.KEYCODE_K -> {
+                    guardPaddleY = clampGuardPaddleY(guardPaddleY + 0.035f)
+                    invalidate()
+                    return true
+                }
+                keyPause, KeyEvent.KEYCODE_SPACE, KeyEvent.KEYCODE_P -> {
+                    screen = GameScreen.PAUSED
+                    slowMotion = false
+                    invalidate()
+                    return true
+                }
+            }
+        } else if (screen == GameScreen.PAUSED &&
+            (keyCode == KeyEvent.KEYCODE_SPACE || keyCode == KeyEvent.KEYCODE_ENTER)) {
+            screen = GameScreen.PLAYING
+            lastFrame = System.nanoTime()
+            invalidate()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        if ((event.source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK &&
+            event.action == MotionEvent.ACTION_MOVE && screen == GameScreen.PLAYING && wallGuardMode) {
+            val axisY = event.getAxisValue(MotionEvent.AXIS_Y)
+            if (abs(axisY) > 0.12f) {
+                guardPaddleY = clampGuardPaddleY(guardPaddleY + axisY * 0.025f)
+                invalidate()
+                return true
+            }
+        }
+        return super.onGenericMotionEvent(event)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -2113,26 +3391,254 @@ private class GameView(context: Context) : View(context) {
         val ny = event.y / viewH
         when (event.actionMasked) {
             MotionEvent.ACTION_POINTER_DOWN -> {
-                slowMotion = true
+                if (screen == GameScreen.PLAYING && gameMode == "local_coop") {
+                    val index = event.actionIndex
+                    secondPointerId = event.getPointerId(index)
+                    secondGuardPaddleY = clampGuardPaddleY(event.getY(index) / viewH)
+                    slowMotion = false
+                } else slowMotion = true
                 invalidate()
                 return true
             }
             MotionEvent.ACTION_POINTER_UP -> {
-                slowMotion = event.pointerCount > 2
+                val liftedId = event.getPointerId(event.actionIndex)
+                if (liftedId == secondPointerId) secondPointerId = -1
+                if (liftedId == primaryPointerId) primaryPointerId = -1
+                slowMotion = gameMode != "local_coop" && event.pointerCount > 2
                 invalidate()
                 return true
             }
             MotionEvent.ACTION_DOWN -> {
+                primaryPointerId = event.getPointerId(0)
                 if (screen != GameScreen.PLAYING) playSfx("UI & Feedback SFX/Button Click.wav")
                 when (screen) {
                     GameScreen.MENU -> {
                         when {
                             inRect(nx, ny, 0.10f, 0.456f, 0.90f, 0.523f) -> screen = GameScreen.DIFFICULTY
                             inRect(nx, ny, 0.10f, 0.532f, 0.90f, 0.599f) -> screen = GameScreen.WORLDS
-                            inRect(nx, ny, 0.10f, 0.608f, 0.90f, 0.675f) -> screen = GameScreen.HELP
+                            inRect(nx, ny, 0.10f, 0.608f, 0.90f, 0.675f) -> screen = GameScreen.FEATURES
                             inRect(nx, ny, 0.10f, 0.684f, 0.90f, 0.751f) -> openShop(GameScreen.MENU)
                             inRect(nx, ny, 0.10f, 0.760f, 0.90f, 0.827f) -> screen = GameScreen.SETTINGS
                         }
+                        invalidate()
+                        return true
+                    }
+
+                    GameScreen.FEATURES -> {
+                        when {
+                            inRect(nx, ny, 0.12f, 0.235f, 0.88f, 0.293f) -> screen = GameScreen.MODES
+                            inRect(nx, ny, 0.12f, 0.300f, 0.88f, 0.358f) -> screen = GameScreen.CHALLENGES
+                            inRect(nx, ny, 0.12f, 0.365f, 0.88f, 0.423f) -> screen = GameScreen.ACHIEVEMENTS
+                            inRect(nx, ny, 0.12f, 0.430f, 0.88f, 0.488f) -> screen = GameScreen.STATS
+                            inRect(nx, ny, 0.12f, 0.495f, 0.88f, 0.553f) -> screen = GameScreen.CUSTOMIZE
+                            inRect(nx, ny, 0.12f, 0.560f, 0.88f, 0.618f) -> screen = GameScreen.EDITOR
+                            inRect(nx, ny, 0.12f, 0.625f, 0.88f, 0.683f) -> screen = GameScreen.ACCESSIBILITY
+                            inRect(nx, ny, 0.12f, 0.690f, 0.88f, 0.748f) -> screen = GameScreen.EXTRAS
+                            inRect(nx, ny, 0.24f, 0.785f, 0.76f, 0.865f) -> screen = GameScreen.MENU
+                        }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.MODES -> {
+                        val modes = listOf("campaign", "endless", "time_attack", "zen", "boss_rush", "speedrun", "procedural", "local_coop")
+                        val i = modes.indices.firstOrNull { inRect(nx, ny, 0.10f, 0.245f + it * 0.067f, 0.90f, 0.312f + it * 0.067f) }
+                        if (i != null) selectMode(modes[i]) else if (inRect(nx, ny, 0.24f, 0.80f, 0.76f, 0.88f)) screen = GameScreen.FEATURES
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.CHALLENGES -> {
+                        when {
+                            inRect(nx, ny, 0.15f, 0.365f, 0.85f, 0.455f) -> startChallenge(false)
+                            inRect(nx, ny, 0.15f, 0.525f, 0.85f, 0.615f) -> startChallenge(true)
+                            inRect(nx, ny, 0.24f, 0.79f, 0.76f, 0.875f) -> screen = GameScreen.FEATURES
+                        }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.ACHIEVEMENTS -> {
+                        if (inRect(nx, ny, 0.24f, 0.82f, 0.76f, 0.90f)) screen = GameScreen.FEATURES
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.STATS -> {
+                        when {
+                            inRect(nx, ny, 0.10f, 0.625f, 0.48f, 0.69f) -> {
+                                val field = android.widget.EditText(context).apply {
+                                    setText(playerName)
+                                    setSingleLine(true)
+                                    hint = "Player name"
+                                }
+                                android.app.AlertDialog.Builder(context)
+                                    .setTitle("Edit local profile")
+                                    .setView(field)
+                                    .setPositiveButton("Save") { _, _ ->
+                                        playerName = field.text.toString().trim().take(24).ifBlank { "BLADE RUNNER" }
+                                        prefs.edit().putString("player_name", playerName).apply()
+                                        invalidate()
+                                    }
+                                    .setNegativeButton("Cancel", null)
+                                    .show()
+                            }
+                            inRect(nx, ny, 0.52f, 0.625f, 0.90f, 0.69f) -> exportSaveBackup()
+                            inRect(nx, ny, 0.10f, 0.705f, 0.48f, 0.77f) -> importSaveBackupFromClipboard()
+                            inRect(nx, ny, 0.52f, 0.705f, 0.90f, 0.77f) -> screen = GameScreen.FEATURES
+                        }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.CUSTOMIZE -> {
+                        when {
+                            inRect(nx, ny, 0.14f, 0.33f, 0.86f, 0.415f) -> {
+                                themeId = (themeId + 1) % 6
+                                prefs.edit().putInt("theme_id", themeId).apply()
+                                applyTheme()
+                            }
+                            inRect(nx, ny, 0.14f, 0.475f, 0.86f, 0.545f) -> {
+                                val next = (bladeSkin + 1) % 6
+                                val key = "blade_skin_unlocked_" + next
+                                if (next == 0 || prefs.getBoolean(key, false)) bladeSkin = next
+                                else if (coinBalance() >= 150) {
+                                    prefs.edit().putInt("coins", coinBalance() - 150).putBoolean(key, true).apply()
+                                    bladeSkin = next
+                                    showMessage("BLADE SKIN UNLOCKED")
+                                } else showMessage("NEED 150 COINS")
+                                prefs.edit().putInt("blade_skin", bladeSkin).apply()
+                            }
+                            inRect(nx, ny, 0.14f, 0.605f, 0.86f, 0.675f) -> {
+                                val next = (shieldSkin + 1) % 6
+                                val key = "shield_skin_unlocked_" + next
+                                if (next == 0 || prefs.getBoolean(key, false)) shieldSkin = next
+                                else if (coinBalance() >= 150) {
+                                    prefs.edit().putInt("coins", coinBalance() - 150).putBoolean(key, true).apply()
+                                    shieldSkin = next
+                                    showMessage("SHIELD SKIN UNLOCKED")
+                                } else showMessage("NEED 150 COINS")
+                                prefs.edit().putInt("shield_skin", shieldSkin).apply()
+                            }
+                            inRect(nx, ny, 0.14f, 0.735f, 0.86f, 0.80f) -> {
+                                val next = (enemySkin + 1) % 4
+                                val key = "enemy_skin_unlocked_" + next
+                                if (next == 0 || prefs.getBoolean(key, false)) enemySkin = next
+                                else if (coinBalance() >= 200) {
+                                    prefs.edit().putInt("coins", coinBalance() - 200).putBoolean(key, true).apply()
+                                    enemySkin = next
+                                    showMessage("ENEMY STYLE UNLOCKED")
+                                } else showMessage("NEED 200 COINS")
+                                prefs.edit().putInt("enemy_skin", enemySkin).apply()
+                            }
+                            inRect(nx, ny, 0.24f, 0.845f, 0.76f, 0.915f) -> screen = GameScreen.FEATURES
+                        }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.EDITOR -> {
+                        when {
+                            inRect(nx, ny, 0.15f, 0.29f, 0.85f, 0.365f) -> editorTargetCount = if (editorTargetCount >= 12) 1 else editorTargetCount + 1
+                            inRect(nx, ny, 0.15f, 0.39f, 0.85f, 0.465f) -> editorHazardId = (editorHazardId + 1) % editorHazards.size
+                            inRect(nx, ny, 0.15f, 0.50f, 0.85f, 0.575f) -> { saveEditorDraft(); showMessage("CUSTOM ARENA SAVED") }
+                            inRect(nx, ny, 0.15f, 0.605f, 0.85f, 0.68f) -> showEditorSharingDialog()
+                            inRect(nx, ny, 0.15f, 0.71f, 0.85f, 0.785f) -> { gameMode = "editor_test"; prefs.edit().putString("game_mode", gameMode).apply(); startLevel(prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)) }
+                            inRect(nx, ny, 0.24f, 0.85f, 0.76f, 0.925f) -> screen = GameScreen.FEATURES
+                        }
+                        prefs.edit().putInt("editor_target_count", editorTargetCount).putInt("editor_hazard", editorHazardId).apply()
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.ACCESSIBILITY -> {
+                        when {
+                            inRect(nx, ny, 0.12f, 0.185f, 0.88f, 0.227f) -> highContrast = !highContrast
+                            inRect(nx, ny, 0.12f, 0.231f, 0.88f, 0.273f) -> { colorblindMode = !colorblindMode; applyTheme() }
+                            inRect(nx, ny, 0.12f, 0.277f, 0.88f, 0.319f) -> reducedMotion = !reducedMotion
+                            inRect(nx, ny, 0.12f, 0.323f, 0.88f, 0.365f) -> leftHandedMode = !leftHandedMode
+                            inRect(nx, ny, 0.12f, 0.369f, 0.88f, 0.411f) -> oneHandedMode = !oneHandedMode
+                            inRect(nx, ny, 0.12f, 0.415f, 0.88f, 0.457f) -> largeUi = !largeUi
+                            inRect(nx, ny, 0.12f, 0.461f, 0.88f, 0.503f) -> batterySaver = !batterySaver
+                            inRect(nx, ny, 0.12f, 0.507f, 0.88f, 0.549f) -> dynamicDifficulty = !dynamicDifficulty
+                            inRect(nx, ny, 0.12f, 0.553f, 0.88f, 0.595f) -> vibrationEnabled = !vibrationEnabled
+                            inRect(nx, ny, 0.12f, 0.61f, 0.48f, 0.655f) -> hapticLevel = (hapticLevel + 1) % 4
+                            inRect(nx, ny, 0.52f, 0.61f, 0.88f, 0.655f) -> { persianLanguage = !persianLanguage; prefs.edit().putBoolean("persian_language", persianLanguage).apply() }
+                            inRect(nx, ny, 0.12f, 0.665f, 0.48f, 0.71f) -> screen = GameScreen.JUKEBOX
+                            inRect(nx, ny, 0.52f, 0.665f, 0.88f, 0.71f) -> screen = GameScreen.HELP
+                            inRect(nx, ny, 0.24f, 0.72f, 0.76f, 0.775f) -> screen = GameScreen.FEATURES
+                        }
+                        prefs.edit().putBoolean("high_contrast", highContrast).putBoolean("colorblind_mode", colorblindMode)
+                            .putInt("haptic_level", hapticLevel).putBoolean("reduced_motion", reducedMotion)
+                            .putBoolean("left_handed", leftHandedMode).putBoolean("one_handed_mode", oneHandedMode)
+                            .putBoolean("large_ui", largeUi).putBoolean("battery_saver", batterySaver)
+                            .putBoolean("dynamic_difficulty", dynamicDifficulty).putBoolean("vibration_enabled", vibrationEnabled).apply()
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.JUKEBOX -> {
+                        when {
+                            inRect(nx, ny, 0.15f, 0.50f, 0.85f, 0.59f) -> {
+                                jukeboxTrackId = (jukeboxTrackId + 1) % musicTracks.size
+                                prefs.edit().putInt("jukebox_track", jukeboxTrackId).apply()
+                                currentMusicPath = null
+                            }
+                            inRect(nx, ny, 0.15f, 0.615f, 0.85f, 0.705f) -> {
+                                soundEnabled = !soundEnabled
+                                prefs.edit().putBoolean("sound_enabled", soundEnabled).apply()
+                            }
+                            inRect(nx, ny, 0.24f, 0.81f, 0.76f, 0.89f) -> screen = GameScreen.ACCESSIBILITY
+                        }
+                        invalidate()
+                        return true
+                    }
+
+                    GameScreen.EXTRAS -> {
+                        when {
+                            inRect(nx, ny, 0.12f, 0.26f, 0.88f, 0.332f) -> screen = GameScreen.LOCAL_SCORES
+                            inRect(nx, ny, 0.12f, 0.352f, 0.88f, 0.424f) -> screen = GameScreen.REPLAYS
+                            inRect(nx, ny, 0.12f, 0.444f, 0.88f, 0.516f) -> screen = GameScreen.PHOTO_MODE
+                            inRect(nx, ny, 0.12f, 0.536f, 0.88f, 0.608f) -> screen = GameScreen.SEASONAL
+                            inRect(nx, ny, 0.12f, 0.628f, 0.88f, 0.700f) -> screen = GameScreen.ONLINE_FEATURES
+                            inRect(nx, ny, 0.24f, 0.76f, 0.76f, 0.845f) -> screen = GameScreen.FEATURES
+                        }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.LOCAL_SCORES -> {
+                        if (inRect(nx, ny, 0.24f, 0.82f, 0.76f, 0.90f)) screen = GameScreen.EXTRAS
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.REPLAYS -> {
+                        when {
+                            inRect(nx, ny, 0.10f, 0.745f, 0.48f, 0.82f) -> shareReplayTrace()
+                            inRect(nx, ny, 0.52f, 0.745f, 0.90f, 0.82f) -> screen = GameScreen.EXTRAS
+                        }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.PHOTO_MODE -> {
+                        when {
+                            inRect(nx, ny, 0.25f, 0.755f, 0.49f, 0.835f) -> showMessage(if (savePhoto()) "PHOTO SAVED" else "COULD NOT SAVE PHOTO")
+                            inRect(nx, ny, 0.51f, 0.755f, 0.75f, 0.835f) -> screen = GameScreen.EXTRAS
+                        }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.SEASONAL -> {
+                        when {
+                            inRect(nx, ny, 0.15f, 0.52f, 0.85f, 0.61f) -> {
+                                gameMode = "seasonal"
+                                prefs.edit().putString("game_mode", gameMode).apply()
+                                startLevel(prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size))
+                            }
+                            inRect(nx, ny, 0.15f, 0.635f, 0.85f, 0.725f) -> {
+                                if (!prefs.getBoolean("season_reward_claimed", false) && prefs.getInt("total_clears", 0) >= 5) {
+                                    prefs.edit().putBoolean("season_reward_claimed", true).putInt("coins", coinBalance() + 100).apply()
+                                    showMessage("100 SEASON COINS CLAIMED")
+                                }
+                            }
+                            inRect(nx, ny, 0.24f, 0.80f, 0.76f, 0.88f) -> screen = GameScreen.EXTRAS
+                        }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.ONLINE_FEATURES -> {
+                        if (inRect(nx, ny, 0.24f, 0.80f, 0.76f, 0.88f)) screen = GameScreen.EXTRAS
                         invalidate()
                         return true
                     }
@@ -2206,7 +3712,10 @@ private class GameView(context: Context) : View(context) {
                         return true
                     }
                     GameScreen.HELP -> {
-                        if (inRect(nx, ny, 0.20f, 0.78f, 0.80f, 0.87f)) screen = GameScreen.MENU
+                        when {
+                            inRect(nx, ny, 0.10f, 0.78f, 0.48f, 0.87f) -> showControlMappingDialog()
+                            inRect(nx, ny, 0.52f, 0.78f, 0.90f, 0.87f) -> screen = GameScreen.MENU
+                        }
                         invalidate()
                         return true
                     }
@@ -2228,8 +3737,8 @@ private class GameView(context: Context) : View(context) {
                     GameScreen.WON -> {
                         when {
                             inRect(nx, ny, 0.18f, 0.50f, 0.82f, 0.60f) -> {
-                                if (levelId >= levels.size) screen = GameScreen.CAMPAIGN_COMPLETE
-                                else startLevel(levelId + 1)
+                                if (levelId >= levels.size && gameMode !in setOf("endless", "procedural")) screen = GameScreen.CAMPAIGN_COMPLETE
+                                else startLevel(if (levelId >= levels.size) 1 else levelId + 1)
                             }
                             inRect(nx, ny, 0.18f, 0.625f, 0.82f, 0.725f) -> { selectedWorld=CampaignWorlds.indexForLevel(levelId);screen=GameScreen.LEVELS }
                         }
@@ -2253,13 +3762,21 @@ private class GameView(context: Context) : View(context) {
                         return true
                     }
                     GameScreen.PLAYING -> {
-                        if (inRect(nx, ny, 0.775f, 0.790f, 0.98f, 0.935f)) {
+                        val abilityHit = if (oneHandedMode) {
+                            if (leftHandedMode) inRect(nx, ny, 0.01f, 0.755f, 0.275f, 0.945f)
+                            else inRect(nx, ny, 0.725f, 0.755f, 0.99f, 0.945f)
+                        } else {
+                            if (leftHandedMode) inRect(nx, ny, 0.02f, 0.790f, 0.225f, 0.935f)
+                            else inRect(nx, ny, 0.775f, 0.790f, 0.98f, 0.935f)
+                        }
+                        if (abilityHit) {
                             touchingAbility = true
                             if (upgradeLevel("nova") > 0) activateNovaPulse() else openShop(GameScreen.PLAYING)
                             invalidate()
                             return true
                         }
-                        if (inRect(nx, ny, 0.82f, 0.025f, 0.98f, 0.115f)) {
+                        if (if (leftHandedMode) inRect(nx, ny, 0.02f, 0.025f, 0.18f, 0.115f)
+                            else inRect(nx, ny, 0.82f, 0.025f, 0.98f, 0.115f)) {
                             screen = GameScreen.PAUSED
                             slowMotion = false
                             playSfx("UI & Feedback SFX/Pause.wav")
@@ -2284,6 +3801,16 @@ private class GameView(context: Context) : View(context) {
             }
             MotionEvent.ACTION_MOVE -> {
                 if (touchingAbility) return true
+                if (screen == GameScreen.PLAYING && gameMode == "local_coop") {
+                    for (index in 0 until event.pointerCount) {
+                        val id = event.getPointerId(index)
+                        val pointerY = event.getY(index) / viewH
+                        if (id == primaryPointerId) guardPaddleY = clampGuardPaddleY(pointerY)
+                        if (id == secondPointerId) secondGuardPaddleY = clampGuardPaddleY(pointerY)
+                    }
+                    invalidate()
+                    return true
+                }
                 if (event.pointerCount > 1) slowMotion = true
                 if (wallGuardMode && screen == GameScreen.PLAYING) {
                     guardPaddleY = clampGuardPaddleY(ny)
@@ -2298,6 +3825,8 @@ private class GameView(context: Context) : View(context) {
                 return true
             }
             MotionEvent.ACTION_UP -> {
+                primaryPointerId = -1
+                secondPointerId = -1
                 if (touchingAbility) {
                     touchingAbility = false
                     invalidate()
@@ -2332,6 +3861,8 @@ private class GameView(context: Context) : View(context) {
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
+                primaryPointerId = -1
+                secondPointerId = -1
                 touchingAbility = false
                 aiming = false
                 slowMotion = false

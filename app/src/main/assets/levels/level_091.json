@@ -1,0 +1,61 @@
+{
+  "id": 91,
+  "name": "CELESTIAL FORGE • Dark Matter 1",
+  "world": "Celestial Forge",
+  "maxBounces": 13,
+  "playerSpawn": {
+    "x": 0.14,
+    "y": 0.8
+  },
+  "exit": {
+    "x": 0.87,
+    "y": 0.18
+  },
+  "switch": {
+    "x": 0.78,
+    "y": 0.75
+  },
+  "enemies": [
+    {
+      "x": 0.345,
+      "y": 0.24
+    },
+    {
+      "x": 0.515,
+      "y": 0.37
+    },
+    {
+      "x": 0.685,
+      "y": 0.5
+    },
+    {
+      "x": 0.325,
+      "y": 0.63
+    }
+  ],
+  "crates": [
+    {
+      "x": 0.45,
+      "y": 0.4
+    },
+    {
+      "x": 0.66,
+      "y": 0.54
+    },
+    {
+      "x": 0.45,
+      "y": 0.68
+    }
+  ],
+  "hazards": [
+    {
+      "type": "spikes",
+      "x": 0.5,
+      "y": 0.89,
+      "width": 0.58,
+      "height": 0.028
+    }
+  ],
+  "requiresAllTargets": true,
+  "requiresSwitch": true
+}

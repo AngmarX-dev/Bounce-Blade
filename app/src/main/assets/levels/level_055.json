@@ -1,0 +1,68 @@
+{
+  "id": 55,
+  "name": "OBSIDIAN RIFT • Thunder Run 5",
+  "world": "Obsidian Rift",
+  "maxBounces": 17,
+  "playerSpawn": {
+    "x": 0.14,
+    "y": 0.8
+  },
+  "exit": {
+    "x": 0.87,
+    "y": 0.18
+  },
+  "switch": {
+    "x": 0.78,
+    "y": 0.75
+  },
+  "enemies": [
+    {
+      "x": 0.31,
+      "y": 0.402
+    },
+    {
+      "x": 0.48,
+      "y": 0.532
+    },
+    {
+      "x": 0.65,
+      "y": 0.662
+    },
+    {
+      "x": 0.82,
+      "y": 0.252
+    }
+  ],
+  "crates": [
+    {
+      "x": 0.45,
+      "y": 0.4
+    },
+    {
+      "x": 0.66,
+      "y": 0.54
+    },
+    {
+      "x": 0.45,
+      "y": 0.68
+    }
+  ],
+  "hazards": [
+    {
+      "type": "spikes",
+      "x": 0.5,
+      "y": 0.89,
+      "width": 0.58,
+      "height": 0.028
+    },
+    {
+      "type": "power_up",
+      "x": 0.46,
+      "y": 0.76,
+      "width": 0.055,
+      "height": 0.055
+    }
+  ],
+  "requiresAllTargets": true,
+  "requiresSwitch": true
+}

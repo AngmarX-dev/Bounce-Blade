@@ -7,7 +7,7 @@ data class NormalizedPoint(val x: Float, val y: Float) {
     }
 }
 
-enum class HazardType { SPIKES, LASER, MOVING_HAZARD, STICKY_WALL, TELEPORTER, POWER_UP }
+enum class HazardType { SPIKES, LASER, MOVING_HAZARD, STICKY_WALL, TELEPORTER, POWER_UP, MOVING_SPIKES, ROTATING_LASER, GRAVITY_WELL, CONVEYOR_BELT, BREAKABLE_WALL, SWITCH, KEY, DOOR }
 
 data class HazardDefinition(
     val type: HazardType,

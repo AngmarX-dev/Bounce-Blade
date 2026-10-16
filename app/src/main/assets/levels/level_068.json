@@ -1,0 +1,61 @@
+{
+  "id": 68,
+  "name": "SOLAR FLARE • Frost Engine 8",
+  "world": "Solar Flare",
+  "maxBounces": 18,
+  "playerSpawn": {
+    "x": 0.14,
+    "y": 0.8
+  },
+  "exit": {
+    "x": 0.87,
+    "y": 0.18
+  },
+  "switch": {
+    "x": 0.78,
+    "y": 0.75
+  },
+  "enemies": [
+    {
+      "x": 0.415,
+      "y": 0.375
+    },
+    {
+      "x": 0.585,
+      "y": 0.505
+    },
+    {
+      "x": 0.755,
+      "y": 0.635
+    },
+    {
+      "x": 0.395,
+      "y": 0.765
+    },
+    {
+      "x": 0.565,
+      "y": 0.355
+    }
+  ],
+  "crates": [
+    {
+      "x": 0.36,
+      "y": 0.45
+    },
+    {
+      "x": 0.57,
+      "y": 0.59
+    }
+  ],
+  "hazards": [
+    {
+      "type": "laser",
+      "x": 0.5,
+      "y": 0.47,
+      "width": 0.64,
+      "height": 0.016
+    }
+  ],
+  "requiresAllTargets": true,
+  "requiresSwitch": true
+}

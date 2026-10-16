@@ -1,0 +1,60 @@
+{
+  "id": 60,
+  "name": "OBSIDIAN RIFT • Final Echo 10",
+  "world": "Obsidian Rift",
+  "maxBounces": 18,
+  "playerSpawn": {
+    "x": 0.14,
+    "y": 0.8
+  },
+  "exit": {
+    "x": 0.87,
+    "y": 0.18
+  },
+  "switch": {
+    "x": 0.78,
+    "y": 0.75
+  },
+  "enemies": [
+    {
+      "x": 0.31,
+      "y": 0.348
+    },
+    {
+      "x": 0.48,
+      "y": 0.478
+    },
+    {
+      "x": 0.65,
+      "y": 0.608
+    }
+  ],
+  "crates": [
+    {
+      "x": 0.36,
+      "y": 0.35
+    },
+    {
+      "x": 0.57,
+      "y": 0.49
+    }
+  ],
+  "hazards": [
+    {
+      "type": "power_up",
+      "x": 0.51,
+      "y": 0.73,
+      "width": 0.055,
+      "height": 0.055
+    },
+    {
+      "type": "power_up",
+      "x": 0.46,
+      "y": 0.76,
+      "width": 0.055,
+      "height": 0.055
+    }
+  ],
+  "requiresAllTargets": true,
+  "requiresSwitch": true
+}

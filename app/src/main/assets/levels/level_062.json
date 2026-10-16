@@ -1,0 +1,61 @@
+{
+  "id": 62,
+  "name": "SOLAR FLARE • Ember Lock 2",
+  "world": "Solar Flare",
+  "maxBounces": 18,
+  "playerSpawn": {
+    "x": 0.14,
+    "y": 0.8
+  },
+  "exit": {
+    "x": 0.87,
+    "y": 0.18
+  },
+  "switch": {
+    "x": 0.78,
+    "y": 0.75
+  },
+  "enemies": [
+    {
+      "x": 0.38,
+      "y": 0.402
+    },
+    {
+      "x": 0.55,
+      "y": 0.532
+    },
+    {
+      "x": 0.72,
+      "y": 0.662
+    },
+    {
+      "x": 0.36,
+      "y": 0.252
+    },
+    {
+      "x": 0.53,
+      "y": 0.382
+    }
+  ],
+  "crates": [
+    {
+      "x": 0.42,
+      "y": 0.45
+    },
+    {
+      "x": 0.63,
+      "y": 0.59
+    }
+  ],
+  "hazards": [
+    {
+      "type": "laser",
+      "x": 0.5,
+      "y": 0.47,
+      "width": 0.64,
+      "height": 0.016
+    }
+  ],
+  "requiresAllTargets": true,
+  "requiresSwitch": true
+}

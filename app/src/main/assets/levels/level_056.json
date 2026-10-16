@@ -1,0 +1,61 @@
+{
+  "id": 56,
+  "name": "OBSIDIAN RIFT • Falling Star 6",
+  "world": "Obsidian Rift",
+  "maxBounces": 17,
+  "playerSpawn": {
+    "x": 0.14,
+    "y": 0.8
+  },
+  "exit": {
+    "x": 0.87,
+    "y": 0.18
+  },
+  "switch": {
+    "x": 0.78,
+    "y": 0.75
+  },
+  "enemies": [
+    {
+      "x": 0.345,
+      "y": 0.24
+    },
+    {
+      "x": 0.515,
+      "y": 0.37
+    },
+    {
+      "x": 0.685,
+      "y": 0.5
+    },
+    {
+      "x": 0.325,
+      "y": 0.63
+    },
+    {
+      "x": 0.495,
+      "y": 0.76
+    }
+  ],
+  "crates": [
+    {
+      "x": 0.36,
+      "y": 0.45
+    },
+    {
+      "x": 0.57,
+      "y": 0.59
+    }
+  ],
+  "hazards": [
+    {
+      "type": "laser",
+      "x": 0.5,
+      "y": 0.47,
+      "width": 0.64,
+      "height": 0.016
+    }
+  ],
+  "requiresAllTargets": true,
+  "requiresSwitch": true
+}
