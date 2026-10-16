@@ -2013,7 +2013,7 @@ private class GameView(context: Context) : View(context) {
     private fun drawWorldSelect(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         drawText(canvas,"CHOOSE YOUR WORLD",0.5f,0.285f,0.058f,Color.WHITE,Paint.Align.CENTER)
-        drawText(canvas,"50 LEVELS  •  5 WORLDS  •  OFFLINE CAMPAIGN",0.5f,0.335f,0.019f,muted,Paint.Align.CENTER)
+        drawText(canvas,"100 LEVELS  •  10 WORLDS  •  OFFLINE CAMPAIGN",0.5f,0.335f,0.019f,muted,Paint.Align.CENTER)
         val unlocked=prefs.getInt("unlocked_level",1).coerceIn(1,levels.size)
         for(w in 0 until CampaignWorlds.WORLD_COUNT){
             val first=CampaignWorlds.firstLevelForWorld(w); val available=unlocked>=first; val top=0.375f+w*0.088f
@@ -2740,7 +2740,7 @@ private class GameView(context: Context) : View(context) {
         val calendar = java.util.Calendar.getInstance()
         val day = calendar.get(java.util.Calendar.DAY_OF_YEAR)
         drawText(canvas, "CHALLENGES", 0.5f, 0.22f, 0.060f, Color.WHITE, Paint.Align.CENTER)
-        drawText(canvas, "TODAY'S ROTATION  #" + (day % 50 + 1), 0.5f, 0.30f, 0.022f, cyan, Paint.Align.CENTER)
+        drawText(canvas, "TODAY'S ROTATION  #" + (day % 100 + 1), 0.5f, 0.30f, 0.022f, cyan, Paint.Align.CENTER)
         drawButton(canvas, 0.15f, 0.365f, 0.85f, 0.455f, "START DAILY CHALLENGE", gold)
         drawText(canvas, "BEST DAILY SCORE  " + prefs.getInt("daily_best_score", 0), 0.5f, 0.485f, 0.019f, muted, Paint.Align.CENTER)
         drawButton(canvas, 0.15f, 0.525f, 0.85f, 0.615f, "START WEEKLY CHALLENGE", pink)
