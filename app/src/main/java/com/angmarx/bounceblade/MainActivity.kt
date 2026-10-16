@@ -218,6 +218,7 @@ private class GameView(context: Context) : View(context) {
     private val pickups = mutableListOf<PickupState>()
     private val activeEffects = mutableMapOf<String, Float>()
     private var extraLifeUsed = false
+    private var multiCatchCharges = 0
     private val musicTracks = listOf(
         "Music & Ambience/Main Menu Theme.wav",
         "Music & Ambience/Gameplay Background.wav",
@@ -450,7 +451,7 @@ private class GameView(context: Context) : View(context) {
             }
         }
         if (screen == GameScreen.PLAYING && flying) {
-            val timeScale = if (slowMotion && slowMeter > 0f) 0.28f else 1f
+            val timeScale = if ((slowMotion && slowMeter > 0f) || (activeEffects["slow_time"] ?: 0f) > 0f) 0.28f else 1f
             val dt = rawDt * timeScale
             if (slowMotion && slowMeter > 0f) slowMeter = (slowMeter - rawDt * 0.20f).coerceAtLeast(0f)
             else slowMeter = (slowMeter + rawDt * 0.075f).coerceAtMost(1f)
@@ -861,9 +862,14 @@ private class GameView(context: Context) : View(context) {
             val shieldContact = if (leftHandedMode) rightContact else leftContact
             val firstCatch = abs(py - paddleCenter) <= paddleHalf + radius
             val secondCatch = gameMode == "local_coop" && abs(py - secondCenter) <= paddleHalf + radius
-            if (firstCatch || secondCatch) {
+            val autoCatch = !firstCatch && !secondCatch && multiCatchCharges > 0
+            if (firstCatch || secondCatch || autoCatch) {
+                if (autoCatch) {
+                    multiCatchCharges--
+                    showMessage("MULTI-CATCH SAVE • " + multiCatchCharges + " LEFT")
+                }
                 px = shieldContact
-                val catchCenter = if (!firstCatch && secondCatch) secondCenter else paddleCenter
+                val catchCenter = if (!firstCatch && secondCatch) secondCenter else if (autoCatch) py else paddleCenter
                 val offset = ((py - catchCenter) / (paddleHalf + radius)).coerceIn(-1f, 1f)
                 if (secondCatch && !firstCatch) showMessage("PLAYER 2 SAVE!")
                 val oldSpeed = sqrt(velocityX * velocityX + velocityY * velocityY)
@@ -918,12 +924,17 @@ private class GameView(context: Context) : View(context) {
                     minDim * 0.46f * bladeSpeedScale(),
                     minDim * 0.90f * bladeSpeedScale()
                 )
-            velocityX = if (cameFromLeft) -abs(velocityX) else abs(velocityX)
+            val piercing = (activeEffects["piercing"] ?: 0f) > 0f
+            if (!piercing) velocityX = if (cameFromLeft) -abs(velocityX) else abs(velocityX)
             velocityY += ((py - ey) / hitRadius).coerceIn(-1f, 1f) * minDim * 0.16f
             val adjustedSpeed = sqrt(velocityX * velocityX + velocityY * velocityY).coerceAtLeast(1f)
             velocityX *= speed / adjustedSpeed
             velocityY *= speed / adjustedSpeed
-            px = if (cameFromLeft) ex - hitRadius else ex + hitRadius
+            px = if (piercing) {
+                if (cameFromLeft) ex + hitRadius else ex - hitRadius
+            } else {
+                if (cameFromLeft) ex - hitRadius else ex + hitRadius
+            }
             addBurst(ex, ey, pink, 14)
             haptic()
             break
@@ -945,6 +956,8 @@ private class GameView(context: Context) : View(context) {
                 "shield_expand" -> activeEffects["shield_expand"] = 12f
                 "slow_time" -> activeEffects["slow_time"] = 8f
                 "score_multiplier" -> activeEffects["score_multiplier"] = 12f
+                "multi_catch" -> multiCatchCharges = (multiCatchCharges + 2).coerceAtMost(6)
+                "piercing" -> activeEffects["piercing"] = 8f
                 "extra_life" -> { activeEffects["extra_life"] = 30f; extraLifeUsed = false }
                 "blade_speed" -> activeEffects["blade_speed"] = 10f
                 "magnet" -> { score += 200; prefs.edit().putInt("coins", coinBalance() + 25).apply() }
@@ -1257,12 +1270,14 @@ private class GameView(context: Context) : View(context) {
         enemies = activeEnemyPoints.mapIndexed { index, point ->
             val bossRush = gameMode == "boss_rush"
             EnemyState(point.x, point.y, true, if (bossRush) 3 else enemyKindForLevel(levelId),
-                if (bossRush) 3 else enemyHealthForLevel(levelId, index), 1.2f + (index % 3) * 0.6f, true)
+                if (bossRush) 10 + index * 2 else enemyHealthForLevel(levelId, index),
+                1.2f + (index % 3) * 0.6f, true)
         }.toMutableList()
         pickups.clear()
         activeEffects.clear()
         extraLifeUsed = false
-        val pickupTypes = listOf("shield_expand", "slow_time", "score_multiplier", "extra_life", "blade_speed", "magnet")
+        multiCatchCharges = 0
+        val pickupTypes = listOf("shield_expand", "slow_time", "multi_catch", "score_multiplier", "extra_life", "blade_speed", "magnet", "piercing")
         val pickupCount = when {
             gameMode == "editor_test" && editorHazardId > 0 -> 1
             gameMode == "procedural" -> 2
@@ -1824,8 +1839,8 @@ private class GameView(context: Context) : View(context) {
             paint.textAlign = Paint.Align.CENTER
             paint.textSize = minDim * 0.023f
             canvas.drawText(when (pickup.type) {
-                "shield_expand" -> "S"; "slow_time" -> "T"; "score_multiplier" -> "2x"
-                "extra_life" -> "+"; "blade_speed" -> "B"; else -> "C"
+                "shield_expand" -> "S"; "slow_time" -> "T"; "multi_catch" -> "M"; "piercing" -> "P"
+                "score_multiplier" -> "2x"; "extra_life" -> "+"; "blade_speed" -> "B"; else -> "C"
             }, px, py + paint.textSize * 0.34f, paint)
         }
         val bladePx = bladeX * viewW
