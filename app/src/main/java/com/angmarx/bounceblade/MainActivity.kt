@@ -2098,6 +2098,216 @@ private class GameView(context: Context) : View(context) {
         }
     }
 
+
+    private fun bladeSkinColor(): Int = when (bladeSkin) {
+        1 -> Color.rgb(255, 105, 120)
+        2 -> Color.rgb(118, 255, 138)
+        3 -> Color.rgb(255, 214, 90)
+        4 -> Color.rgb(190, 118, 255)
+        5 -> Color.rgb(255, 255, 255)
+        else -> cyan
+    }
+
+    private fun shieldSkinColor(): Int = when (shieldSkin) {
+        1 -> Color.rgb(255, 112, 112)
+        2 -> Color.rgb(116, 255, 145)
+        3 -> Color.rgb(255, 219, 90)
+        4 -> Color.rgb(184, 128, 255)
+        5 -> Color.rgb(255, 255, 255)
+        else -> cyan
+    }
+
+    private fun selectMode(mode: String, startImmediately: Boolean = true) {
+        gameMode = mode
+        prefs.edit().putString("game_mode", mode).apply()
+        if (startImmediately) {
+            val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
+            val startId = if (mode == "boss_rush" && unlocked >= 10) (unlocked / 10 * 10).coerceIn(10, levels.size) else unlocked
+            startLevel(startId)
+        } else screen = GameScreen.MENU
+    }
+
+    private fun startChallenge(weekly: Boolean) {
+        val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
+        val calendar = java.util.Calendar.getInstance()
+        val day = calendar.get(java.util.Calendar.DAY_OF_YEAR)
+        val seed = if (weekly) day / 7 + calendar.get(java.util.Calendar.YEAR) * 3 else day + calendar.get(java.util.Calendar.YEAR)
+        val stage = (seed % unlocked) + 1
+        gameMode = if (weekly) "weekly" else "daily"
+        prefs.edit().putString("game_mode", gameMode).apply()
+        startLevel(stage)
+    }
+
+    private fun saveEditorDraft(): String {
+        val hazard = editorHazards[editorHazardId]
+        val draft = "{\"name\":\"My Arena\",\"targets\":" + editorTargetCount +
+            ",\"hazard\":\"" + hazard + "\",\"seed\":" + prefs.getInt("procedural_seed", 23) + "}"
+        prefs.edit().putString("custom_level_draft", draft).putInt("editor_target_count", editorTargetCount)
+            .putInt("editor_hazard", editorHazardId).apply()
+        return draft
+    }
+
+    private fun shareEditorDraft() {
+        val draft = saveEditorDraft()
+        try {
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(android.content.Intent.EXTRA_SUBJECT, "Bounce Blade custom arena")
+                putExtra(android.content.Intent.EXTRA_TEXT, draft)
+            }
+            context.startActivity(android.content.Intent.createChooser(intent, "Share custom arena"))
+        } catch (_: Exception) {
+            showMessage("DRAFT SAVED LOCALLY")
+        }
+    }
+
+    private fun drawFeatures(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "FEATURE HUB", 0.5f, 0.16f, 0.060f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "OFFLINE MODES • PROGRESSION • PERSONALIZATION", 0.5f, 0.205f, 0.017f, cyan, Paint.Align.CENTER)
+        val items = listOf("GAME MODES", "DAILY / WEEKLY CHALLENGE", "ACHIEVEMENTS", "PROFILE & STATS",
+            "BLADE / SHIELD COSMETICS", "LEVEL LAB & SHARE", "ACCESSIBILITY & AUDIO", "HELP & CONTROLS")
+        items.forEachIndexed { i, label ->
+            val top = 0.235f + i * 0.065f
+            drawButton(canvas, 0.12f, top, 0.88f, top + 0.058f, label, if (i % 2 == 0) cyan else gold)
+        }
+        drawButton(canvas, 0.24f, 0.785f, 0.76f, 0.865f, "BACK", pink)
+    }
+
+    private fun drawModes(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "GAME MODES", 0.5f, 0.16f, 0.060f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "ACTIVE: " + gameMode.replace('_', ' ').uppercase(), 0.5f, 0.205f, 0.020f, gold, Paint.Align.CENTER)
+        val modes = listOf(
+            "campaign" to "CAMPAIGN • 50 STAGES",
+            "endless" to "ENDLESS • LOOP FOREVER",
+            "time_attack" to "TIME ATTACK • 60 SECONDS",
+            "zen" to "ZEN / PRACTICE • NO RUN LOST",
+            "boss_rush" to "BOSS RUSH • ARMORED TARGETS",
+            "speedrun" to "SPEEDRUN • TRACK YOUR TIME",
+            "procedural" to "PROCEDURAL • RANDOM ARENA"
+        )
+        modes.forEachIndexed { i, pair ->
+            val top = 0.245f + i * 0.077f
+            val label = (if (gameMode == pair.first) "✓  " else "") + pair.second
+            drawButton(canvas, 0.10f, top, 0.90f, top + 0.067f, label, if (i % 2 == 0) cyan else gold)
+        }
+        drawButton(canvas, 0.24f, 0.80f, 0.76f, 0.88f, "BACK", pink)
+    }
+
+    private fun drawChallenges(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        val calendar = java.util.Calendar.getInstance()
+        val day = calendar.get(java.util.Calendar.DAY_OF_YEAR)
+        drawText(canvas, "CHALLENGES", 0.5f, 0.22f, 0.060f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "TODAY'S ROTATION  #" + (day % 50 + 1), 0.5f, 0.30f, 0.022f, cyan, Paint.Align.CENTER)
+        drawButton(canvas, 0.15f, 0.365f, 0.85f, 0.455f, "START DAILY CHALLENGE", gold)
+        drawText(canvas, "BEST DAILY SCORE  " + prefs.getInt("daily_best_score", 0), 0.5f, 0.485f, 0.019f, muted, Paint.Align.CENTER)
+        drawButton(canvas, 0.15f, 0.525f, 0.85f, 0.615f, "START WEEKLY CHALLENGE", pink)
+        drawText(canvas, "BEST WEEKLY SCORE  " + prefs.getInt("weekly_best_score", 0), 0.5f, 0.645f, 0.019f, muted, Paint.Align.CENTER)
+        drawText(canvas, "Challenges are seeded locally; no server is required.", 0.5f, 0.71f, 0.016f, muted, Paint.Align.CENTER)
+        drawButton(canvas, 0.24f, 0.79f, 0.76f, 0.875f, "BACK", cyan)
+    }
+
+    private fun achievementLines(): List<Pair<String, Boolean>> = listOf(
+        "FIRST CLEAR" to (prefs.getInt("total_clears", 0) >= 1),
+        "TEN CLEARS" to (prefs.getInt("total_clears", 0) >= 10),
+        "FIFTY CLEARS" to (prefs.getInt("total_clears", 0) >= 50),
+        "STAR COLLECTOR" to (totalBestStarsAfter(0, 0) >= 50),
+        "COMBO MASTER" to (bestCombo >= 5 || prefs.getInt("all_time_best_combo", 0) >= 5),
+        "BLADE INVESTOR" to (shopItems.any { upgradeLevel(it.id) > 0 }),
+        "WORLD CONQUEROR" to (prefs.getInt("unlocked_level", 1) >= levels.size)
+    )
+
+    private fun drawAchievements(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "ACHIEVEMENTS", 0.5f, 0.19f, 0.060f, Color.WHITE, Paint.Align.CENTER)
+        achievementLines().forEachIndexed { i, entry ->
+            val y = 0.30f + i * 0.065f
+            drawText(canvas, if (entry.second) "✓  " + entry.first else "◇  " + entry.first,
+                0.18f, y, 0.023f, if (entry.second) gold else muted)
+            drawText(canvas, if (entry.second) "UNLOCKED" else "LOCKED", 0.82f, y, 0.017f,
+                if (entry.second) cyan else muted, Paint.Align.RIGHT)
+        }
+        drawText(canvas, "Achievements and best times are stored on this device.", 0.5f, 0.785f, 0.016f, muted, Paint.Align.CENTER)
+        drawButton(canvas, 0.24f, 0.82f, 0.76f, 0.90f, "BACK", cyan)
+    }
+
+    private fun drawStats(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        val seconds = prefs.getLong("total_play_seconds", 0L)
+        drawText(canvas, "LOCAL PROFILE", 0.5f, 0.18f, 0.060f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "BLADE RUNNER  •  OFFLINE PROFILE", 0.5f, 0.245f, 0.021f, cyan, Paint.Align.CENTER)
+        val lines = listOf(
+            "RUNS STARTED  " + prefs.getInt("total_runs", 0),
+            "STAGES CLEARED  " + prefs.getInt("total_clears", 0),
+            "FAILED RUNS  " + prefs.getInt("total_fails", 0),
+            "TOTAL PLAY TIME  " + formatTime(seconds.toFloat()),
+            "BEST STARS  " + totalBestStarsAfter(0, 0) + "/" + (levels.size * 3),
+            "COINS  " + coinBalance() + "    BEST COMBO  " + max(bestCombo, prefs.getInt("all_time_best_combo", 0))
+        )
+        lines.forEachIndexed { i, text -> drawText(canvas, text, 0.18f, 0.34f + i * 0.065f, 0.021f, if (i % 2 == 0) Color.WHITE else muted) }
+        drawText(canvas, "Cloud profile sync needs a configured online service.", 0.5f, 0.77f, 0.015f, muted, Paint.Align.CENTER)
+        drawButton(canvas, 0.24f, 0.82f, 0.76f, 0.90f, "BACK", cyan)
+    }
+
+    private fun drawCustomize(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "BLADE & SHIELD LAB", 0.5f, 0.20f, 0.060f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "THEME  " + themeName(), 0.5f, 0.29f, 0.023f, cyan, Paint.Align.CENTER)
+        drawButton(canvas, 0.14f, 0.33f, 0.86f, 0.415f, "CYCLE THEME", cyan)
+        drawText(canvas, "BLADE SKIN  " + (bladeSkin + 1) + "/6", 0.5f, 0.465f, 0.023f, bladeSkinColor(), Paint.Align.CENTER)
+        drawButton(canvas, 0.14f, 0.49f, 0.86f, 0.575f, "NEXT BLADE SKIN", gold)
+        drawText(canvas, "SHIELD SKIN  " + (shieldSkin + 1) + "/6", 0.5f, 0.625f, 0.023f, shieldSkinColor(), Paint.Align.CENTER)
+        drawButton(canvas, 0.14f, 0.65f, 0.86f, 0.735f, "NEXT SHIELD SKIN", pink)
+        drawButton(canvas, 0.24f, 0.80f, 0.76f, 0.88f, "BACK", cyan)
+    }
+
+    private fun drawEditor(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "LEVEL LAB", 0.5f, 0.18f, 0.060f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "CREATE A LOCAL ARENA DRAFT", 0.5f, 0.245f, 0.020f, cyan, Paint.Align.CENTER)
+        drawButton(canvas, 0.15f, 0.29f, 0.85f, 0.365f, "TARGET COUNT: " + editorTargetCount + " (TAP TO CYCLE)", gold)
+        drawButton(canvas, 0.15f, 0.39f, 0.85f, 0.465f, "HAZARD: " + editorHazards[editorHazardId], pink)
+        drawButton(canvas, 0.15f, 0.50f, 0.85f, 0.575f, "SAVE DRAFT", cyan)
+        drawButton(canvas, 0.15f, 0.605f, 0.85f, 0.68f, "SHARE DRAFT", gold)
+        drawButton(canvas, 0.15f, 0.71f, 0.85f, 0.785f, "PLAY TEST", pink)
+        drawText(canvas, "Saved draft: " + if (prefs.contains("custom_level_draft")) "YES" else "NO", 0.5f, 0.815f, 0.017f, muted, Paint.Align.CENTER)
+        drawButton(canvas, 0.24f, 0.85f, 0.76f, 0.925f, "BACK", cyan)
+    }
+
+    private fun drawAccessibility(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "ACCESSIBILITY & PERFORMANCE", 0.5f, 0.17f, 0.052f, Color.WHITE, Paint.Align.CENTER)
+        val options = listOf(
+            "HIGH CONTRAST: " + if (highContrast) "ON" else "OFF",
+            "REDUCED MOTION: " + if (reducedMotion) "ON" else "OFF",
+            "LEFT-HANDED LAYOUT: " + if (leftHandedMode) "ON" else "OFF",
+            "LARGE UI: " + if (largeUi) "ON" else "OFF",
+            "BATTERY SAVER: " + if (batterySaver) "ON" else "OFF",
+            "DYNAMIC DIFFICULTY: " + if (dynamicDifficulty) "ON" else "OFF",
+            "VIBRATION: " + if (vibrationEnabled) "ON" else "OFF"
+        )
+        options.forEachIndexed { i, label ->
+            val top = 0.235f + i * 0.063f
+            drawButton(canvas, 0.12f, top, 0.88f, top + 0.056f, label, if (i % 2 == 0) cyan else gold)
+        }
+        drawButton(canvas, 0.12f, 0.70f, 0.48f, 0.765f, "JUKEBOX", pink)
+        drawButton(canvas, 0.52f, 0.70f, 0.88f, 0.765f, "HELP", gold)
+        drawButton(canvas, 0.24f, 0.81f, 0.76f, 0.89f, "BACK", cyan)
+    }
+
+    private fun drawJukebox(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "SOUNDTRACK PLAYER", 0.5f, 0.22f, 0.060f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "TRACK " + (jukeboxTrackId + 1) + "/4", 0.5f, 0.34f, 0.025f, gold, Paint.Align.CENTER)
+        drawText(canvas, musicTracks[jukeboxTrackId].substringAfterLast('/').removeSuffix(".wav"), 0.5f, 0.42f, 0.024f, cyan, Paint.Align.CENTER)
+        drawButton(canvas, 0.15f, 0.50f, 0.85f, 0.59f, "NEXT TRACK", pink)
+        drawButton(canvas, 0.15f, 0.615f, 0.85f, 0.705f, "SOUND: " + if (soundEnabled) "ON" else "OFF", gold)
+        drawText(canvas, "The selected track previews while this screen is open.", 0.5f, 0.75f, 0.016f, muted, Paint.Align.CENTER)
+        drawButton(canvas, 0.24f, 0.81f, 0.76f, 0.89f, "BACK", cyan)
+    }
+
     private fun drawSettings(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         drawText(canvas, "SETTINGS", 0.5f, 0.29f, 0.07f, Color.WHITE, Paint.Align.CENTER)
@@ -2272,6 +2482,112 @@ private class GameView(context: Context) : View(context) {
                             inRect(nx, ny, 0.10f, 0.608f, 0.90f, 0.675f) -> screen = GameScreen.FEATURES
                             inRect(nx, ny, 0.10f, 0.684f, 0.90f, 0.751f) -> openShop(GameScreen.MENU)
                             inRect(nx, ny, 0.10f, 0.760f, 0.90f, 0.827f) -> screen = GameScreen.SETTINGS
+                        }
+                        invalidate()
+                        return true
+                    }
+
+                    GameScreen.FEATURES -> {
+                        when {
+                            inRect(nx, ny, 0.12f, 0.235f, 0.88f, 0.293f) -> screen = GameScreen.MODES
+                            inRect(nx, ny, 0.12f, 0.300f, 0.88f, 0.358f) -> screen = GameScreen.CHALLENGES
+                            inRect(nx, ny, 0.12f, 0.365f, 0.88f, 0.423f) -> screen = GameScreen.ACHIEVEMENTS
+                            inRect(nx, ny, 0.12f, 0.430f, 0.88f, 0.488f) -> screen = GameScreen.STATS
+                            inRect(nx, ny, 0.12f, 0.495f, 0.88f, 0.553f) -> screen = GameScreen.CUSTOMIZE
+                            inRect(nx, ny, 0.12f, 0.560f, 0.88f, 0.618f) -> screen = GameScreen.EDITOR
+                            inRect(nx, ny, 0.12f, 0.625f, 0.88f, 0.683f) -> screen = GameScreen.ACCESSIBILITY
+                            inRect(nx, ny, 0.12f, 0.690f, 0.88f, 0.748f) -> screen = GameScreen.HELP
+                            inRect(nx, ny, 0.24f, 0.785f, 0.76f, 0.865f) -> screen = GameScreen.MENU
+                        }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.MODES -> {
+                        val modes = listOf("campaign", "endless", "time_attack", "zen", "boss_rush", "speedrun", "procedural")
+                        val i = modes.indices.firstOrNull { inRect(nx, ny, 0.10f, 0.245f + it * 0.077f, 0.90f, 0.312f + it * 0.077f) }
+                        if (i != null) selectMode(modes[i]) else if (inRect(nx, ny, 0.24f, 0.80f, 0.76f, 0.88f)) screen = GameScreen.FEATURES
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.CHALLENGES -> {
+                        when {
+                            inRect(nx, ny, 0.15f, 0.365f, 0.85f, 0.455f) -> startChallenge(false)
+                            inRect(nx, ny, 0.15f, 0.525f, 0.85f, 0.615f) -> startChallenge(true)
+                            inRect(nx, ny, 0.24f, 0.79f, 0.76f, 0.875f) -> screen = GameScreen.FEATURES
+                        }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.ACHIEVEMENTS, GameScreen.STATS -> {
+                        if (inRect(nx, ny, 0.24f, 0.82f, 0.76f, 0.90f)) screen = GameScreen.FEATURES
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.CUSTOMIZE -> {
+                        when {
+                            inRect(nx, ny, 0.14f, 0.33f, 0.86f, 0.415f) -> {
+                                themeId = (themeId + 1) % 3
+                                prefs.edit().putInt("theme_id", themeId).apply()
+                                applyTheme()
+                            }
+                            inRect(nx, ny, 0.14f, 0.49f, 0.86f, 0.575f) -> {
+                                bladeSkin = (bladeSkin + 1) % 6
+                                prefs.edit().putInt("blade_skin", bladeSkin).apply()
+                            }
+                            inRect(nx, ny, 0.14f, 0.65f, 0.86f, 0.735f) -> {
+                                shieldSkin = (shieldSkin + 1) % 6
+                                prefs.edit().putInt("shield_skin", shieldSkin).apply()
+                            }
+                            inRect(nx, ny, 0.24f, 0.80f, 0.76f, 0.88f) -> screen = GameScreen.FEATURES
+                        }
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.EDITOR -> {
+                        when {
+                            inRect(nx, ny, 0.15f, 0.29f, 0.85f, 0.365f) -> editorTargetCount = if (editorTargetCount >= 12) 1 else editorTargetCount + 1
+                            inRect(nx, ny, 0.15f, 0.39f, 0.85f, 0.465f) -> editorHazardId = (editorHazardId + 1) % editorHazards.size
+                            inRect(nx, ny, 0.15f, 0.50f, 0.85f, 0.575f) -> { saveEditorDraft(); showMessage("CUSTOM ARENA SAVED") }
+                            inRect(nx, ny, 0.15f, 0.605f, 0.85f, 0.68f) -> shareEditorDraft()
+                            inRect(nx, ny, 0.15f, 0.71f, 0.85f, 0.785f) -> { gameMode = "editor_test"; prefs.edit().putString("game_mode", gameMode).apply(); startLevel(prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)) }
+                            inRect(nx, ny, 0.24f, 0.85f, 0.76f, 0.925f) -> screen = GameScreen.FEATURES
+                        }
+                        prefs.edit().putInt("editor_target_count", editorTargetCount).putInt("editor_hazard", editorHazardId).apply()
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.ACCESSIBILITY -> {
+                        when {
+                            inRect(nx, ny, 0.12f, 0.235f, 0.88f, 0.291f) -> highContrast = !highContrast
+                            inRect(nx, ny, 0.12f, 0.298f, 0.88f, 0.354f) -> reducedMotion = !reducedMotion
+                            inRect(nx, ny, 0.361f, 0.361f, 0.88f, 0.417f) -> leftHandedMode = !leftHandedMode
+                            inRect(nx, ny, 0.12f, 0.424f, 0.88f, 0.480f) -> largeUi = !largeUi
+                            inRect(nx, ny, 0.12f, 0.487f, 0.88f, 0.543f) -> batterySaver = !batterySaver
+                            inRect(nx, ny, 0.12f, 0.550f, 0.88f, 0.606f) -> dynamicDifficulty = !dynamicDifficulty
+                            inRect(nx, ny, 0.12f, 0.613f, 0.88f, 0.669f) -> vibrationEnabled = !vibrationEnabled
+                            inRect(nx, ny, 0.12f, 0.70f, 0.48f, 0.765f) -> screen = GameScreen.JUKEBOX
+                            inRect(nx, ny, 0.52f, 0.70f, 0.88f, 0.765f) -> screen = GameScreen.HELP
+                            inRect(nx, ny, 0.24f, 0.81f, 0.76f, 0.89f) -> screen = GameScreen.FEATURES
+                        }
+                        prefs.edit().putBoolean("high_contrast", highContrast).putBoolean("reduced_motion", reducedMotion)
+                            .putBoolean("left_handed", leftHandedMode).putBoolean("large_ui", largeUi)
+                            .putBoolean("battery_saver", batterySaver).putBoolean("dynamic_difficulty", dynamicDifficulty)
+                            .putBoolean("vibration_enabled", vibrationEnabled).apply()
+                        invalidate()
+                        return true
+                    }
+                    GameScreen.JUKEBOX -> {
+                        when {
+                            inRect(nx, ny, 0.15f, 0.50f, 0.85f, 0.59f) -> {
+                                jukeboxTrackId = (jukeboxTrackId + 1) % musicTracks.size
+                                prefs.edit().putInt("jukebox_track", jukeboxTrackId).apply()
+                                currentMusicPath = null
+                            }
+                            inRect(nx, ny, 0.15f, 0.615f, 0.85f, 0.705f) -> {
+                                soundEnabled = !soundEnabled
+                                prefs.edit().putBoolean("sound_enabled", soundEnabled).apply()
+                            }
+                            inRect(nx, ny, 0.24f, 0.81f, 0.76f, 0.89f) -> screen = GameScreen.ACCESSIBILITY
                         }
                         invalidate()
                         return true
