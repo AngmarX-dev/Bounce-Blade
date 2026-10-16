@@ -135,7 +135,7 @@ private class GameView(context: Context) : View(context) {
     private var secondPointerId = -1
     private var viewW = 1f
     private var viewH = 1f
-    private var themeId = prefs.getInt("theme_id", 0).coerceIn(0, 2)
+    private var themeId = prefs.getInt("theme_id", 0).coerceIn(0, 5)
     private var cyan = Color.rgb(45, 235, 255)
     private var pink = Color.rgb(255, 65, 150)
     private var gold = Color.rgb(255, 199, 83)
@@ -1626,7 +1626,7 @@ private class GameView(context: Context) : View(context) {
     }
 
     private fun applyTheme() {
-        when (themeId.coerceIn(0, 2)) {
+        when (themeId.coerceIn(0, 5)) {
             1 -> {
                 cyan = Color.rgb(75, 255, 150); pink = Color.rgb(255, 105, 75)
                 gold = Color.rgb(220, 255, 90); dark = Color.rgb(5, 18, 18)
@@ -1636,6 +1636,21 @@ private class GameView(context: Context) : View(context) {
                 cyan = Color.rgb(180, 130, 255); pink = Color.rgb(255, 90, 190)
                 gold = Color.rgb(255, 190, 100); dark = Color.rgb(13, 7, 25)
                 muted = Color.rgb(132, 112, 165); grid = Color.rgb(41, 25, 63)
+            }
+            3 -> {
+                cyan = Color.rgb(255, 115, 90); pink = Color.rgb(255, 65, 85)
+                gold = Color.rgb(255, 206, 95); dark = Color.rgb(24, 7, 14)
+                muted = Color.rgb(165, 98, 112); grid = Color.rgb(58, 18, 30)
+            }
+            4 -> {
+                cyan = Color.rgb(255, 205, 70); pink = Color.rgb(255, 125, 35)
+                gold = Color.rgb(255, 237, 160); dark = Color.rgb(22, 12, 4)
+                muted = Color.rgb(155, 125, 88); grid = Color.rgb(58, 37, 12)
+            }
+            5 -> {
+                cyan = Color.rgb(70, 210, 190); pink = Color.rgb(55, 145, 255)
+                gold = Color.rgb(120, 235, 255); dark = Color.rgb(3, 13, 27)
+                muted = Color.rgb(90, 137, 165); grid = Color.rgb(14, 39, 60)
             }
             else -> {
                 cyan = Color.rgb(45, 235, 255); pink = Color.rgb(255, 65, 150)
@@ -1653,6 +1668,9 @@ private class GameView(context: Context) : View(context) {
     private fun themeName(): String = when (themeId) {
         1 -> "GREEN"
         2 -> "VIOLET"
+        3 -> "CRIMSON"
+        4 -> "SOLAR"
+        5 -> "OCEAN"
         else -> "CYAN"
     }
 
@@ -3089,7 +3107,7 @@ private class GameView(context: Context) : View(context) {
         drawButton(canvas, 0.12f, 0.475f, 0.88f, 0.560f, "VIBRATION: " + if (vibrationEnabled) "ON" else "OFF", gold)
         drawButton(canvas, 0.12f, 0.570f, 0.88f, 0.655f, "THEME: " + themeName(), pink)
         drawButton(canvas, 0.12f, 0.680f, 0.88f, 0.765f, "BACK", cyan)
-        drawText(canvas, "Tap THEME to cycle through Cyan, Green and Violet.", 0.5f, 0.83f, 0.018f, muted, Paint.Align.CENTER)
+        drawText(canvas, "Tap THEME to cycle through Cyan, Green, Violet, Crimson, Solar and Ocean.", 0.5f, 0.83f, 0.018f, muted, Paint.Align.CENTER)
         drawText(canvas, "Settings are saved on this device.", 0.5f, 0.87f, 0.018f, muted, Paint.Align.CENTER)
     }
 
@@ -3470,7 +3488,7 @@ private class GameView(context: Context) : View(context) {
                     GameScreen.CUSTOMIZE -> {
                         when {
                             inRect(nx, ny, 0.14f, 0.33f, 0.86f, 0.415f) -> {
-                                themeId = (themeId + 1) % 3
+                                themeId = (themeId + 1) % 6
                                 prefs.edit().putInt("theme_id", themeId).apply()
                                 applyTheme()
                             }
