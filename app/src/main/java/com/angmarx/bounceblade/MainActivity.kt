@@ -1420,7 +1420,7 @@ private class GameView(context: Context) : View(context) {
         if (gameMode == "procedural") {
             val hazardRandom = kotlin.random.Random(levelId * 997 + prefs.getInt("procedural_seed", 23) + 41)
             val generatedHazards = mutableListOf<HazardState>()
-            val hazardOptions = listOf("spikes", "laser", "moving_hazard", "sticky_wall", "power_up")
+            val hazardOptions = listOf("spikes", "moving_spikes", "laser", "rotating_laser", "moving_hazard", "sticky_wall", "gravity_well", "conveyor_belt", "breakable_wall", "power_up")
             repeat(2) { index ->
                 val type = hazardOptions[hazardRandom.nextInt(hazardOptions.size)]
                 generatedHazards.add(
