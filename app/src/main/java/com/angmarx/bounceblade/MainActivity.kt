@@ -1,6 +1,7 @@
 package com.angmarx.bounceblade
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.ContentValues
 import android.graphics.Bitmap
@@ -303,6 +304,8 @@ private class GameView(context: Context) : View(context) {
         isFocusable = true
         isFocusableInTouchMode = true
         isClickable = true
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+        contentDescription = "Bounce Blade game. Main menu."
         requestFocus()
     }
 
@@ -355,6 +358,16 @@ private class GameView(context: Context) : View(context) {
         super.onDraw(canvas)
         viewW = width.toFloat().coerceAtLeast(1f)
         viewH = height.toFloat().coerceAtLeast(1f)
+        contentDescription = when (screen) {
+            GameScreen.MENU -> "Bounce Blade main menu. Campaign progress " + prefs.getInt("unlocked_level", 1) + " of " + levels.size + "."
+            GameScreen.WORLDS -> "World selection. Choose an unlocked world."
+            GameScreen.LEVELS -> "Stage selection for " + CampaignWorlds.worldName(selectedWorld) + "."
+            GameScreen.PLAYING -> "Playing stage " + levelId + ". Score " + score + ". Drag vertically to move the shield."
+            GameScreen.PAUSED -> "Game paused. Resume, restart, or return to the menu."
+            GameScreen.WON -> "Stage complete. Score " + score + ". Stars earned " + earnedStars + "."
+            GameScreen.FAILED -> "Run ended. " + message
+            else -> "Bounce Blade " + screen.name.lowercase().replace('_', ' ') + "."
+        }
         advanceFrame()
         updateMusicForScreen()
         updateBladeIdleLoop()
@@ -411,7 +424,13 @@ private class GameView(context: Context) : View(context) {
                 drawButton(canvas, 0.15f, 0.680f, 0.85f, 0.780f, "LEVEL SELECT", gold)
             }
         }
-        if (screen == GameScreen.PLAYING || flying || particles.isNotEmpty() || turretProjectiles.isNotEmpty() || screen == GameScreen.JUKEBOX) postInvalidateDelayed(if (batterySaver) 33L else 16L)
+        if (screen == GameScreen.PLAYING || flying || particles.isNotEmpty() || turretProjectiles.isNotEmpty() || screen == GameScreen.JUKEBOX) postInvalidateDelayed(frameDelayMillis())
+    }
+
+    private fun frameDelayMillis(): Long {
+        if (batterySaver) return 33L
+        val refreshRate = display?.refreshRate ?: resources.displayMetrics.refreshRate
+        return (1000f / refreshRate.coerceIn(30f, 144f)).toLong().coerceIn(6L, 33L)
     }
 
     private fun advanceFrame() {
@@ -2954,6 +2973,7 @@ private class GameView(context: Context) : View(context) {
     private fun showMessage(text: String) {
         message = text
         messageUntil = System.nanoTime() + 1_800_000_000L
+        if (importantForAccessibility == View.IMPORTANT_FOR_ACCESSIBILITY_YES) announceForAccessibility(text)
     }
 
     private fun haptic() {
