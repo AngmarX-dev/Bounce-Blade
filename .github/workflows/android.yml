@@ -145,6 +145,27 @@ jobs:
           print(f"Validated {len(files)} levels across five worlds.")
           PY
 
+      - name: Verify hostile enemy behavior and turret durability
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+
+          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
+          required = [
+              "private fun updateHostileEnemies(dt: Float)",
+              "val droneSpeed =",
+              "enemy.jumpTime = 0.58f",
+              "id in 21..30 || id >= 41 -> 3",
+              "DRONE HIT THE WALL — YOU BURNED",
+              "val isTurret = enemy.kind == 1 || enemy.kind == 3",
+          ]
+          missing = [marker for marker in required if marker not in source]
+          if missing:
+              sys.exit("Missing hostile enemy behavior: " + ", ".join(missing))
+          print("Verified drone pursuit/breach, slime jumps, and three-hit turrets.")
+          PY
+
       - name: Run unit tests and build debug APK
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug
 

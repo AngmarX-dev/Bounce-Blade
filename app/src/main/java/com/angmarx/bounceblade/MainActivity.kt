@@ -68,8 +68,9 @@ class MainActivity : Activity() {
 
 private data class PointN(val x: Float, val y: Float)
 private data class EnemyState(
-    val x: Float, val y: Float, var alive: Boolean = true, val kind: Int = 0,
-    var health: Int = 1, var fireCooldown: Float = 1.6f, val canSplit: Boolean = true
+    var x: Float, var y: Float, var alive: Boolean = true, val kind: Int = 0,
+    var health: Int = 1, var fireCooldown: Float = 1.6f, val canSplit: Boolean = true,
+    var jumpTime: Float = 0f, var jumpCooldown: Float = 1.4f
 )
 private data class TurretProjectile(var x: Float, var y: Float, var vx: Float, var vy: Float, var life: Float)
 private data class CrateState(val x: Float, val y: Float, var alive: Boolean = true)
@@ -326,6 +327,7 @@ private class GameView(context: Context) : View(context) {
             comboWindow = (comboWindow - rawDt).coerceAtLeast(0f)
             if (comboWindow <= 0f) comboCount = 0
             teleportCooldown = (teleportCooldown - rawDt).coerceAtLeast(0f)
+            if (wallGuardMode) updateHostileEnemies(rawDt)
             if (!wallGuardMode) {
                 val timeLeft = GameRules.timeLimitSeconds(levelId, difficulty) - levelElapsedSeconds
                 if (timeLeft <= 5f && timeLeft > 0f && !timerWarningPlayed) {
@@ -413,8 +415,7 @@ private class GameView(context: Context) : View(context) {
     }
 
     private fun enemyHealthForLevel(id: Int, index: Int): Int = when {
-        id == 50 && index == 0 -> 5
-        id >= 41 -> 2
+        id in 21..30 || id >= 41 -> 3
         else -> 1
     }
 
@@ -425,7 +426,81 @@ private class GameView(context: Context) : View(context) {
             3 -> PointF(sin(animationTime * 0.75f + index) * 0.009f, 0f)
             else -> PointF(0f, 0f)
         }
-        return PointF((enemy.x + d.x).coerceIn(0.1f, 0.9f), (enemy.y + d.y).coerceIn(0.17f, 0.84f))
+        val jumpProgress = if (enemy.kind == 2 && enemy.jumpTime > 0f)
+            (1f - enemy.jumpTime / 0.58f).coerceIn(0f, 1f) else 0f
+        val jumpArc = if (enemy.kind == 2 && enemy.jumpTime > 0f)
+            -sin(jumpProgress * 3.1415926f) * 0.075f else 0f
+        return PointF(
+            (enemy.x + d.x).coerceIn(0.1f, 0.9f),
+            (enemy.y + d.y + jumpArc).coerceIn(0.17f, 0.84f)
+        )
+    }
+
+    /**
+     * Enemy AI for the active left-wall arcade mode.
+     * Drones pursue the shield quickly, slimes make repeated lunging jumps,
+     * and turrets advance slowly. Letting a hostile reach the left wall burns
+     * the run, so the blade must destroy it before it breaks through.
+     */
+    private fun updateHostileEnemies(dt: Float) {
+        if (screen != GameScreen.PLAYING || !wallGuardMode || dt <= 0f) return
+        val breachX = 0.108f
+        val targetY = guardPaddleY.coerceIn(0.18f, 0.82f)
+        val difficultyScale = 1f + (difficulty - 1) * 0.18f
+
+        for ((index, enemy) in enemies.withIndex()) {
+            if (!enemy.alive) continue
+            when (enemy.kind) {
+                0 -> {
+                    // Drones fly directly toward the player's shield and adjust
+                    // their flight path to follow its current height.
+                    val droneSpeed = (0.040f + min(levelId, 20) * 0.0012f) * difficultyScale
+                    enemy.x -= droneSpeed * dt
+                    val verticalStep = droneSpeed * 0.78f * dt
+                    enemy.y += (targetY - enemy.y).coerceIn(-verticalStep, verticalStep)
+                }
+                2 -> {
+                    // Slimes pause briefly, then leap left while homing vertically.
+                    if (enemy.jumpTime <= 0f) {
+                        enemy.jumpCooldown -= dt
+                        if (enemy.jumpCooldown <= 0f) {
+                            enemy.jumpTime = 0.58f
+                            enemy.jumpCooldown = 1.20f + (index % 3) * 0.16f
+                        }
+                    }
+                    if (enemy.jumpTime > 0f) {
+                        val jumpSpeed = (0.19f + min(levelId, 40) * 0.001f) * difficultyScale
+                        enemy.x -= jumpSpeed * dt
+                        val verticalStep = jumpSpeed * 0.72f * dt
+                        enemy.y += (targetY - enemy.y).coerceIn(-verticalStep, verticalStep)
+                        enemy.jumpTime = (enemy.jumpTime - dt).coerceAtLeast(0f)
+                    }
+                }
+                1, 3 -> {
+                    // Turrets are durable but deliberately slower than drones.
+                    val turretSpeed = if (enemy.kind == 1) 0.014f else 0.011f
+                    enemy.x -= turretSpeed * difficultyScale * dt
+                    val verticalStep = turretSpeed * 0.52f * dt
+                    enemy.y += (targetY - enemy.y).coerceIn(-verticalStep, verticalStep)
+                }
+            }
+
+            if (enemy.x <= breachX) {
+                enemy.x = breachX
+                enemy.alive = false
+                val impactX = enemy.x * viewW
+                val impactY = enemy.y * viewH
+                addBurst(impactX, impactY, Color.rgb(255, 92, 28), 30)
+                val reason = when (enemy.kind) {
+                    0 -> "DRONE HIT THE WALL — YOU BURNED"
+                    2 -> "SLIME REACHED THE WALL — YOU BURNED"
+                    else -> "TURRET BREACHED THE WALL — YOU BURNED"
+                }
+                showMessage(reason)
+                fail(reason)
+                return
+            }
+        }
     }
 
     private fun formatTime(seconds: Float): String {
@@ -1456,15 +1531,25 @@ private class GameView(context: Context) : View(context) {
             else -> "Gameplay Sprites/Enemy Drone.png"
         }
         val drawSize = if (enemy.kind == 3) r * 3.2f else r * 2.35f
-        if (enemy.kind == 3) {
-            paint.style = Paint.Style.STROKE; paint.strokeWidth = max(2f, density * 2f); paint.color = if (enemy.health > 1) gold else cyan
+        val isTurret = enemy.kind == 1 || enemy.kind == 3
+        if (isTurret) {
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = max(2f, density * 2f)
+            paint.color = if (enemy.health > 1) gold else cyan
             paint.setShadowLayer(density * 9f, 0f, 0f, paint.color)
             canvas.drawCircle(x, y, drawSize * 0.61f, paint)
             paint.clearShadowLayer()
         }
         drawAssetCentered(canvas, path, x, y, drawSize)
-        if (enemy.kind == 3 && enemy.health > 1) drawText(canvas, enemy.health.toString(), x / viewW,
-            (y + drawSize * 0.63f) / viewH, 0.017f, gold, Paint.Align.CENTER)
+        if (isTurret) drawText(
+            canvas,
+            enemy.health.toString(),
+            x / viewW,
+            (y + drawSize * 0.63f) / viewH,
+            0.017f,
+            if (enemy.health > 1) gold else cyan,
+            Paint.Align.CENTER
+        )
         paint.style = Paint.Style.FILL
     }
 
