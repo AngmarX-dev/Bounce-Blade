@@ -1283,8 +1283,8 @@ private class GameView(context: Context) : View(context) {
         paint.style = Paint.Style.FILL
         paint.color = Color.WHITE
         canvas.drawRoundRect(
-            RectF(paddle.centerX - density, paddle.top + density * 7f,
-                paddle.centerX + density, paddle.bottom - density * 7f),
+            RectF(paddle.centerX() - density, paddle.top + density * 7f,
+                paddle.centerX() + density, paddle.bottom - density * 7f),
             density, density, paint
         )
 
