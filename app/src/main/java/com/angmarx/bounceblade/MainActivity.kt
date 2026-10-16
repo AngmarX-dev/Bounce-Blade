@@ -3049,7 +3049,7 @@ private class GameView(context: Context) : View(context) {
         paint.textSize = (size * minDim * (if (largeUi) 1.16f else 1f)).coerceAtLeast(8f * density)
         paint.typeface = TypefaceFactory.bold
         paint.textAlign = align
-        canvas.drawText(text, x * viewW, y * viewH, paint)
+        canvas.drawText(localizeUiText(text), x * viewW, y * viewH, paint)
     }
 
     private fun drawButton(
@@ -3098,7 +3098,7 @@ private class GameView(context: Context) : View(context) {
         val shift = if (iconPath == null) 0f else minDim * 0.018f
         drawText(
             canvas,
-            label,
+            localizeButtonLabel(label),
             (visualRect.centerX() + shift) / viewW,
             visualRect.centerY() / viewH + 0.010f,
             if (label.length > 18) 0.022f else 0.028f,
