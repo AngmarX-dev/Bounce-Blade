@@ -108,6 +108,8 @@ private class GameView(context: Context) : View(context) {
     private val prefs = context.getSharedPreferences("bounce_blade_save", Context.MODE_PRIVATE)
     private val density = resources.displayMetrics.density
     private val minDim get() = min(viewW, viewH)
+    private val wallGuardMode = true
+    private var guardPaddleY = 0.5f
     private var viewW = 1f
     private var viewH = 1f
     private var themeId = prefs.getInt("theme_id", 0).coerceIn(0, 2)
@@ -324,14 +326,16 @@ private class GameView(context: Context) : View(context) {
             comboWindow = (comboWindow - rawDt).coerceAtLeast(0f)
             if (comboWindow <= 0f) comboCount = 0
             teleportCooldown = (teleportCooldown - rawDt).coerceAtLeast(0f)
-            val timeLeft = GameRules.timeLimitSeconds(levelId, difficulty) - levelElapsedSeconds
-            if (timeLeft <= 5f && timeLeft > 0f && !timerWarningPlayed) {
-                timerWarningPlayed = true
-                playSfx("UI & Feedback SFX/Timer Warning.wav", ToneGenerator.TONE_PROP_BEEP)
+            if (!wallGuardMode) {
+                val timeLeft = GameRules.timeLimitSeconds(levelId, difficulty) - levelElapsedSeconds
+                if (timeLeft <= 5f && timeLeft > 0f && !timerWarningPlayed) {
+                    timerWarningPlayed = true
+                    playSfx("UI & Feedback SFX/Timer Warning.wav", ToneGenerator.TONE_PROP_BEEP)
+                }
+                if (levelElapsedSeconds > GameRules.timeLimitSeconds(levelId, difficulty)) { fail("TIME UP"); return }
+                updateTurrets(rawDt)
+                updateTurretProjectiles(rawDt)
             }
-            if (levelElapsedSeconds > GameRules.timeLimitSeconds(levelId, difficulty)) { fail("TIME UP"); return }
-            updateTurrets(rawDt)
-            updateTurretProjectiles(rawDt)
         }
         if (screen == GameScreen.PLAYING && flying) {
             val timeScale = if (slowMotion && slowMeter > 0f) 0.28f else 1f
@@ -341,7 +345,8 @@ private class GameView(context: Context) : View(context) {
             flightTime += dt
             angle = (angle + 1080f * dt) % 360f
             repeat(3) { if (screen == GameScreen.PLAYING && flying) simulateStep(dt / 3f) }
-            if (flying && (sqrt(velocityX * velocityX + velocityY * velocityY) < minDim * 0.055f || flightTime > 12f)) {
+            if (flying && !wallGuardMode &&
+                (sqrt(velocityX * velocityX + velocityY * velocityY) < minDim * 0.055f || flightTime > 12f)) {
                 flying = false; velocityX = 0f; velocityY = 0f
             }
         } else {
@@ -429,6 +434,10 @@ private class GameView(context: Context) : View(context) {
     }
 
     private fun simulateStep(dt: Float) {
+        if (wallGuardMode) {
+            simulateWallGuardStep(dt)
+            return
+        }
         val radius = minDim * 0.022f
         val left = viewW * 0.075f + radius
         val right = viewW * 0.925f - radius
@@ -568,6 +577,138 @@ private class GameView(context: Context) : View(context) {
         }
     }
 
+
+    /**
+     * Arcade mode: the blade moves automatically, targets send it back toward
+     * the player, and the player moves the vertical shield along the left edge.
+     * A miss at the left edge ends the run immediately.
+     */
+    private fun simulateWallGuardStep(dt: Float) {
+        val radius = minDim * 0.022f
+        val leftContact = viewW * 0.098f + radius
+        val right = viewW * 0.955f - radius
+        val top = viewH * 0.145f + radius
+        val bottom = viewH * 0.935f - radius
+        var px = bladeX * viewW + velocityX * dt
+        var py = bladeY * viewH + velocityY * dt
+
+        var wallHit = false
+        if (px > right) {
+            px = right
+            velocityX = -abs(velocityX)
+            wallHit = true
+        }
+        if (py < top) {
+            py = top
+            velocityY = abs(velocityY)
+            wallHit = true
+        } else if (py > bottom) {
+            py = bottom
+            velocityY = -abs(velocityY)
+            wallHit = true
+        }
+        if (wallHit) {
+            addBurst(px, py, cyan, 7)
+            playNextRicochet()
+        }
+
+        if (px < leftContact) {
+            val paddleCenter = guardPaddleY * viewH
+            val paddleHalf = guardPaddleHalf()
+            if (abs(py - paddleCenter) <= paddleHalf + radius) {
+                px = leftContact
+                val offset = ((py - paddleCenter) / (paddleHalf + radius)).coerceIn(-1f, 1f)
+                val oldSpeed = sqrt(velocityX * velocityX + velocityY * velocityY)
+                val speed = (oldSpeed * 1.035f).coerceIn(minDim * 0.46f, minDim * 0.90f)
+                val bounceAngle = offset * 1.10f
+                velocityX = abs(cos(bounceAngle) * speed).coerceAtLeast(minDim * 0.32f)
+                velocityY = sin(bounceAngle) * speed
+                comboCount = (comboCount + 1).coerceAtMost(99)
+                bestCombo = max(bestCombo, comboCount)
+                comboWindow = 2.0f
+                addBurst(px, py, gold, 12)
+                showMessage("WALL SAVE!")
+                playNextRicochet()
+                haptic()
+            } else {
+                bladeX = px / viewW
+                bladeY = py / viewH
+                fail("THE BLADE PASSED THE LEFT WALL")
+                return
+            }
+        }
+
+        for ((index, enemy) in enemies.withIndex()) {
+            if (!enemy.alive) continue
+            val center = enemyCenter(enemy, index)
+            val ex = center.x * viewW
+            val ey = center.y * viewH
+            val hitRadius = radius + minDim * (if (enemy.kind == 3) 0.055f else 0.035f)
+            if (distanceSquared(px, py, ex, ey) > hitRadius * hitRadius) continue
+
+            val cameFromLeft = velocityX > 0f
+            enemy.health -= 1
+            if (enemy.health <= 0) {
+                enemy.alive = false
+                registerTargetHit(if (enemy.kind == 3) 250 else 100, ex, ey, pink)
+                playSfx(
+                    if (index % 2 == 0) "Core Gameplay SFX/Enemy Slice (Variation 1).wav"
+                    else "Core Gameplay SFX/Enemy Slice (Variation 2).wav"
+                )
+            } else {
+                score += 50
+                addBurst(ex, ey, gold, 12)
+                showMessage("ENEMY HIT")
+                playSfx("Optional - Extra Sounds/Shield Break.wav")
+            }
+
+            val speed = sqrt(velocityX * velocityX + velocityY * velocityY)
+                .coerceIn(minDim * 0.46f, minDim * 0.90f)
+            velocityX = if (cameFromLeft) -abs(velocityX) else abs(velocityX)
+            velocityY += ((py - ey) / hitRadius).coerceIn(-1f, 1f) * minDim * 0.16f
+            val adjustedSpeed = sqrt(velocityX * velocityX + velocityY * velocityY).coerceAtLeast(1f)
+            velocityX *= speed / adjustedSpeed
+            velocityY *= speed / adjustedSpeed
+            px = if (cameFromLeft) ex - hitRadius else ex + hitRadius
+            addBurst(ex, ey, pink, 14)
+            haptic()
+            break
+        }
+
+        bladeX = (px / viewW).coerceIn(0f, 1f)
+        bladeY = (py / viewH).coerceIn(0f, 1f)
+        bladeTrail.add(PointF(px, py))
+        while (bladeTrail.size > 24) bladeTrail.removeAt(0)
+
+        if (enemies.none { it.alive }) {
+            completeLevel()
+            return
+        }
+    }
+
+    private fun guardPaddleHalf(): Float = viewH * when (difficulty) {
+        1 -> 0.105f
+        3 -> 0.065f
+        else -> 0.085f
+    }
+
+    private fun launchWallGuardBlade() {
+        guardPaddleY = guardPaddleY.coerceIn(0.20f, 0.86f)
+        bladeX = 0.145f
+        bladeY = guardPaddleY
+        val speed = minDim * (0.50f + difficulty * 0.075f + min(levelId, 30) * 0.003f)
+        velocityX = speed
+        velocityY = speed * (sin(levelId * 1.37f) * 0.22f)
+        flying = true
+        aiming = false
+        shotsUsed = 1
+        flightTime = 0f
+        bladeTrail.clear()
+        addBurst(bladeX * viewW, bladeY * viewH, cyan, 8)
+        lastFrame = System.nanoTime()
+        playSfx("Core Gameplay SFX/Blade Launch.wav", ToneGenerator.TONE_PROP_BEEP)
+    }
+
     private fun reflectFrom(dx: Float, dy: Float) {
         val length = sqrt(dx * dx + dy * dy)
         if (length <= 0.001f) {
@@ -631,12 +772,31 @@ private class GameView(context: Context) : View(context) {
     private fun loadLevel(id: Int) {
         levelId = id.coerceIn(1, levels.size)
         level = levels.firstOrNull { it.id == levelId } ?: levels.first()
+        if (wallGuardMode) {
+            // Make every campaign stage playable in the arcade format, even
+            // when its legacy puzzle JSON did not define any enemies.
+            val targetCount = (3 + (levelId - 1) / 2).coerceAtMost(12)
+            val points = (0 until targetCount).map { index ->
+                val column = index % 4
+                val row = index / 4
+                PointN(0.49f + column * 0.115f, 0.235f + row * 0.215f)
+            }
+            level = level.copy(
+                spawn = PointN(0.145f, 0.5f),
+                enemies = points,
+                crates = emptyList(),
+                hazards = emptyList(),
+                requiresAllTargets = true,
+                requiresSwitch = false
+            )
+            guardPaddleY = 0.5f
+        }
         enemies = level.enemies.mapIndexed { index, point ->
             EnemyState(point.x, point.y, true, enemyKindForLevel(levelId), enemyHealthForLevel(levelId, index), 1.2f + (index % 3) * 0.6f, true)
         }.toMutableList()
         crates = level.crates.map { CrateState(it.x, it.y) }.toMutableList()
-        bladeX = level.spawn.x
-        bladeY = level.spawn.y
+        bladeX = if (wallGuardMode) 0.145f else level.spawn.x
+        bladeY = if (wallGuardMode) guardPaddleY else level.spawn.y
         velocityX = 0f
         velocityY = 0f
         angle = 0f
@@ -675,6 +835,7 @@ private class GameView(context: Context) : View(context) {
         }
         loadLevel(id)
         screen = GameScreen.PLAYING
+        if (wallGuardMode) launchWallGuardBlade()
         invalidate()
     }
 
@@ -935,7 +1096,7 @@ private class GameView(context: Context) : View(context) {
     private fun drawMenu(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         drawAsset(canvas, "App Icon & Logo/Game Logo.png", RectF(viewW * 0.16f, viewH * 0.13f, viewW * 0.84f, viewH * 0.29f), 255)
-        drawText(canvas, "AIM  •  RICOCHET  •  ESCAPE", 0.5f, 0.465f, 0.022f, muted, Paint.Align.CENTER)
+        drawText(canvas, "BOUNCE OFF ENEMIES  •  GUARD THE LEFT WALL", 0.5f, 0.465f, 0.020f, muted, Paint.Align.CENTER)
         drawButton(canvas, 0.18f, 0.52f, 0.82f, 0.585f, "PLAY CAMPAIGN", cyan)
         drawButton(canvas, 0.18f, 0.595f, 0.82f, 0.66f, "LEVEL SELECT", gold)
         drawButton(canvas, 0.18f, 0.67f, 0.82f, 0.735f, "HELP", pink)
@@ -982,6 +1143,10 @@ private class GameView(context: Context) : View(context) {
     }
 
     private fun drawGame(canvas: Canvas) {
+        if (wallGuardMode) {
+            drawWallGuardGame(canvas)
+            return
+        }
         drawText(canvas,"BOUNCE BLADE",0.07f,0.047f,0.025f,Color.WHITE)
         drawText(canvas,level.name.uppercase()+"  "+levelId+"/"+levels.size+"  •  "+"★".repeat(difficulty),0.48f,0.047f,0.020f,cyan,Paint.Align.CENTER)
         drawText(canvas,"BOUNCES "+bouncesLeft,0.78f,0.047f,0.019f,gold,Paint.Align.RIGHT)
@@ -1047,6 +1212,89 @@ private class GameView(context: Context) : View(context) {
         drawMeter(canvas)
         if (System.nanoTime() < messageUntil && message.isNotBlank()) {
             drawText(canvas, message, 0.5f, 0.855f, 0.019f, gold, Paint.Align.CENTER)
+        }
+    }
+
+
+    private fun drawWallGuardGame(canvas: Canvas) {
+        drawText(canvas, "BOUNCE BLADE", 0.07f, 0.047f, 0.025f, Color.WHITE)
+        drawText(canvas, "LEVEL $levelId/\${levels.size}", 0.49f, 0.047f, 0.022f, cyan, Paint.Align.CENTER)
+        drawButton(canvas, 0.83f, 0.065f, 0.94f, 0.115f, "Ⅱ", pink)
+        drawText(canvas, "SCORE $score", 0.07f, 0.092f, 0.019f, gold)
+        drawText(canvas, "TARGETS \${enemies.count { it.alive }}", 0.50f, 0.092f, 0.019f, pink, Paint.Align.CENTER)
+        drawText(canvas, "SAVE STREAK $comboCount", 0.92f, 0.092f, 0.016f, cyan, Paint.Align.RIGHT)
+
+        val arena = RectF(viewW * 0.035f, viewH * 0.135f, viewW * 0.965f, viewH * 0.94f)
+        drawAsset(canvas, "Backgrounds & Environments/Gameplay Background.png", arena, 230)
+        drawAsset(canvas, "UI Elements/UI Panel.png",
+            RectF(viewW * 0.025f, viewH * 0.012f, viewW * 0.975f, viewH * 0.125f), 115)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = max(2f, density * 2f)
+        paint.color = cyan
+        paint.setShadowLayer(density * 10f, 0f, 0f, cyan)
+        canvas.drawRoundRect(arena, density * 14f, density * 14f, paint)
+        paint.clearShadowLayer()
+        paint.color = grid
+        paint.strokeWidth = max(1f, density * 0.7f)
+        for (i in 1..5) {
+            val x = viewW * (0.035f + 0.155f * i)
+            canvas.drawLine(x, arena.top, x, arena.bottom, paint)
+        }
+        for (i in 1..8) {
+            val y = viewH * (0.135f + 0.1f * i)
+            canvas.drawLine(arena.left, y, arena.right, y, paint)
+        }
+        paint.style = Paint.Style.FILL
+
+        drawBladeTrail(canvas)
+        drawParticles(canvas)
+        val now = System.nanoTime()
+        if (now < impactUntil) {
+            val alpha = ((impactUntil - now) * 255L / 320_000_000L).toInt().coerceIn(0, 255)
+            drawAssetCentered(canvas, "Effects & Particles/Explosion.png", lastImpactX, lastImpactY, minDim * 0.11f, alpha)
+        }
+        for ((index, enemy) in enemies.withIndex()) if (enemy.alive) drawEnemy(canvas, enemy, index)
+
+        // Player-controlled barrier occupying a short segment of the left wall.
+        val paddleHalf = guardPaddleHalf()
+        val paddleCenter = guardPaddleY * viewH
+        val paddle = RectF(
+            viewW * 0.043f,
+            paddleCenter - paddleHalf,
+            viewW * 0.098f,
+            paddleCenter + paddleHalf
+        )
+        paint.style = Paint.Style.FILL
+        paint.color = Color.argb(105, Color.red(cyan), Color.green(cyan), Color.blue(cyan))
+        paint.setShadowLayer(density * 13f, 0f, 0f, cyan)
+        canvas.drawRoundRect(paddle, density * 8f, density * 8f, paint)
+        paint.clearShadowLayer()
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = max(2f, density * 2.5f)
+        paint.color = cyan
+        canvas.drawRoundRect(paddle, density * 8f, density * 8f, paint)
+        paint.style = Paint.Style.FILL
+        paint.color = Color.WHITE
+        canvas.drawRoundRect(
+            RectF(paddle.centerX - density, paddle.top + density * 7f,
+                paddle.centerX + density, paddle.bottom - density * 7f),
+            density, density, paint
+        )
+
+        val bladePx = bladeX * viewW
+        val bladePy = bladeY * viewH
+        canvas.save()
+        canvas.rotate(angle, bladePx, bladePy)
+        val bladeSize = minDim * 0.078f
+        drawAsset(canvas, if (flying) "Gameplay Sprites/Blade.png" else "Gameplay Sprites/Blade Idle.png",
+            RectF(bladePx - bladeSize / 2f, bladePy - bladeSize / 2f,
+                bladePx + bladeSize / 2f, bladePy + bladeSize / 2f), 255)
+        canvas.restore()
+
+        drawText(canvas, "DRAG UP OR DOWN TO MOVE THE LEFT SHIELD",
+            0.5f, 0.965f, 0.018f, cyan, Paint.Align.CENTER)
+        if (System.nanoTime() < messageUntil && message.isNotBlank()) {
+            drawText(canvas, message, 0.5f, 0.885f, 0.020f, gold, Paint.Align.CENTER)
         }
     }
 
@@ -1315,13 +1563,13 @@ private class GameView(context: Context) : View(context) {
     private fun drawHelp(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         drawText(canvas, "HELP & CONTROLS", 0.5f, 0.29f, 0.055f, Color.WHITE, Paint.Align.CENTER)
-        drawText(canvas, "1. Drag backwards, then release to launch.", 0.12f, 0.385f, 0.019f, cyan)
-        drawText(canvas, "2. Bounce into every enemy and crate.", 0.12f, 0.445f, 0.019f, Color.WHITE)
-        drawText(canvas, "3. Activate the gold switch, then reach the exit.", 0.12f, 0.505f, 0.017f, Color.WHITE)
-        drawText(canvas, "4. Avoid spikes, moving hazards and lasers.", 0.12f, 0.565f, 0.018f, pink)
-        drawText(canvas, "5. Two fingers slow time while the blade flies.", 0.12f, 0.625f, 0.018f, Color.WHITE)
-        drawText(canvas, "6. Earn stars with efficient shots and spare bounces.", 0.12f, 0.685f, 0.017f, gold)
-        drawText(canvas, "Easy gives more bounces; Hard gives fewer.", 0.5f, 0.735f, 0.017f, muted, Paint.Align.CENTER)
+        drawText(canvas, "1. The blade launches automatically from the left.", 0.12f, 0.385f, 0.018f, cyan)
+        drawText(canvas, "2. Drag anywhere up/down to move your shield.", 0.12f, 0.445f, 0.018f, Color.WHITE)
+        drawText(canvas, "3. The blade bounces back after it hits a target.", 0.12f, 0.505f, 0.017f, Color.WHITE)
+        drawText(canvas, "4. Catch it on the left or you lose immediately.", 0.12f, 0.565f, 0.018f, pink)
+        drawText(canvas, "5. Hit every enemy to clear the level.", 0.12f, 0.625f, 0.018f, Color.WHITE)
+        drawText(canvas, "Easy gives a larger shield; Hard gives a smaller one.", 0.12f, 0.685f, 0.016f, gold)
+        drawText(canvas, "Tip: move early to meet the returning blade.", 0.5f, 0.735f, 0.017f, muted, Paint.Align.CENTER)
         drawButton(canvas, 0.22f, 0.79f, 0.78f, 0.86f, "BACK", cyan)
     }
 
@@ -1517,8 +1765,7 @@ private class GameView(context: Context) : View(context) {
                                 lastFrame = System.nanoTime()
                             }
                             inRect(nx, ny, 0.24f, 0.54f, 0.76f, 0.62f) -> {
-                                loadLevel(levelId)
-                                screen = GameScreen.PLAYING
+                                startLevel(levelId)
                             }
                             inRect(nx, ny, 0.24f, 0.65f, 0.76f, 0.73f) -> screen = GameScreen.MENU
                         }
@@ -1560,6 +1807,11 @@ private class GameView(context: Context) : View(context) {
                             invalidate()
                             return true
                         }
+                        if (wallGuardMode) {
+                            guardPaddleY = ny.coerceIn(0.20f, 0.86f)
+                            invalidate()
+                            return true
+                        }
                         if (!flying) {
                             aiming = true
                             aimStartX = event.x
@@ -1573,6 +1825,11 @@ private class GameView(context: Context) : View(context) {
             }
             MotionEvent.ACTION_MOVE -> {
                 if (event.pointerCount > 1) slowMotion = true
+                if (wallGuardMode && screen == GameScreen.PLAYING) {
+                    guardPaddleY = ny.coerceIn(0.20f, 0.86f)
+                    invalidate()
+                    return true
+                }
                 if (aiming && !flying && screen == GameScreen.PLAYING) {
                     aimX = event.x
                     aimY = event.y
