@@ -1355,7 +1355,6 @@ private class GameView(context: Context) : View(context) {
 
     private fun applyTheme() {
         when (themeId.coerceIn(0, 2)) {
-        when (themeId.coerceIn(0, 2)) {
             1 -> {
                 cyan = Color.rgb(75, 255, 150); pink = Color.rgb(255, 105, 75)
                 gold = Color.rgb(220, 255, 90); dark = Color.rgb(5, 18, 18)
