@@ -1549,8 +1549,8 @@ private class GameView(context: Context) : View(context) {
     private fun drawDifficulty(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         drawText(canvas, "CHOOSE DIFFICULTY", 0.5f, 0.30f, 0.055f, Color.WHITE, Paint.Align.CENTER)
-        drawText(canvas, "Higher star ratings give you fewer bounces.", 0.5f, 0.36f, 0.020f, muted, Paint.Align.CENTER)
-        val labels = arrayOf("★☆☆  EASY  •  MORE BOUNCES", "★★☆  NORMAL", "★★★  HARD  •  FEWER BOUNCES")
+        drawText(canvas, "Harder modes use a faster blade and a smaller shield.", 0.5f, 0.36f, 0.018f, muted, Paint.Align.CENTER)
+        val labels = arrayOf("★☆☆  EASY  •  BIG SHIELD", "★★☆  NORMAL", "★★★  HARD  •  SMALL SHIELD")
         val accents = intArrayOf(cyan, gold, pink)
         for (mode in 1..3) {
             val top = 0.405f + (mode - 1) * 0.11f
