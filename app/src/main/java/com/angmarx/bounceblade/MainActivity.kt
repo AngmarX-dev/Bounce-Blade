@@ -1112,7 +1112,7 @@ private class GameView(context: Context) : View(context) {
         val bestTotal = totalBestStarsAfter(0, 0)
         drawText(canvas, "UNLOCKED  " + unlocked + "/" + levels.size + "     BEST STARS  " + bestTotal + "/" + (levels.size * 3),
             0.5f, 0.88f, 0.019f, muted, Paint.Align.CENTER)
-        drawText(canvas, "DRAG BACK TO LAUNCH  •  TWO FINGERS TO SLOW TIME", 0.5f, 0.925f, 0.014f, muted, Paint.Align.CENTER)
+        drawText(canvas, "DRAG UP/DOWN TO MOVE THE SHIELD  •  CATCH EVERY RETURN", 0.5f, 0.925f, 0.014f, muted, Paint.Align.CENTER)
     }
     private fun drawWorldSelect(canvas: Canvas) {
         drawMenuBackdrop(canvas)
