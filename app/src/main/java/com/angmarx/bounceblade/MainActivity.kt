@@ -1218,10 +1218,10 @@ private class GameView(context: Context) : View(context) {
 
     private fun drawWallGuardGame(canvas: Canvas) {
         drawText(canvas, "BOUNCE BLADE", 0.07f, 0.047f, 0.025f, Color.WHITE)
-        drawText(canvas, "LEVEL $levelId/\${levels.size}", 0.49f, 0.047f, 0.022f, cyan, Paint.Align.CENTER)
+        drawText(canvas, "LEVEL " + levelId + "/" + levels.size, 0.49f, 0.047f, 0.022f, cyan, Paint.Align.CENTER)
         drawButton(canvas, 0.83f, 0.065f, 0.94f, 0.115f, "Ⅱ", pink)
         drawText(canvas, "SCORE $score", 0.07f, 0.092f, 0.019f, gold)
-        drawText(canvas, "TARGETS \${enemies.count { it.alive }}", 0.50f, 0.092f, 0.019f, pink, Paint.Align.CENTER)
+        drawText(canvas, "TARGETS " + enemies.count { it.alive }, 0.50f, 0.092f, 0.019f, pink, Paint.Align.CENTER)
         drawText(canvas, "SAVE STREAK $comboCount", 0.92f, 0.092f, 0.016f, cyan, Paint.Align.RIGHT)
 
         val arena = RectF(viewW * 0.035f, viewH * 0.135f, viewW * 0.965f, viewH * 0.94f)
