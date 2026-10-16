@@ -31,7 +31,7 @@
 
 ## Gameplay Features
 
-- **50 handcrafted stages** across five worlds: Neon Grid, Crimson Circuit, Azure Vault, Magenta Maze, and Golden Core.
+- **100 stages across ten worlds**: Neon Grid, Crimson Circuit, Azure Vault, Magenta Maze, Golden Core, Obsidian Rift, Solar Flare, Quantum Abyss, Storm Citadel, and Celestial Forge.
 - **Linear campaign progression** with local save data.
 - **Automatic blade launch:** each stage begins with the blade flying into the arena.
 - **Ricochet physics:** enemy impacts reverse the blade’s horizontal direction, sending it back toward the player.
@@ -53,7 +53,12 @@
 | Crimson Circuit | Red / industrial | 11–20 | Faster blade, tighter catches |
 | Azure Vault | Blue / icy | 21–30 | Multi-hit enemies appear |
 | Magenta Maze | Purple / chaotic | 31–40 | Dense waves and mixed hazards |
-| Golden Core | Gold / endgame | 41–50 | Toughest formations and final challenges |
+| Golden Core | Gold / endgame | 41–50 | Toughest original campaign formations |
+| Obsidian Rift | Black / violet | 51–60 | Advanced hazards and resilient enemies |
+| Solar Flare | Solar / orange | 61–70 | Fast waves and aggressive patterns |
+| Quantum Abyss | Deep blue | 71–80 | Teleporters and unstable formations |
+| Storm Citadel | Storm / silver | 81–90 | High-pressure enemy combinations |
+| Celestial Forge | Gold / white | 91–100 | Final gauntlet and endgame challenge |
 
 - **Linear unlocking:** complete a stage to unlock the next.
 - **Local saves:** campaign progress, score stars, and settings are stored on-device.
