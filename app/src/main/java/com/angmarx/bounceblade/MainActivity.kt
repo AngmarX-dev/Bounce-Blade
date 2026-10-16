@@ -224,6 +224,7 @@ private class GameView(context: Context) : View(context) {
     private val activeEffects = mutableMapOf<String, Float>()
     private var extraLifeUsed = false
     private var multiCatchCharges = 0
+    private var hasLevelKey = false
     private val musicTracks = listOf(
         "Music & Ambience/Main Menu Theme.wav",
         "Music & Ambience/Gameplay Background.wav",
@@ -885,14 +886,23 @@ private class GameView(context: Context) : View(context) {
         }
 
         for ((hazardIndex, hazard) in level.hazards.withIndex()) {
-            if (hazard.type == "power_up" && hazardIndex in collectedPowerUps) continue
+            if (hazardIndex in collectedPowerUps &&
+                hazard.type in setOf("power_up", "breakable_wall", "switch", "key", "door")) continue
             val center = hazardCenter(hazard, hazardIndex)
             val hx = center.x * viewW
             val hy = center.y * viewH
             val halfW = max(hazard.width * viewW * 0.5f, radius)
             val halfH = max(hazard.height * viewH * 0.5f, radius)
-            val hit = px + radius >= hx - halfW && px - radius <= hx + halfW &&
-                py + radius >= hy - halfH && py - radius <= hy + halfH
+            val hit = if (hazard.type == "rotating_laser") {
+                val angle = animationTime * 1.35f + hazardIndex * 0.4f
+                val lineX = cos(angle) * halfW
+                val lineY = sin(angle) * halfW
+                val edge = radius + max(density * 2f, hazard.height * viewH)
+                pointToSegmentDistanceSquared(px, py, hx - lineX, hy - lineY, hx + lineX, hy + lineY) <= edge * edge
+            } else {
+                px + radius >= hx - halfW && px - radius <= hx + halfW &&
+                    py + radius >= hy - halfH && py - radius <= hy + halfH
+            }
             if (!hit) continue
             when (hazard.type) {
                 "teleporter" -> {
@@ -920,12 +930,59 @@ private class GameView(context: Context) : View(context) {
                         showMessage("POWER-UP • +2 RETURNS")
                     }
                 }
+                "switch" -> {
+                    collectedPowerUps.add(hazardIndex)
+                    switchActivated = true
+                    addBurst(hx, hy, gold, 12)
+                    playSfx("Core Gameplay SFX/Switch Activation.wav")
+                    showMessage("SWITCH ACTIVATED")
+                }
+                "key" -> {
+                    collectedPowerUps.add(hazardIndex)
+                    hasLevelKey = true
+                    addBurst(hx, hy, gold, 12)
+                    playSfx("Optional - Extra Sounds/Power-Up Collect.wav")
+                    showMessage("KEY COLLECTED")
+                }
+                "door" -> {
+                    if (hasLevelKey) {
+                        collectedPowerUps.add(hazardIndex)
+                        addBurst(hx, hy, cyan, 14)
+                        showMessage("DOOR UNLOCKED")
+                    } else {
+                        velocityX = -velocityX * 0.82f
+                        velocityY = -velocityY * 0.82f
+                        showMessage("DOOR LOCKED • FIND THE KEY")
+                    }
+                }
+                "breakable_wall" -> {
+                    collectedPowerUps.add(hazardIndex)
+                    addBurst(hx, hy, gold, 18)
+                    playSfx("Core Gameplay SFX/Crate Break.wav")
+                    showMessage("WALL BROKEN")
+                }
+                "gravity_well" -> {
+                    val dx = hx - px
+                    val dy = hy - py
+                    val distance = sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
+                    velocityX += dx / distance * minDim * 0.20f * dt
+                    velocityY += dy / distance * minDim * 0.20f * dt
+                    showMessage("GRAVITY WELL PULL")
+                }
+                "conveyor_belt" -> {
+                    velocityX += (if (px < hx) -1f else 1f) * minDim * 0.05f * dt
+                    showMessage("CONVEYOR BELT")
+                }
+                "rotating_laser" -> {
+                    fail("ROTATING LASER HIT")
+                    return
+                }
                 "sticky_wall" -> {
                     fail("STICKY WALL — BLADE STUCK")
                     return
                 }
                 else -> {
-                    fail(if (hazard.type == "spikes") "SPIKES HIT" else "HAZARD HIT")
+                    fail(if (hazard.type.contains("spike")) "SPIKES HIT" else "HAZARD HIT")
                     return
                 }
             }
@@ -1406,6 +1463,7 @@ private class GameView(context: Context) : View(context) {
         activeEffects.clear()
         extraLifeUsed = false
         multiCatchCharges = 0
+        hasLevelKey = false
         val pickupTypes = listOf("shield_expand", "slow_time", "multi_catch", "score_multiplier", "extra_life", "blade_speed", "magnet", "piercing")
         val pickupCount = when {
             gameMode == "editor_test" -> 0
@@ -2999,6 +3057,15 @@ private class GameView(context: Context) : View(context) {
         val allowedMax = 0.94f - hazard.width / 2f
         val drift = sin(animationTime * 1.7f + index * 1.3f) * min(0.15f, hazard.width * 0.35f)
         return PointF((hazard.x + drift).coerceIn(allowedMin, max(allowedMin, allowedMax)), hazard.y)
+    }
+
+    private fun pointToSegmentDistanceSquared(px: Float, py: Float, x1: Float, y1: Float, x2: Float, y2: Float): Float {
+        val dx = x2 - x1
+        val dy = y2 - y1
+        val lengthSquared = dx * dx + dy * dy
+        if (lengthSquared <= 0.0001f) return distanceSquared(px, py, x1, y1)
+        val t = (((px - x1) * dx + (py - y1) * dy) / lengthSquared).coerceIn(0f, 1f)
+        return distanceSquared(px, py, x1 + t * dx, y1 + t * dy)
     }
 
     private fun totalBestStarsAfter(updatedLevelId: Int, updatedValue: Int): Int =
