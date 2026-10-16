@@ -63,6 +63,26 @@ jobs:
           print(f"Verified {len(required)} artwork/audio files.")
           PY
 
+
+      - name: Verify left-wall guard gameplay
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
+          required = [
+              "simulateWallGuardStep",
+              "launchWallGuardBlade",
+              "drawWallGuardGame",
+              "guardPaddleY = ny.coerceIn",
+              "THE BLADE PASSED THE LEFT WALL",
+          ]
+          missing = [marker for marker in required if marker not in source]
+          if missing:
+              sys.exit("Missing wall-guard gameplay wiring: " + ", ".join(missing))
+          print("Verified automatic blade launch, movable shield, arcade renderer, and fail condition.")
+          PY
+
       - name: Validate campaign level JSON
         run: |
           python3 - <<'PY'
