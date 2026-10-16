@@ -1018,9 +1018,18 @@ private class GameView(context: Context) : View(context) {
                 velocityY = sin(bounceAngle) * speed
                 comboCount = (comboCount + 1).coerceAtMost(99)
                 bestCombo = max(bestCombo, comboCount)
+                if (bestCombo > prefs.getInt("all_time_best_combo", 0)) prefs.edit().putInt("all_time_best_combo", bestCombo).apply()
                 comboWindow = 2.0f
                 addBurst(px, py, gold, 12)
                 showMessage("WALL SAVE!")
+                if (abs(offset) <= 0.16f) {
+                    val perfectCount = prefs.getInt("perfect_catches", 0) + 1
+                    prefs.edit().putInt("perfect_catches", perfectCount).apply()
+                    val bonus = 150 * max(comboCount, 1)
+                    score += bonus
+                    showMessage("PERFECT CATCH + " + bonus)
+                    addBurst(px, py, gold, 18)
+                }
                 playNextRicochet()
                 haptic()
             } else {
@@ -1040,6 +1049,16 @@ private class GameView(context: Context) : View(context) {
             val hitRadius = radius + minDim * (if (enemy.kind == 3) 0.055f else 0.035f)
             if (distanceSquared(px, py, ex, ey) > hitRadius * hitRadius) continue
 
+            if (enemy.kind == 9 && enemy.shieldHits > 0) {
+                enemy.shieldHits--
+                val cameFromLeft = velocityX > 0f
+                velocityX = if (cameFromLeft) -abs(velocityX) else abs(velocityX)
+                px = if (cameFromLeft) ex - hitRadius else ex + hitRadius
+                addBurst(ex, ey, cyan, 14)
+                showMessage("ENERGY SHIELD BLOCKED HIT • " + enemy.shieldHits + " CHARGES")
+                playSfx("Optional - Extra Sounds/Shield Break.wav")
+                break
+            }
             val cameFromLeft = velocityX > 0f
             enemy.health -= 1
             if (enemy.health <= 0) {
@@ -2670,6 +2689,8 @@ private class GameView(context: Context) : View(context) {
         "FIFTY CLEARS" to (prefs.getInt("total_clears", 0) >= 50),
         "STAR COLLECTOR" to (totalBestStarsAfter(0, 0) >= 50),
         "COMBO MASTER" to (bestCombo >= 5 || prefs.getInt("all_time_best_combo", 0) >= 5),
+        "PERFECT CATCH" to (prefs.getInt("perfect_catches", 0) >= 1),
+        "TEN PERFECT CATCHES" to (prefs.getInt("perfect_catches", 0) >= 10),
         "BLADE INVESTOR" to (shopItems.any { upgradeLevel(it.id) > 0 }),
         "WORLD CONQUEROR" to (prefs.getInt("unlocked_level", 1) >= levels.size)
     )
