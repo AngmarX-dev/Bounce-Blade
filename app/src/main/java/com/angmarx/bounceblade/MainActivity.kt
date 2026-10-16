@@ -860,8 +860,36 @@ private class GameView(context: Context) : View(context) {
         val rightWall = viewW * 0.955f - radius
         val top = viewH * 0.145f + radius
         val bottom = viewH * 0.935f - radius
+        val worldIndex = CampaignWorlds.indexForLevel(levelId)
+        when (worldIndex) {
+            2 -> {
+                // Azure Vault's icy surface preserves drift and adds a subtle slide.
+                velocityY += sin(animationTime * 1.35f + levelId * 0.17f) * minDim * 0.018f * dt
+            }
+            3 -> {
+                // Magenta Maze wind shifts the blade vertically in gusts.
+                velocityY += cos(animationTime * 1.1f + levelId) * minDim * 0.032f * dt
+            }
+            7 -> {
+                // Quantum Abyss water-like fields dampen momentum.
+                velocityX *= (1f - 0.06f * dt).coerceAtLeast(0.90f)
+                velocityY *= (1f - 0.045f * dt).coerceAtLeast(0.92f)
+            }
+            8 -> {
+                // Storm Citadel gusts change direction over time.
+                velocityY += sin(animationTime * 2.2f + levelId * 0.3f) * minDim * 0.035f * dt
+            }
+            9 -> {
+                // Low gravity in Celestial Forge softens vertical acceleration.
+                velocityY *= (1f - 0.025f * dt).coerceAtLeast(0.95f)
+            }
+        }
         var px = bladeX * viewW + velocityX * dt
         var py = bladeY * viewH + velocityY * dt
+        if (worldIndex == 6 && py > viewH * 0.86f && sin(animationTime * 1.2f) > 0.78f) {
+            fail("LAVA SURGE — STAY ABOVE THE HOT ZONE")
+            return
+        }
 
         var wallHit = false
         if (!leftHandedMode && px > rightWall) {
