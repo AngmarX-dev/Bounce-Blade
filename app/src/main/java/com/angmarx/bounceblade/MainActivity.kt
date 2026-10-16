@@ -94,6 +94,7 @@ private data class GameLevel(
     val requiresAllTargets: Boolean = true,
     val requiresSwitch: Boolean = true
 )
+private data class PickupState(val type: String, val x: Float, val y: Float, var active: Boolean = true)
 private data class Particle(
     var x: Float,
     var y: Float,
@@ -103,7 +104,7 @@ private data class Particle(
     val color: Int,
     val radius: Float
 )
-private enum class GameScreen { MENU, WORLDS, LEVELS, PLAYING, PAUSED, SETTINGS, HELP, DIFFICULTY, SHOP, WON, FAILED, CAMPAIGN_COMPLETE }
+private enum class GameScreen { MENU, WORLDS, LEVELS, PLAYING, PAUSED, SETTINGS, HELP, DIFFICULTY, SHOP, FEATURES, MODES, CHALLENGES, ACHIEVEMENTS, STATS, CUSTOMIZE, EDITOR, ACCESSIBILITY, JUKEBOX, WON, FAILED, CAMPAIGN_COMPLETE }
 
 private data class ShopItem(
     val id: String,
@@ -186,6 +187,28 @@ private class GameView(context: Context) : View(context) {
     private var difficulty = prefs.getInt("difficulty_stars", 2).coerceIn(1, 3)
     private var screen = GameScreen.MENU
     private var shopReturnScreen = GameScreen.MENU
+    private var gameMode = prefs.getString("game_mode", "campaign") ?: "campaign"
+    private var bladeSkin = prefs.getInt("blade_skin", 0).coerceIn(0, 5)
+    private var shieldSkin = prefs.getInt("shield_skin", 0).coerceIn(0, 5)
+    private var highContrast = prefs.getBoolean("high_contrast", false)
+    private var reducedMotion = prefs.getBoolean("reduced_motion", false)
+    private var leftHandedMode = prefs.getBoolean("left_handed", false)
+    private var largeUi = prefs.getBoolean("large_ui", false)
+    private var batterySaver = prefs.getBoolean("battery_saver", false)
+    private var dynamicDifficulty = prefs.getBoolean("dynamic_difficulty", true)
+    private var jukeboxTrackId = prefs.getInt("jukebox_track", 0).coerceIn(0, 3)
+    private var editorTargetCount = prefs.getInt("editor_target_count", 6).coerceIn(1, 12)
+    private var editorHazardId = prefs.getInt("editor_hazard", 0).coerceIn(0, 5)
+    private val pickups = mutableListOf<PickupState>()
+    private val activeEffects = mutableMapOf<String, Float>()
+    private var extraLifeUsed = false
+    private val musicTracks = listOf(
+        "Music & Ambience/Main Menu Theme.wav",
+        "Music & Ambience/Gameplay Background.wav",
+        "Music & Ambience/Victory Theme.wav",
+        "Music & Ambience/Game Over Theme.wav"
+    )
+    private val editorHazards = listOf("NONE", "SPIKES", "LASER", "MOVING HAZARD", "PORTAL PAIR", "STICKY WALL")
     private var touchingAbility = false
     private var novaCooldownRemaining = 0f
     private var novaFlashUntil = 0L
@@ -264,7 +287,7 @@ private class GameView(context: Context) : View(context) {
         playSfx("UI & Feedback SFX/Button Back.wav")
         when (screen) {
             GameScreen.PLAYING -> screen = GameScreen.PAUSED
-            GameScreen.PAUSED, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY -> screen = GameScreen.MENU
+            GameScreen.PAUSED, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.EDITOR, GameScreen.ACCESSIBILITY, GameScreen.JUKEBOX -> screen = if (screen == GameScreen.FEATURES) GameScreen.MENU else GameScreen.FEATURES
             GameScreen.SHOP -> {
                 screen = shopReturnScreen
                 if (screen == GameScreen.PLAYING) lastFrame = System.nanoTime()
@@ -329,6 +352,15 @@ private class GameView(context: Context) : View(context) {
             GameScreen.HELP -> drawHelp(canvas)
             GameScreen.DIFFICULTY -> drawDifficulty(canvas)
             GameScreen.SHOP -> drawShop(canvas)
+            GameScreen.FEATURES -> drawFeatures(canvas)
+            GameScreen.MODES -> drawModes(canvas)
+            GameScreen.CHALLENGES -> drawChallenges(canvas)
+            GameScreen.ACHIEVEMENTS -> drawAchievements(canvas)
+            GameScreen.STATS -> drawStats(canvas)
+            GameScreen.CUSTOMIZE -> drawCustomize(canvas)
+            GameScreen.EDITOR -> drawEditor(canvas)
+            GameScreen.ACCESSIBILITY -> drawAccessibility(canvas)
+            GameScreen.JUKEBOX -> drawJukebox(canvas)
             GameScreen.WON -> {
                 drawGame(canvas)
                 drawOverlay(canvas, "LEVEL CLEARED", "Nice shot! The exit is open.")
@@ -350,7 +382,7 @@ private class GameView(context: Context) : View(context) {
                 drawButton(canvas, 0.15f, 0.680f, 0.85f, 0.780f, "LEVEL SELECT", gold)
             }
         }
-        if (screen == GameScreen.PLAYING || flying || particles.isNotEmpty() || turretProjectiles.isNotEmpty()) postInvalidateDelayed(16L)
+        if (screen == GameScreen.PLAYING || flying || particles.isNotEmpty() || turretProjectiles.isNotEmpty() || screen == GameScreen.JUKEBOX) postInvalidateDelayed(if (batterySaver) 33L else 16L)
     }
 
     private fun advanceFrame() {
@@ -359,7 +391,17 @@ private class GameView(context: Context) : View(context) {
         lastFrame = now
         animationTime += rawDt
         if (screen == GameScreen.PLAYING) {
+            val effectIterator = activeEffects.entries.iterator()
+            while (effectIterator.hasNext()) {
+                val entry = effectIterator.next()
+                entry.setValue((entry.value - rawDt).coerceAtLeast(0f))
+                if (entry.value <= 0f) effectIterator.remove()
+            }
             levelElapsedSeconds += rawDt
+            if (gameMode == "time_attack" && levelElapsedSeconds >= 60f) {
+                fail("TIME ATTACK OVER — 60 SECONDS")
+                return
+            }
             comboWindow = (comboWindow - rawDt).coerceAtLeast(0f)
             if (comboWindow <= 0f) comboCount = 0
             teleportCooldown = (teleportCooldown - rawDt).coerceAtLeast(0f)
@@ -483,7 +525,8 @@ private class GameView(context: Context) : View(context) {
         if (screen != GameScreen.PLAYING || !wallGuardMode || dt <= 0f) return
         val breachX = 0.108f
         val targetY = guardPaddleY.coerceIn(0.18f, 0.82f)
-        val difficultyScale = 1f + (difficulty - 1) * 0.18f
+        val adaptiveScale = if (dynamicDifficulty) 1f + min(prefs.getInt("total_clears", 0), 60) * 0.0025f else 1f
+        val difficultyScale = (1f + (difficulty - 1) * 0.18f) * adaptiveScale
 
         for ((index, enemy) in enemies.withIndex()) {
             if (!enemy.alive) continue
@@ -798,6 +841,28 @@ private class GameView(context: Context) : View(context) {
         bladeTrail.add(PointF(px, py))
         while (bladeTrail.size > 24) bladeTrail.removeAt(0)
 
+        for (pickup in pickups) {
+            if (!pickup.active) continue
+            val cx = pickup.x * viewW
+            val cy = pickup.y * viewH
+            val pickupRadius = radius + minDim * 0.026f
+            if (distanceSquared(px, py, cx, cy) > pickupRadius * pickupRadius) continue
+            pickup.active = false
+            when (pickup.type) {
+                "shield_expand" -> activeEffects["shield_expand"] = 12f
+                "slow_time" -> activeEffects["slow_time"] = 8f
+                "score_multiplier" -> activeEffects["score_multiplier"] = 12f
+                "extra_life" -> { activeEffects["extra_life"] = 30f; extraLifeUsed = false }
+                "blade_speed" -> activeEffects["blade_speed"] = 10f
+                "magnet" -> { score += 200; prefs.edit().putInt("coins", coinBalance() + 25).apply() }
+            }
+            if (pickup.type == "slow_time") { velocityX *= 0.72f; velocityY *= 0.72f }
+            if (pickup.type == "blade_speed") { velocityX *= 1.2f; velocityY *= 1.2f }
+            addBurst(cx, cy, gold, 18)
+            showMessage("POWER-UP: " + pickup.type.replace('_', ' ').uppercase())
+            playSfx("Optional - Extra Sounds/Power-Up Collect.wav")
+        }
+
         if (enemies.none { it.alive }) {
             completeLevel()
             return
@@ -814,7 +879,7 @@ private class GameView(context: Context) : View(context) {
         1 -> 0.105f
         3 -> 0.065f
         else -> 0.085f
-    } * (1f + upgradeLevel("shield_mod").coerceAtMost(2) * 0.14f)
+    } * (1f + upgradeLevel("shield_mod").coerceAtMost(2) * 0.14f) * (if ((activeEffects["shield_expand"] ?: 0f) > 0f) 1.55f else 1f)
 
     private fun clampGuardPaddleY(y: Float): Float {
         val half = guardPaddleHalf()
@@ -999,6 +1064,8 @@ private class GameView(context: Context) : View(context) {
         val bestShotsKey = bestShotsKey(levelId)
         val previousBestShots = prefs.getInt(bestShotsKey, Int.MAX_VALUE)
         prefs.edit()
+            .putInt("total_clears", prefs.getInt("total_clears", 0) + 1)
+            .putLong("total_play_seconds", prefs.getLong("total_play_seconds", 0L) + levelElapsedSeconds.toLong())
             .putInt("unlocked_level", newUnlocked)
             .putInt("coins", updatedCoinBalance)
             .putInt(starsKey, max(previousBest, earnedStars))
@@ -1007,6 +1074,8 @@ private class GameView(context: Context) : View(context) {
             .putInt("campaign_best_stars_difficulty_" + difficulty,
                 totalBestStarsAfter(levelId, max(previousBest, earnedStars)))
             .apply()
+        if (gameMode == "daily") prefs.edit().putInt("daily_best_score", max(prefs.getInt("daily_best_score", 0), score)).apply()
+        if (gameMode == "weekly") prefs.edit().putInt("weekly_best_score", max(prefs.getInt("weekly_best_score", 0), score)).apply()
         screen = if (levelId >= levels.size) GameScreen.CAMPAIGN_COMPLETE else GameScreen.WON
         playSfx("Core Gameplay SFX/Level Complete.wav")
         if (earnedStars > previousBest) playSfx("UI & Feedback SFX/Star - Score Earned.wav")
@@ -1015,6 +1084,27 @@ private class GameView(context: Context) : View(context) {
 
     private fun fail(reason: String) {
         if (screen != GameScreen.PLAYING) return
+        if (gameMode == "zen" || gameMode == "practice") {
+            flying = false
+            aiming = false
+            velocityX = 0f
+            velocityY = 0f
+            bladeX = 0.145f
+            bladeY = guardPaddleY
+            showMessage("PRACTICE RESET • NO RUN LOST")
+            launchWallGuardBlade()
+            return
+        }
+        if (!extraLifeUsed && (activeEffects["extra_life"] ?: 0f) > 0f) {
+            extraLifeUsed = true
+            activeEffects.remove("extra_life")
+            enemies.filter { it.alive && it.x < 0.18f }.forEach { it.x = 0.78f; it.y = guardPaddleY }
+            flying = false
+            launchWallGuardBlade()
+            showMessage("EXTRA LIFE USED")
+            return
+        }
+        prefs.edit().putInt("total_fails", prefs.getInt("total_fails", 0) + 1).apply()
         flying = false
         aiming = false
         velocityX = 0f
@@ -1032,7 +1122,7 @@ private class GameView(context: Context) : View(context) {
         if (wallGuardMode) {
             // Make every campaign stage playable in the arcade format, even
             // when its legacy puzzle JSON did not define any enemies.
-            val targetCount = (3 + (levelId - 1) / 2).coerceAtMost(12)
+            val targetCount = (if (gameMode == "editor_test") editorTargetCount else if (gameMode == "boss_rush") 3 else (3 + (levelId - 1) / 2)).coerceAtMost(12)
             val points = (0 until targetCount).map { index ->
                 val column = index % 4
                 val row = index / 4
@@ -1053,9 +1143,39 @@ private class GameView(context: Context) : View(context) {
             )
             guardPaddleY = 0.5f
         }
-        enemies = level.enemies.mapIndexed { index, point ->
-            EnemyState(point.x, point.y, true, enemyKindForLevel(levelId), enemyHealthForLevel(levelId, index), 1.2f + (index % 3) * 0.6f, true)
+        val activeEnemyPoints = when {
+            gameMode == "procedural" -> {
+                val seeded = kotlin.random.Random(levelId * 739 + prefs.getInt("procedural_seed", 23))
+                (0 until (3 + seeded.nextInt(10))).map {
+                    PointN(0.38f + seeded.nextFloat() * 0.52f, 0.20f + seeded.nextFloat() * 0.62f)
+                }
+            }
+            gameMode == "editor_test" -> (0 until editorTargetCount).map { i ->
+                PointN(0.42f + (i % 4) * 0.13f, 0.22f + (i / 4) * 0.22f)
+            }
+            else -> level.enemies
+        }
+        enemies = activeEnemyPoints.mapIndexed { index, point ->
+            val bossRush = gameMode == "boss_rush"
+            EnemyState(point.x, point.y, true, if (bossRush) 3 else enemyKindForLevel(levelId),
+                if (bossRush) 3 else enemyHealthForLevel(levelId, index), 1.2f + (index % 3) * 0.6f, true)
         }.toMutableList()
+        pickups.clear()
+        activeEffects.clear()
+        extraLifeUsed = false
+        val pickupTypes = listOf("shield_expand", "slow_time", "score_multiplier", "extra_life", "blade_speed", "magnet")
+        val pickupCount = when {
+            gameMode == "editor_test" && editorHazardId > 0 -> 1
+            gameMode == "procedural" -> 2
+            levelId % 2 == 0 -> 1
+            else -> 0
+        }
+        repeat(pickupCount) { i ->
+            val type = if (gameMode == "editor_test" && editorHazardId > 0)
+                when (editorHazardId) { 1 -> "score_multiplier"; 2 -> "slow_time"; 3 -> "blade_speed"; 4 -> "magnet"; else -> "shield_expand" }
+            else pickupTypes[(levelId + i) % pickupTypes.size]
+            pickups.add(PickupState(type, 0.885f, if (i % 2 == 0) 0.22f else 0.79f))
+        }
         crates = level.crates.map { CrateState(it.x, it.y) }.toMutableList()
         bladeX = if (wallGuardMode) 0.145f else level.spawn.x
         bladeY = if (wallGuardMode) guardPaddleY else level.spawn.y
@@ -1098,6 +1218,7 @@ private class GameView(context: Context) : View(context) {
             showMessage("CLEAR PREVIOUS LEVELS TO UNLOCK THIS")
             return
         }
+        prefs.edit().putInt("total_runs", prefs.getInt("total_runs", 0) + 1).apply()
         loadLevel(id)
         screen = GameScreen.PLAYING
         if (wallGuardMode) launchWallGuardBlade()
@@ -1358,11 +1479,12 @@ private class GameView(context: Context) : View(context) {
 
     private fun updateMusicForScreen() {
         val target = when (screen) {
-            GameScreen.MENU, GameScreen.WORLDS, GameScreen.LEVELS, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY, GameScreen.SHOP ->
+            GameScreen.MENU, GameScreen.WORLDS, GameScreen.LEVELS, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY, GameScreen.SHOP, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.EDITOR, GameScreen.ACCESSIBILITY ->
                 "Music & Ambience/Main Menu Theme.wav"
             GameScreen.PLAYING, GameScreen.PAUSED -> "Music & Ambience/Gameplay Background.wav"
             GameScreen.WON, GameScreen.CAMPAIGN_COMPLETE -> "Music & Ambience/Victory Theme.wav"
             GameScreen.FAILED -> "Music & Ambience/Game Over Theme.wav"
+            GameScreen.JUKEBOX -> musicTracks[jukeboxTrackId]
         }
         if (!soundEnabled || audioLifecyclePaused) {
             if (musicPrepared) try { musicPlayer?.pause() } catch (_: IllegalStateException) { }
@@ -1454,7 +1576,7 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas, "◈ " + coinBalance(), 0.91f, 0.105f, 0.026f, gold, Paint.Align.RIGHT)
         drawButton(canvas, 0.10f, 0.456f, 0.90f, 0.523f, "PLAY CAMPAIGN", cyan)
         drawButton(canvas, 0.10f, 0.532f, 0.90f, 0.599f, "LEVEL SELECT", gold)
-        drawButton(canvas, 0.10f, 0.608f, 0.90f, 0.675f, "HELP", pink)
+        drawButton(canvas, 0.10f, 0.608f, 0.90f, 0.675f, "MORE FEATURES", pink)
         drawButton(canvas, 0.10f, 0.684f, 0.90f, 0.751f, "BLADE SHOP", gold)
         drawButton(canvas, 0.10f, 0.760f, 0.90f, 0.827f, "SETTINGS", cyan)
         val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
@@ -1592,6 +1714,22 @@ private class GameView(context: Context) : View(context) {
             drawAsset(canvas, "Effects & Particles/Combo Text.png", RectF(viewW * 0.34f, viewH * 0.82f, viewW * 0.66f, viewH * 0.89f), 240)
         }
         if (aiming && !flying) drawAim(canvas)
+        for (pickup in pickups) if (pickup.active) {
+            val px = pickup.x * viewW
+            val py = pickup.y * viewH
+            paint.style = Paint.Style.FILL
+            paint.color = gold
+            paint.setShadowLayer(density * 12f, 0f, 0f, gold)
+            canvas.drawCircle(px, py, minDim * 0.024f, paint)
+            paint.clearShadowLayer()
+            paint.color = dark
+            paint.textAlign = Paint.Align.CENTER
+            paint.textSize = minDim * 0.023f
+            canvas.drawText(when (pickup.type) {
+                "shield_expand" -> "S"; "slow_time" -> "T"; "score_multiplier" -> "2x"
+                "extra_life" -> "+"; "blade_speed" -> "B"; else -> "C"
+            }, px, py + paint.textSize * 0.34f, paint)
+        }
         val bladePx = bladeX * viewW
         val bladePy = bladeY * viewH
         canvas.save()
@@ -1669,13 +1807,14 @@ private class GameView(context: Context) : View(context) {
             paddleCenter + paddleHalf
         )
         paint.style = Paint.Style.FILL
-        paint.color = Color.argb(105, Color.red(cyan), Color.green(cyan), Color.blue(cyan))
-        paint.setShadowLayer(density * 13f, 0f, 0f, cyan)
+        val shieldColor = shieldSkinColor()
+        paint.color = Color.argb(105, Color.red(shieldColor), Color.green(shieldColor), Color.blue(shieldColor))
+        paint.setShadowLayer(density * 13f, 0f, 0f, shieldColor)
         canvas.drawRoundRect(paddle, density * 8f, density * 8f, paint)
         paint.clearShadowLayer()
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(2f, density * 2.5f)
-        paint.color = cyan
+        paint.color = shieldSkinColor()
         canvas.drawRoundRect(paddle, density * 8f, density * 8f, paint)
         paint.style = Paint.Style.FILL
         paint.color = Color.WHITE
@@ -1805,8 +1944,8 @@ private class GameView(context: Context) : View(context) {
         path.lineTo(x - radius * 0.36f, y + radius * 0.90f)
         path.close()
         paint.style = Paint.Style.FILL
-        paint.color = cyan
-        paint.setShadowLayer(density * 15f, 0f, 0f, cyan)
+        paint.color = bladeSkinColor()
+        paint.setShadowLayer(density * 15f, 0f, 0f, bladeSkinColor())
         canvas.drawPath(path, paint)
         paint.clearShadowLayer()
         paint.color = Color.WHITE
@@ -2009,7 +2148,8 @@ private class GameView(context: Context) : View(context) {
         paint.clearShadowLayer()
         paint.style = Paint.Style.FILL
         paint.color = color
-        paint.textSize = (size * minDim).coerceAtLeast(8f * density)
+        paint.color = if (highContrast && color == muted) Color.WHITE else color
+        paint.textSize = (size * minDim * (if (largeUi) 1.16f else 1f)).coerceAtLeast(8f * density)
         paint.typeface = TypefaceFactory.bold
         paint.textAlign = align
         canvas.drawText(text, x * viewW, y * viewH, paint)
@@ -2129,7 +2269,7 @@ private class GameView(context: Context) : View(context) {
                         when {
                             inRect(nx, ny, 0.10f, 0.456f, 0.90f, 0.523f) -> screen = GameScreen.DIFFICULTY
                             inRect(nx, ny, 0.10f, 0.532f, 0.90f, 0.599f) -> screen = GameScreen.WORLDS
-                            inRect(nx, ny, 0.10f, 0.608f, 0.90f, 0.675f) -> screen = GameScreen.HELP
+                            inRect(nx, ny, 0.10f, 0.608f, 0.90f, 0.675f) -> screen = GameScreen.FEATURES
                             inRect(nx, ny, 0.10f, 0.684f, 0.90f, 0.751f) -> openShop(GameScreen.MENU)
                             inRect(nx, ny, 0.10f, 0.760f, 0.90f, 0.827f) -> screen = GameScreen.SETTINGS
                         }
@@ -2228,8 +2368,8 @@ private class GameView(context: Context) : View(context) {
                     GameScreen.WON -> {
                         when {
                             inRect(nx, ny, 0.18f, 0.50f, 0.82f, 0.60f) -> {
-                                if (levelId >= levels.size) screen = GameScreen.CAMPAIGN_COMPLETE
-                                else startLevel(levelId + 1)
+                                if (levelId >= levels.size && gameMode !in setOf("endless", "procedural")) screen = GameScreen.CAMPAIGN_COMPLETE
+                                else startLevel(if (levelId >= levels.size) 1 else levelId + 1)
                             }
                             inRect(nx, ny, 0.18f, 0.625f, 0.82f, 0.725f) -> { selectedWorld=CampaignWorlds.indexForLevel(levelId);screen=GameScreen.LEVELS }
                         }
