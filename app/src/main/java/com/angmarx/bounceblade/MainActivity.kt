@@ -113,7 +113,7 @@ private data class Particle(
     val color: Int,
     val radius: Float
 )
-private enum class GameScreen { MENU, WORLDS, LEVELS, PLAYING, PAUSED, SETTINGS, HELP, DIFFICULTY, SHOP, FEATURES, MODES, CHALLENGES, ACHIEVEMENTS, STATS, CUSTOMIZE, EDITOR, ACCESSIBILITY, JUKEBOX, EXTRAS, LOCAL_SCORES, REPLAYS, PHOTO_MODE, SEASONAL, ONLINE_FEATURES, WON, FAILED, CAMPAIGN_COMPLETE }
+private enum class GameScreen { MENU, STORY, WORLDS, LEVELS, PLAYING, PAUSED, SETTINGS, HELP, DIFFICULTY, SHOP, FEATURES, MODES, CHALLENGES, ACHIEVEMENTS, STATS, CUSTOMIZE, EDITOR, ACCESSIBILITY, JUKEBOX, EXTRAS, LOCAL_SCORES, REPLAYS, PHOTO_MODE, SEASONAL, ONLINE_FEATURES, WON, FAILED, CAMPAIGN_COMPLETE }
 
 private data class ShopItem(
     val id: String,
@@ -200,6 +200,7 @@ private class GameView(context: Context) : View(context) {
     private var screen = GameScreen.MENU
     private var shopReturnScreen = GameScreen.MENU
     private var menuSelection = 0
+    private var storyPage = 0
     private var gameMode = prefs.getString("game_mode", "campaign") ?: "campaign"
     private var bladeSkin = prefs.getInt("blade_skin", 0).coerceIn(0, 5)
     private var shieldSkin = prefs.getInt("shield_skin", 0).coerceIn(0, 5)
@@ -317,7 +318,7 @@ private class GameView(context: Context) : View(context) {
         playSfx("UI & Feedback SFX/Button Back.wav")
         when (screen) {
             GameScreen.PLAYING -> screen = GameScreen.PAUSED
-            GameScreen.PAUSED, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.EDITOR, GameScreen.ACCESSIBILITY, GameScreen.JUKEBOX, GameScreen.EXTRAS, GameScreen.LOCAL_SCORES, GameScreen.REPLAYS, GameScreen.PHOTO_MODE, GameScreen.SEASONAL, GameScreen.ONLINE_FEATURES -> screen = if (screen == GameScreen.FEATURES) GameScreen.MENU else if (screen == GameScreen.EXTRAS) GameScreen.FEATURES else GameScreen.EXTRAS
+            GameScreen.PAUSED, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.STORY, GameScreen.DIFFICULTY, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.EDITOR, GameScreen.ACCESSIBILITY, GameScreen.JUKEBOX, GameScreen.EXTRAS, GameScreen.LOCAL_SCORES, GameScreen.REPLAYS, GameScreen.PHOTO_MODE, GameScreen.SEASONAL, GameScreen.ONLINE_FEATURES -> screen = if (screen == GameScreen.FEATURES) GameScreen.MENU else if (screen == GameScreen.EXTRAS) GameScreen.FEATURES else GameScreen.EXTRAS
             GameScreen.SHOP -> {
                 screen = shopReturnScreen
                 if (screen == GameScreen.PLAYING) lastFrame = System.nanoTime()
@@ -378,6 +379,7 @@ private class GameView(context: Context) : View(context) {
         drawBackground(canvas)
         when (screen) {
             GameScreen.MENU -> drawMenu(canvas)
+            GameScreen.STORY -> drawStory(canvas)
             GameScreen.WORLDS -> drawWorldSelect(canvas)
             GameScreen.LEVELS -> drawLevelSelect(canvas)
             GameScreen.PLAYING -> drawGame(canvas)
@@ -1856,7 +1858,7 @@ private class GameView(context: Context) : View(context) {
 
     private fun updateMusicForScreen() {
         val target = when (screen) {
-            GameScreen.MENU, GameScreen.WORLDS, GameScreen.LEVELS, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY, GameScreen.SHOP, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.EDITOR, GameScreen.ACCESSIBILITY, GameScreen.EXTRAS, GameScreen.LOCAL_SCORES, GameScreen.REPLAYS, GameScreen.SEASONAL, GameScreen.ONLINE_FEATURES ->
+            GameScreen.MENU, GameScreen.STORY, GameScreen.WORLDS, GameScreen.LEVELS, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY, GameScreen.SHOP, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.EDITOR, GameScreen.ACCESSIBILITY, GameScreen.EXTRAS, GameScreen.LOCAL_SCORES, GameScreen.REPLAYS, GameScreen.SEASONAL, GameScreen.ONLINE_FEATURES ->
                 "Music & Ambience/Main Menu Theme.wav"
             GameScreen.PLAYING, GameScreen.PAUSED -> "Music & Ambience/Gameplay Background.wav"
             GameScreen.WON, GameScreen.CAMPAIGN_COMPLETE -> "Music & Ambience/Victory Theme.wav"
@@ -1950,18 +1952,59 @@ private class GameView(context: Context) : View(context) {
     private fun drawMenu(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         drawAsset(canvas, "App Icon & Logo/Game Logo.png", RectF(viewW * 0.16f, viewH * 0.13f, viewW * 0.84f, viewH * 0.29f), 255)
-        drawText(canvas, "BOUNCE OFF ENEMIES  •  GUARD THE LEFT WALL", 0.5f, 0.435f, 0.020f, muted, Paint.Align.CENTER)
+        drawText(canvas, "BOUNCE OFF ENEMIES  •  GUARD THE LEFT WALL", 0.5f, 0.418f, 0.018f, muted, Paint.Align.CENTER)
         drawText(canvas, "◈ " + coinBalance(), 0.91f, 0.105f, 0.026f, gold, Paint.Align.RIGHT)
-        drawButton(canvas, 0.10f, 0.456f, 0.90f, 0.523f, "PLAY CAMPAIGN", if (menuSelection == 0) gold else cyan)
-        drawButton(canvas, 0.10f, 0.532f, 0.90f, 0.599f, "LEVEL SELECT", if (menuSelection == 1) pink else gold)
-        drawButton(canvas, 0.10f, 0.608f, 0.90f, 0.675f, "MORE FEATURES", if (menuSelection == 2) cyan else pink)
-        drawButton(canvas, 0.10f, 0.684f, 0.90f, 0.751f, "BLADE SHOP", if (menuSelection == 3) pink else gold)
-        drawButton(canvas, 0.10f, 0.760f, 0.90f, 0.827f, "SETTINGS", if (menuSelection == 4) gold else cyan)
+        drawButton(canvas, 0.10f, 0.438f, 0.90f, 0.493f, "PLAY CAMPAIGN", if (menuSelection == 0) gold else cyan)
+        drawButton(canvas, 0.10f, 0.500f, 0.90f, 0.555f, "LEVEL SELECT", if (menuSelection == 1) pink else gold)
+        drawButton(canvas, 0.10f, 0.562f, 0.90f, 0.617f, "MORE FEATURES", if (menuSelection == 2) cyan else pink)
+        drawButton(canvas, 0.10f, 0.624f, 0.90f, 0.679f, "BLADE SHOP", if (menuSelection == 3) pink else gold)
+        drawButton(canvas, 0.10f, 0.686f, 0.90f, 0.741f, "SETTINGS", if (menuSelection == 4) gold else cyan)
+        drawButton(canvas, 0.10f, 0.748f, 0.90f, 0.803f, "THE STORY", cyan)
         val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
         val bestTotal = totalBestStarsAfter(0, 0)
         drawText(canvas, "UNLOCKED  " + unlocked + "/" + levels.size + "     BEST STARS  " + bestTotal + "/" + (levels.size * 3),
-            0.5f, 0.86f, 0.019f, muted, Paint.Align.CENTER)
+            0.5f, 0.85f, 0.017f, muted, Paint.Align.CENTER)
         drawText(canvas, "COLLECT COINS • UPGRADE YOUR BLADE • SURVIVE EVERY WAVE", 0.5f, 0.91f, 0.014f, muted, Paint.Align.CENTER)
+    }
+
+    private fun drawStory(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "THE STORY", 0.5f, 0.125f, 0.060f, gold, Paint.Align.CENTER)
+        drawText(canvas, "CHAPTER " + (storyPage + 1) + " / 3", 0.5f, 0.185f, 0.020f, cyan, Paint.Align.CENTER)
+        val lines = when (storyPage) {
+            0 -> listOf(
+                "In the beginning, there was only the Lumen Grid—a vast, shimmering tapestry",
+                "of light and data, woven from the dreams of a thousand forgotten stars.",
+                "At its heart burned the Golden Core, the first spark and source of all creation.",
+                "To protect this fragile light, the Guardians were forged: beings of will and",
+                "reflection, each wielding a shield of pure intent."
+            )
+            1 -> listOf(
+                "But from the edges of the void came the Corruption—a creeping static that",
+                "twisted the Grid's own energies into ravenous enemies.",
+                "The Guardians created the Bounce Blade, a weapon of precision and a shard",
+                "of the Core itself, designed to ricochet through the Corruption and return",
+                "to its master's hand."
+            )
+            else -> listOf(
+                "For eons, the balance held. Then the Corruption poisoned the Blade with wild,",
+                "uncontrollable momentum. Every launch became a runaway star that could",
+                "shatter the Grid if it escaped.",
+                "You are the last Guardian. Across the Neon Grid, Crimson Circuit, Azure Vault,",
+                "Magenta Maze, and Golden Core, you must destroy the Corruption and catch",
+                "the light. The Blade remembers its purpose; every impact and perfect catch",
+                "strengthens your bond. Catch the Blade. Save the light. Become the legend."
+            )
+        }
+        val lineStep = if (storyPage == 2) 0.064f else 0.075f
+        val startY = if (storyPage == 2) 0.31f else 0.34f
+        lines.forEachIndexed { index, line ->
+            drawText(canvas, line, 0.5f, startY + index * lineStep, 0.020f, Color.WHITE, Paint.Align.CENTER)
+        }
+        drawButton(canvas, 0.08f, 0.815f, 0.32f, 0.900f, "BACK TO MENU", pink)
+        if (storyPage > 0) drawButton(canvas, 0.36f, 0.815f, 0.62f, 0.900f, "PREVIOUS", muted)
+        if (storyPage < 2) drawButton(canvas, 0.66f, 0.815f, 0.92f, 0.900f, "NEXT CHAPTER", cyan)
+        else drawText(canvas, "THE GRID'S FATE IS IN YOUR HANDS", 0.64f, 0.865f, 0.017f, gold, Paint.Align.CENTER)
     }
     private fun drawShop(canvas: Canvas) {
         drawMenuBackdrop(canvas)
@@ -3414,11 +3457,22 @@ private class GameView(context: Context) : View(context) {
                 when (screen) {
                     GameScreen.MENU -> {
                         when {
-                            inRect(nx, ny, 0.10f, 0.456f, 0.90f, 0.523f) -> screen = GameScreen.DIFFICULTY
-                            inRect(nx, ny, 0.10f, 0.532f, 0.90f, 0.599f) -> screen = GameScreen.WORLDS
-                            inRect(nx, ny, 0.10f, 0.608f, 0.90f, 0.675f) -> screen = GameScreen.FEATURES
-                            inRect(nx, ny, 0.10f, 0.684f, 0.90f, 0.751f) -> openShop(GameScreen.MENU)
-                            inRect(nx, ny, 0.10f, 0.760f, 0.90f, 0.827f) -> screen = GameScreen.SETTINGS
+                            inRect(nx, ny, 0.10f, 0.438f, 0.90f, 0.493f) -> screen = GameScreen.DIFFICULTY
+                            inRect(nx, ny, 0.10f, 0.500f, 0.90f, 0.555f) -> screen = GameScreen.WORLDS
+                            inRect(nx, ny, 0.10f, 0.562f, 0.90f, 0.617f) -> screen = GameScreen.FEATURES
+                            inRect(nx, ny, 0.10f, 0.624f, 0.90f, 0.679f) -> openShop(GameScreen.MENU)
+                            inRect(nx, ny, 0.10f, 0.686f, 0.90f, 0.741f) -> screen = GameScreen.SETTINGS
+                            inRect(nx, ny, 0.10f, 0.748f, 0.90f, 0.803f) -> { storyPage = 0; screen = GameScreen.STORY }
+                        }
+                        invalidate()
+                        return true
+                    }
+
+                    GameScreen.STORY -> {
+                        when {
+                            inRect(nx, ny, 0.08f, 0.815f, 0.32f, 0.900f) -> screen = GameScreen.MENU
+                            storyPage > 0 && inRect(nx, ny, 0.36f, 0.815f, 0.62f, 0.900f) -> storyPage--
+                            storyPage < 2 && inRect(nx, ny, 0.66f, 0.815f, 0.92f, 0.900f) -> storyPage++
                         }
                         invalidate()
                         return true
