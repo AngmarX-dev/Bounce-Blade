@@ -223,13 +223,37 @@ jobs:
               "val abilityHit = if (oneHandedMode)",
               "inRect(nx, ny, 0.82f, 0.025f, 0.98f, 0.115f)",
               "inRect(nx, ny, 0.775f, 0.790f, 0.98f, 0.935f)",
-              "0.10f, 0.456f, 0.90f, 0.523f",
+              "0.10f, 0.438f, 0.90f, 0.493f",
               "private fun inRect(x: Float, y: Float, left: Float, top: Float, right: Float, bottom: Float): Boolean {",
           ]
           missing = [marker for marker in required if marker not in source]
           if missing:
               sys.exit("Missing larger button or matching hitbox wiring: " + ", ".join(missing))
           print("Verified larger button artwork, type, and matching touch zones.")
+          PY
+
+      - name: Verify in-game story chapters and navigation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+
+          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
+          required = [
+              "GameScreen.STORY -> drawStory(canvas)",
+              'drawButton(canvas, 0.10f, 0.748f, 0.90f, 0.803f, "THE STORY", cyan)',
+              "private fun drawStory(canvas: Canvas)",
+              "Lumen Grid",
+              "Golden Core",
+              "The Guardians created the Bounce Blade",
+              "NEXT CHAPTER",
+              "storyPage++",
+              "GameScreen.FEATURES, GameScreen.STORY -> GameScreen.MENU",
+          ]
+          missing = [marker for marker in required if marker not in source]
+          if missing:
+              sys.exit("Missing in-game story feature: " + ", ".join(missing))
+          print("Verified story menu entry, three narrative chapters, and navigation.")
           PY
 
       - name: Run unit tests and build debug APK
