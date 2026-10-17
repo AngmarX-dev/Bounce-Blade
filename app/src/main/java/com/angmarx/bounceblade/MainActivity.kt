@@ -318,7 +318,7 @@ private class GameView(context: Context) : View(context) {
         playSfx("UI & Feedback SFX/Button Back.wav")
         when (screen) {
             GameScreen.PLAYING -> screen = GameScreen.PAUSED
-            GameScreen.PAUSED, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.STORY, GameScreen.DIFFICULTY, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.EDITOR, GameScreen.ACCESSIBILITY, GameScreen.JUKEBOX, GameScreen.EXTRAS, GameScreen.LOCAL_SCORES, GameScreen.REPLAYS, GameScreen.PHOTO_MODE, GameScreen.SEASONAL, GameScreen.ONLINE_FEATURES -> screen = if (screen == GameScreen.FEATURES) GameScreen.MENU else if (screen == GameScreen.EXTRAS) GameScreen.FEATURES else GameScreen.EXTRAS
+            GameScreen.PAUSED, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.STORY, GameScreen.DIFFICULTY, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.EDITOR, GameScreen.ACCESSIBILITY, GameScreen.JUKEBOX, GameScreen.EXTRAS, GameScreen.LOCAL_SCORES, GameScreen.REPLAYS, GameScreen.PHOTO_MODE, GameScreen.SEASONAL, GameScreen.ONLINE_FEATURES -> screen = when (screen) { GameScreen.FEATURES, GameScreen.STORY -> GameScreen.MENU; GameScreen.EXTRAS -> GameScreen.FEATURES; else -> GameScreen.EXTRAS }
             GameScreen.SHOP -> {
                 screen = shopReturnScreen
                 if (screen == GameScreen.PLAYING) lastFrame = System.nanoTime()
