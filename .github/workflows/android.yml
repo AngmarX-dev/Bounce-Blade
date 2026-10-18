@@ -212,8 +212,11 @@ jobs:
 
           source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
           required = [
-              "hitRect.width() * buttonExpansion",
-              ") 0.015f else 0.055f",
+              "val hitRect = RectF(left * viewW, top * viewH, right * viewW, bottom * viewH)",
+              "val visualRect = buttonBitmap?.let { fitAssetRect(it, hitRect) } ?: hitRect",
+              "drawAsset(canvas, \"UI Elements/Button.png\", hitRect, if (enabled) 255 else 125)",
+              "availableTextWidth",
+              "maxWidth: Float = 0f",
               "if (label.length > 18) 0.022f else 0.028f",
               "drawButton(canvas, 0.825f, 0.027f, 0.97f, 0.110f, \"Ⅱ\", pink)",
               "val novaLeft = if (oneHandedMode)",
@@ -254,6 +257,67 @@ jobs:
           if missing:
               sys.exit("Missing in-game story feature: " + ", ".join(missing))
           print("Verified story menu entry, three narrative chapters, and navigation.")
+          PY
+
+      - name: Verify replacement artwork and safe layout bounds
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+
+          required = [
+              "Images/App Icon & Logo/Splash Screen.png",
+              "Images/Backgrounds & Environments/Game Over Background.png",
+              "Images/Backgrounds & Environments/Gameplay Background.png",
+              "Images/Backgrounds & Environments/Menu Background.png",
+              "Images/Backgrounds & Environments/Victory Background.png",
+              "Images/Banners & Text/Game Over Banner.png",
+              "Images/Banners & Text/Level Complete Banner.png",
+              "Images/Banners & Text/Victory Banner.png",
+              "Images/Effects & Particles/Impact Spark.png",
+              "Images/Effects & Particles/Portal Enter Effect.png",
+              "Images/Effects & Particles/Slice Effect.png",
+              "Images/Gameplay Sprites/Floor Tile.jpg",
+              "Images/Gameplay Sprites/Switch.jpg",
+              "Images/Gameplay Sprites/Wall Segment.jpg",
+              "Images/World Art/Neon Grid.png",
+              "Images/World Art/Crimson Circuit.png",
+              "Images/World Art/Azure Vault.png",
+              "Images/World Art/Magenta Maze.png",
+              "Images/World Art/Golden Core.png",
+          ]
+          missing = [path for path in required if not Path(path).is_file() or Path(path).stat().st_size == 0]
+          if missing:
+              sys.exit("Missing replacement artwork: " + ", ".join(missing))
+          if Path("New Image").exists():
+              sys.exit("Temporary New Image directory should be removed after migration.")
+          legacy = [
+              "Images/UI Elements/Button.jpeg",
+              "Images/Gameplay Sprites/Floor Tile.png",
+              "Images/Gameplay Sprites/Switch.png",
+              "Images/Gameplay Sprites/Wall Segment.png",
+          ]
+          present = [path for path in legacy if Path(path).exists()]
+          if present:
+              sys.exit("Legacy artwork still present: " + ", ".join(present))
+
+          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
+          required_wiring = [
+              "World Art/Neon Grid.png",
+              "World Art/Crimson Circuit.png",
+              "World Art/Azure Vault.png",
+              "World Art/Magenta Maze.png",
+              "World Art/Golden Core.png",
+              "availableTextWidth",
+              "val top = 0.225f + row * 0.126f",
+              "inRect(nx, ny, left, top, left + 0.44f, top + 0.105f)",
+              "Gameplay Sprites/Switch.jpg",
+              "Effects & Particles/Impact Spark.png",
+          ]
+          missing_wiring = [marker for marker in required_wiring if marker not in source]
+          if missing_wiring:
+              sys.exit("Missing new-art or safe-layout integration: " + ", ".join(missing_wiring))
+          print(f"Verified {len(required)} replacement images, legacy cleanup, world artwork, and bounded UI layout.")
           PY
 
       - name: Run unit tests and build debug APK
