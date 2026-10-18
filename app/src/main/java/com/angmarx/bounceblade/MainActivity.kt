@@ -1954,12 +1954,12 @@ private class GameView(context: Context) : View(context) {
         drawAsset(canvas, "App Icon & Logo/Game Logo.png", RectF(viewW * 0.16f, viewH * 0.13f, viewW * 0.84f, viewH * 0.29f), 255)
         drawText(canvas, "BOUNCE OFF ENEMIES  •  GUARD THE LEFT WALL", 0.5f, 0.418f, 0.018f, muted, Paint.Align.CENTER)
         drawText(canvas, "◈ " + coinBalance(), 0.91f, 0.105f, 0.026f, gold, Paint.Align.RIGHT)
-        drawButton(canvas, 0.10f, 0.438f, 0.90f, 0.493f, "PLAY CAMPAIGN", if (menuSelection == 0) gold else cyan)
-        drawButton(canvas, 0.10f, 0.500f, 0.90f, 0.555f, "LEVEL SELECT", if (menuSelection == 1) pink else gold)
-        drawButton(canvas, 0.10f, 0.562f, 0.90f, 0.617f, "MORE FEATURES", if (menuSelection == 2) cyan else pink)
-        drawButton(canvas, 0.10f, 0.624f, 0.90f, 0.679f, "BLADE SHOP", if (menuSelection == 3) pink else gold)
-        drawButton(canvas, 0.10f, 0.686f, 0.90f, 0.741f, "SETTINGS", if (menuSelection == 4) gold else cyan)
-        drawButton(canvas, 0.10f, 0.748f, 0.90f, 0.803f, "THE STORY", cyan)
+        drawButton(canvas, 0.10f, 0.432f, 0.90f, 0.492f, "PLAY CAMPAIGN", if (menuSelection == 0) gold else cyan)
+        drawButton(canvas, 0.10f, 0.495f, 0.90f, 0.555f, "LEVEL SELECT", if (menuSelection == 1) pink else gold)
+        drawButton(canvas, 0.10f, 0.558f, 0.90f, 0.618f, "MORE FEATURES", if (menuSelection == 2) cyan else pink)
+        drawButton(canvas, 0.10f, 0.621f, 0.90f, 0.681f, "BLADE SHOP", if (menuSelection == 3) pink else gold)
+        drawButton(canvas, 0.10f, 0.684f, 0.90f, 0.744f, "SETTINGS", if (menuSelection == 4) gold else cyan)
+        drawButton(canvas, 0.10f, 0.747f, 0.90f, 0.807f, "THE STORY", cyan)
         val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
         val bestTotal = totalBestStarsAfter(0, 0)
         drawText(canvas, "UNLOCKED  " + unlocked + "/" + levels.size + "     BEST STARS  " + bestTotal + "/" + (levels.size * 3),
@@ -2795,7 +2795,7 @@ private class GameView(context: Context) : View(context) {
             "BLADE / SHIELD COSMETICS", "LEVEL LAB & SHARE", "ACCESSIBILITY & AUDIO", "EXTRAS / SCORES / REPLAY")
         items.forEachIndexed { i, label ->
             val top = 0.235f + i * 0.065f
-            drawButton(canvas, 0.12f, top, 0.88f, top + 0.058f, label, if (i % 2 == 0) cyan else gold)
+            drawButton(canvas, 0.12f, top, 0.88f, top + 0.062f, label, if (i % 2 == 0) cyan else gold)
         }
         drawButton(canvas, 0.24f, 0.785f, 0.76f, 0.865f, "BACK", pink)
     }
@@ -3335,11 +3335,11 @@ private class GameView(context: Context) : View(context) {
             else -> null
         }
         if (label == "Ⅱ" && iconPath != null) {
-            val iconSize = min(visualRect.height() * 0.56f, minDim * 0.052f)
+            val iconSize = min(visualRect.height() * 0.68f, minDim * 0.075f)
             drawAssetCentered(canvas, iconPath, visualRect.centerX(), visualRect.centerY(), iconSize, if (enabled) 255 else 120)
             return
         }
-        val iconSize = if (iconPath == null) 0f else min(visualRect.height() * 0.48f, minDim * 0.045f)
+        val iconSize = if (iconPath == null) 0f else min(visualRect.height() * 0.62f, minDim * 0.060f)
         if (iconPath != null) {
             drawAssetCentered(canvas, iconPath, visualRect.left + iconSize * 0.95f, visualRect.centerY(), iconSize, if (enabled) 255 else 120)
         }
@@ -3351,7 +3351,7 @@ private class GameView(context: Context) : View(context) {
             localizeButtonLabel(label),
             textCenterX / viewW,
             visualRect.centerY() / viewH + 0.008f,
-            if (label.length > 18) 0.022f else 0.028f,
+            if (label.length > 18) 0.036f else 0.042f,
             if (enabled) color else muted,
             Paint.Align.CENTER,
             availableTextWidth
@@ -3501,12 +3501,12 @@ private class GameView(context: Context) : View(context) {
                 when (screen) {
                     GameScreen.MENU -> {
                         when {
-                            inRect(nx, ny, 0.10f, 0.438f, 0.90f, 0.493f) -> screen = GameScreen.DIFFICULTY
-                            inRect(nx, ny, 0.10f, 0.500f, 0.90f, 0.555f) -> screen = GameScreen.WORLDS
-                            inRect(nx, ny, 0.10f, 0.562f, 0.90f, 0.617f) -> screen = GameScreen.FEATURES
-                            inRect(nx, ny, 0.10f, 0.624f, 0.90f, 0.679f) -> openShop(GameScreen.MENU)
-                            inRect(nx, ny, 0.10f, 0.686f, 0.90f, 0.741f) -> screen = GameScreen.SETTINGS
-                            inRect(nx, ny, 0.10f, 0.748f, 0.90f, 0.803f) -> { storyPage = 0; screen = GameScreen.STORY }
+                            inRect(nx, ny, 0.10f, 0.432f, 0.90f, 0.492f) -> screen = GameScreen.DIFFICULTY
+                            inRect(nx, ny, 0.10f, 0.495f, 0.90f, 0.555f) -> screen = GameScreen.WORLDS
+                            inRect(nx, ny, 0.10f, 0.558f, 0.90f, 0.618f) -> screen = GameScreen.FEATURES
+                            inRect(nx, ny, 0.10f, 0.621f, 0.90f, 0.681f) -> openShop(GameScreen.MENU)
+                            inRect(nx, ny, 0.10f, 0.684f, 0.90f, 0.744f) -> screen = GameScreen.SETTINGS
+                            inRect(nx, ny, 0.10f, 0.747f, 0.90f, 0.807f) -> { storyPage = 0; screen = GameScreen.STORY }
                         }
                         invalidate()
                         return true
@@ -3524,14 +3524,14 @@ private class GameView(context: Context) : View(context) {
 
                     GameScreen.FEATURES -> {
                         when {
-                            inRect(nx, ny, 0.12f, 0.235f, 0.88f, 0.293f) -> screen = GameScreen.MODES
-                            inRect(nx, ny, 0.12f, 0.300f, 0.88f, 0.358f) -> screen = GameScreen.CHALLENGES
-                            inRect(nx, ny, 0.12f, 0.365f, 0.88f, 0.423f) -> screen = GameScreen.ACHIEVEMENTS
-                            inRect(nx, ny, 0.12f, 0.430f, 0.88f, 0.488f) -> screen = GameScreen.STATS
-                            inRect(nx, ny, 0.12f, 0.495f, 0.88f, 0.553f) -> screen = GameScreen.CUSTOMIZE
-                            inRect(nx, ny, 0.12f, 0.560f, 0.88f, 0.618f) -> screen = GameScreen.EDITOR
-                            inRect(nx, ny, 0.12f, 0.625f, 0.88f, 0.683f) -> screen = GameScreen.ACCESSIBILITY
-                            inRect(nx, ny, 0.12f, 0.690f, 0.88f, 0.748f) -> screen = GameScreen.EXTRAS
+                            inRect(nx, ny, 0.12f, 0.235f, 0.88f, 0.297f) -> screen = GameScreen.MODES
+                            inRect(nx, ny, 0.12f, 0.300f, 0.88f, 0.362f) -> screen = GameScreen.CHALLENGES
+                            inRect(nx, ny, 0.12f, 0.365f, 0.88f, 0.427f) -> screen = GameScreen.ACHIEVEMENTS
+                            inRect(nx, ny, 0.12f, 0.430f, 0.88f, 0.492f) -> screen = GameScreen.STATS
+                            inRect(nx, ny, 0.12f, 0.495f, 0.88f, 0.557f) -> screen = GameScreen.CUSTOMIZE
+                            inRect(nx, ny, 0.12f, 0.560f, 0.88f, 0.622f) -> screen = GameScreen.EDITOR
+                            inRect(nx, ny, 0.12f, 0.625f, 0.88f, 0.687f) -> screen = GameScreen.ACCESSIBILITY
+                            inRect(nx, ny, 0.12f, 0.690f, 0.88f, 0.752f) -> screen = GameScreen.EXTRAS
                             inRect(nx, ny, 0.24f, 0.785f, 0.76f, 0.865f) -> screen = GameScreen.MENU
                         }
                         invalidate()
