@@ -424,7 +424,7 @@ private class GameView(context: Context) : View(context) {
             GameScreen.CAMPAIGN_COMPLETE -> {
                 drawMenuBackdrop(canvas)
                 drawAssetCover(canvas, "Backgrounds & Environments/Victory Background.png", RectF(0f, 0f, viewW, viewH), 238)
-                drawAsset(canvas, "Banners & Text/Victory Banner.png", RectF(viewW * 0.12f, viewH * 0.27f, viewW * 0.88f, viewH * 0.43f), 255)
+                drawAsset(canvas, "Banners & Text/Victory Banner.png", RectF(viewW * 0.16f, viewH * 0.27f, viewW * 0.84f, viewH * 0.42f), 255)
                 drawText(canvas, "You conquered all ten worlds.", 0.5f, 0.48f, 0.024f, Color.WHITE, Paint.Align.CENTER)
                 drawButton(canvas, 0.15f, 0.565f, 0.85f, 0.665f, "PLAY AGAIN", cyan)
                 drawButton(canvas, 0.15f, 0.680f, 0.85f, 0.780f, "LEVEL SELECT", gold)
@@ -1969,8 +1969,18 @@ private class GameView(context: Context) : View(context) {
 
     private fun drawStory(canvas: Canvas) {
         drawMenuBackdrop(canvas)
-        drawText(canvas, "THE STORY", 0.5f, 0.125f, 0.060f, gold, Paint.Align.CENTER)
-        drawText(canvas, "CHAPTER " + (storyPage + 1) + " / 3", 0.5f, 0.185f, 0.020f, cyan, Paint.Align.CENTER)
+        val storyArt = when (storyPage) {
+            0 -> "World Art/Neon Grid.png"
+            1 -> "World Art/Crimson Circuit.png"
+            else -> "World Art/Golden Core.png"
+        }
+        drawAssetCover(canvas, storyArt, RectF(0f, 0f, viewW, viewH), 115)
+        paint.style = Paint.Style.FILL
+        paint.color = Color.argb(172, 3, 6, 18)
+        canvas.drawRoundRect(viewW * 0.045f, viewH * 0.215f, viewW * 0.955f, viewH * 0.785f,
+            density * 16f, density * 16f, paint)
+        drawText(canvas, "THE STORY", 0.5f, 0.125f, 0.060f, gold, Paint.Align.CENTER, viewW * 0.90f)
+        drawText(canvas, "CHAPTER " + (storyPage + 1) + " / 3", 0.5f, 0.185f, 0.020f, cyan, Paint.Align.CENTER, viewW * 0.80f)
         val lines = when (storyPage) {
             0 -> listOf(
                 "In the beginning, there was only the Lumen Grid—a vast, shimmering tapestry",
@@ -1999,12 +2009,12 @@ private class GameView(context: Context) : View(context) {
         val lineStep = if (storyPage == 2) 0.064f else 0.075f
         val startY = if (storyPage == 2) 0.31f else 0.34f
         lines.forEachIndexed { index, line ->
-            drawText(canvas, line, 0.5f, startY + index * lineStep, 0.020f, Color.WHITE, Paint.Align.CENTER)
+            drawText(canvas, line, 0.5f, startY + index * lineStep, 0.020f, Color.WHITE, Paint.Align.CENTER, viewW * 0.88f)
         }
         drawButton(canvas, 0.08f, 0.815f, 0.32f, 0.900f, "BACK TO MENU", pink)
         if (storyPage > 0) drawButton(canvas, 0.36f, 0.815f, 0.62f, 0.900f, "PREVIOUS", muted)
         if (storyPage < 2) drawButton(canvas, 0.66f, 0.815f, 0.92f, 0.900f, "NEXT CHAPTER", cyan)
-        else drawText(canvas, "THE GRID'S FATE IS IN YOUR HANDS", 0.64f, 0.865f, 0.017f, gold, Paint.Align.CENTER)
+        else drawText(canvas, "THE GRID'S FATE IS IN YOUR HANDS", 0.64f, 0.865f, 0.017f, gold, Paint.Align.CENTER, viewW * 0.30f)
     }
     private fun drawShop(canvas: Canvas) {
         drawMenuBackdrop(canvas)
@@ -2056,17 +2066,48 @@ private class GameView(context: Context) : View(context) {
 
     private fun drawWorldSelect(canvas: Canvas) {
         drawMenuBackdrop(canvas)
-        drawText(canvas,"CHOOSE YOUR WORLD",0.5f,0.285f,0.058f,Color.WHITE,Paint.Align.CENTER)
-        drawText(canvas,"100 LEVELS  •  10 WORLDS  •  OFFLINE CAMPAIGN",0.5f,0.335f,0.019f,muted,Paint.Align.CENTER)
-        val unlocked=prefs.getInt("unlocked_level",1).coerceIn(1,levels.size)
-        for(w in 0 until CampaignWorlds.WORLD_COUNT){
-            val first=CampaignWorlds.firstLevelForWorld(w); val available=unlocked>=first; val top=0.375f+w*0.088f
-            val total=(first..min(first+9,levels.size)).sumOf{prefs.getInt(bestStarsKey(it),0)}
-            val label=(w+1).toString().padStart(2,'0')+"  "+CampaignWorlds.worldName(w)+"  "+if(available) "$total/30 ★" else "LOCKED"
-            drawButton(canvas,0.10f,top,0.90f,top+0.076f,label,if(available) cyan else muted,available)
+        drawText(canvas, "CHOOSE YOUR WORLD", 0.5f, 0.115f, 0.052f, Color.WHITE, Paint.Align.CENTER, viewW * 0.90f)
+        drawText(canvas, "100 LEVELS  •  10 WORLDS  •  OFFLINE CAMPAIGN", 0.5f, 0.180f, 0.018f, muted, Paint.Align.CENTER, viewW * 0.90f)
+        val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
+        val worldArt = arrayOf(
+            "World Art/Neon Grid.png",
+            "World Art/Crimson Circuit.png",
+            "World Art/Azure Vault.png",
+            "World Art/Magenta Maze.png",
+            "World Art/Golden Core.png"
+        )
+        for (w in 0 until CampaignWorlds.WORLD_COUNT) {
+            val first = CampaignWorlds.firstLevelForWorld(w)
+            val available = unlocked >= first
+            val total = (first..min(first + 9, levels.size)).sumOf { prefs.getInt(bestStarsKey(it), 0) }
+            val row = w % 5
+            val col = w / 5
+            val left = if (col == 0) 0.045f else 0.515f
+            val top = 0.225f + row * 0.126f
+            val right = left + 0.44f
+            val bottom = top + 0.105f
+            val rect = RectF(left * viewW, top * viewH, right * viewW, bottom * viewH)
+            val artPath = if (w < worldArt.size) worldArt[w] else "Backgrounds & Environments/Menu Background.png"
+            drawAssetCover(canvas, artPath, rect, if (available) 245 else 145)
+            paint.style = Paint.Style.FILL
+            paint.color = Color.argb(if (available) 150 else 205, 2, 6, 18)
+            canvas.drawRoundRect(rect, density * 10f, density * 10f, paint)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = max(1.5f * density, minDim * 0.0015f)
+            paint.color = if (!available) muted else if (w == selectedWorld) gold else cyan
+            canvas.drawRoundRect(rect, density * 10f, density * 10f, paint)
+            paint.style = Paint.Style.FILL
+            val label = (w + 1).toString().padStart(2, '0') + "  " + CampaignWorlds.worldName(w)
+            drawText(canvas, label, (left + right) / 2f, top + 0.047f, 0.026f,
+                if (available) Color.WHITE else muted, Paint.Align.CENTER, rect.width() * 0.90f)
+            drawText(canvas, if (available) "$total/30 ★" else "LOCKED",
+                (left + right) / 2f, top + 0.082f, 0.016f,
+                if (available) gold else muted, Paint.Align.CENTER, rect.width() * 0.84f)
         }
-        drawButton(canvas,0.20f,0.83f,0.80f,0.915f,"BACK",gold)
-        if(System.nanoTime()<messageUntil&&message.isNotBlank()) drawText(canvas,message,0.5f,0.93f,0.018f,gold,Paint.Align.CENTER)
+        drawButton(canvas, 0.20f, 0.875f, 0.80f, 0.955f, "BACK", gold)
+        if (System.nanoTime() < messageUntil && message.isNotBlank()) {
+            drawText(canvas, message, 0.5f, 0.965f, 0.016f, gold, Paint.Align.CENTER, viewW * 0.90f)
+        }
     }
 
     private fun drawLevelSelect(canvas: Canvas) {
@@ -2130,6 +2171,7 @@ private class GameView(context: Context) : View(context) {
         if (nowNanos < impactUntil) {
             val alpha = ((impactUntil - nowNanos) * 255L / 320_000_000L).toInt().coerceIn(0, 255)
             drawAssetCentered(canvas, "Effects & Particles/Explosion.png", lastImpactX, lastImpactY, minDim * 0.11f, alpha)
+            drawAssetCentered(canvas, "Effects & Particles/Impact Spark.png", lastImpactX, lastImpactY, minDim * 0.09f, alpha)
         }
         if (comboCount >= 2 && comboWindow > 0f) {
             drawAsset(canvas, "Effects & Particles/Combo Text.png", RectF(viewW * 0.34f, viewH * 0.82f, viewW * 0.66f, viewH * 0.89f), 240)
@@ -2218,6 +2260,7 @@ private class GameView(context: Context) : View(context) {
         if (now < impactUntil) {
             val alpha = ((impactUntil - now) * 255L / 320_000_000L).toInt().coerceIn(0, 255)
             drawAssetCentered(canvas, "Effects & Particles/Explosion.png", lastImpactX, lastImpactY, minDim * 0.11f, alpha)
+            drawAssetCentered(canvas, "Effects & Particles/Impact Spark.png", lastImpactX, lastImpactY, minDim * 0.09f, alpha)
         }
         for ((index, enemy) in enemies.withIndex()) if (enemy.alive) drawEnemy(canvas, enemy, index)
 
@@ -2376,7 +2419,7 @@ private class GameView(context: Context) : View(context) {
                 "rotating_laser"->{val theta=animationTime*1.35f+index*0.4f;val dx=cos(theta)*hw;val dy=sin(theta)*hw;paint.style=Paint.Style.STROKE;paint.strokeWidth=max(3f,density*3f);paint.color=pink;paint.setShadowLayer(density*10f,0f,0f,pink);canvas.drawLine(x-dx,y-dy,x+dx,y+dy,paint);paint.clearShadowLayer()}
                 "gravity_well"->{paint.style=Paint.Style.STROKE;paint.strokeWidth=max(1.5f,density*1.5f);paint.color=Color.rgb(100,135,255);paint.setShadowLayer(density*9f,0f,0f,paint.color);canvas.drawCircle(x,y,max(hw,minDim*0.035f),paint);canvas.drawCircle(x,y,max(hw*1.6f,minDim*0.055f),paint);canvas.drawCircle(x,y,max(hw*2.1f,minDim*0.075f),paint);paint.clearShadowLayer()}
                 "conveyor_belt"->{paint.style=Paint.Style.FILL;paint.color=Color.rgb(45,70,95);canvas.drawRoundRect(x-hw,y-h,x+hw,y+h,density*5f,density*5f,paint);paint.color=cyan;for(i in 0..4){val ax=x-hw+(2f*hw)*(i+0.5f)/5f;canvas.drawLine(ax-density*3f,y-density*3f,ax+density*3f,y+density*3f,paint)}}
-                "switch"->{paint.style=Paint.Style.STROKE;paint.strokeWidth=max(2f,density*2f);paint.color=gold;canvas.drawCircle(x,y,max(minDim*0.025f,hw),paint);drawAssetCentered(canvas,"Gameplay Sprites/Switch.png",x,y,minDim*0.07f)}
+                "switch"->{paint.style=Paint.Style.STROKE;paint.strokeWidth=max(2f,density*2f);paint.color=gold;canvas.drawCircle(x,y,max(minDim*0.025f,hw),paint);drawAssetCentered(canvas,"Gameplay Sprites/Switch.jpg",x,y,minDim*0.07f)}
                 "key"->{paint.style=Paint.Style.STROKE;paint.strokeWidth=max(2f,density*2f);paint.color=gold;paint.setShadowLayer(density*6f,0f,0f,gold);canvas.drawCircle(x,y,max(minDim*0.015f,hw*0.4f),paint);canvas.drawLine(x+hw*0.3f,y,x+hw*1.8f,y,paint);canvas.drawLine(x+hw*1.25f,y,x+hw*1.25f,y+h,paint);paint.clearShadowLayer()}
                 "door"->{paint.style=Paint.Style.FILL;paint.color=if(hasLevelKey) cyan else Color.rgb(115,65,70);canvas.drawRoundRect(x-hw,y-h*1.6f,x+hw,y+h*1.6f,density*4f,density*4f,paint);paint.color=gold;canvas.drawCircle(x+hw*0.5f,y,density*2f,paint)}
                 else->{paint.style=Paint.Style.FILL;paint.color=when(hazard.type){"sticky_wall"->Color.rgb(95,48,145);"moving_hazard"->Color.rgb(80,65,22);else->Color.rgb(80,22,51)};canvas.drawRoundRect(x-hw,y-h/2f,x+hw,y+h/2f,density*4f,density*4f,paint);paint.style=Paint.Style.STROKE;paint.color=when(hazard.type){"sticky_wall"->Color.rgb(190,105,255);"moving_hazard"->gold;else->pink};paint.strokeWidth=density*when(hazard.type){"laser"->3.5f;"sticky_wall"->4f;else->3f};paint.setShadowLayer(density*7f,0f,0f,paint.color);canvas.drawLine(x-hw,y,x+hw,y,paint);paint.clearShadowLayer();if(hazard.type.contains("spike")){paint.style=Paint.Style.FILL;paint.color=pink;val count=max(4,(hazard.width*22f).toInt());for(i in 0 until count){val sx=x-hw+2f*hw*i/count;val nx=min(x+hw,sx+max(density*6f,2f*hw/count));val p=Path();p.moveTo(sx,y+h/2f);p.lineTo((sx+nx)/2f,y-h/2f);p.lineTo(nx,y+h/2f);p.close();canvas.drawPath(p,paint)}}else if(hazard.type=="moving_hazard"){paint.style=Paint.Style.FILL;paint.color=gold;canvas.drawCircle(x,y,density*5f,paint)}}
@@ -2395,7 +2438,7 @@ private class GameView(context: Context) : View(context) {
         paint.setShadowLayer(density * 10f, 0f, 0f, paint.color)
         canvas.drawCircle(x, y, radius, paint)
         paint.clearShadowLayer()
-        drawAssetCentered(canvas, "Gameplay Sprites/Switch.png", x, y, radius * 2.25f)
+        drawAssetCentered(canvas, "Gameplay Sprites/Switch.jpg", x, y, radius * 2.25f)
         drawText(canvas, if (switchActivated) "ON" else "SWITCH", x / viewW, (y + radius + density * 15f) / viewH,
             0.015f, if (switchActivated) cyan else gold, Paint.Align.CENTER)
         paint.style = Paint.Style.FILL
@@ -2625,14 +2668,14 @@ private class GameView(context: Context) : View(context) {
     }
 
     private fun drawOverlay(canvas: Canvas, title: String, subtitle: String) {
-        if (screen == GameScreen.WON) drawAsset(canvas, "Backgrounds & Environments/Victory Background.png", RectF(0f, 0f, viewW, viewH), 238)
+        if (screen == GameScreen.WON) drawAssetCover(canvas, "Backgrounds & Environments/Victory Background.png", RectF(0f, 0f, viewW, viewH), 238)
         else if (screen == GameScreen.FAILED) drawAssetCover(canvas, "Backgrounds & Environments/Game Over Background.png", RectF(0f, 0f, viewW, viewH), 238)
         paint.style = Paint.Style.FILL
         paint.color = Color.argb(228, 3, 6, 18)
         canvas.drawRoundRect(viewW * 0.08f, viewH * 0.30f, viewW * 0.92f, viewH * 0.75f, density * 18f, density * 18f, paint)
         when (screen) {
-            GameScreen.WON -> drawAsset(canvas, "Banners & Text/Level Complete Banner.png", RectF(viewW * 0.20f, viewH * 0.315f, viewW * 0.80f, viewH * 0.395f), 255)
-            GameScreen.FAILED -> drawAsset(canvas, "Banners & Text/Game Over Banner.png", RectF(viewW * 0.20f, viewH * 0.315f, viewW * 0.80f, viewH * 0.395f), 255)
+            GameScreen.WON -> drawAsset(canvas, "Banners & Text/Level Complete Banner.png", RectF(viewW * 0.24f, viewH * 0.315f, viewW * 0.76f, viewH * 0.395f), 255)
+            GameScreen.FAILED -> drawAsset(canvas, "Banners & Text/Game Over Banner.png", RectF(viewW * 0.24f, viewH * 0.315f, viewW * 0.76f, viewH * 0.395f), 255)
             else -> drawText(canvas, title, 0.5f, 0.365f, 0.046f, if (title.contains("CLEAR")) cyan else pink, Paint.Align.CENTER)
         }
         drawText(canvas, subtitle, 0.5f, 0.415f, 0.018f, Color.WHITE, Paint.Align.CENTER)
@@ -3247,16 +3290,22 @@ private class GameView(context: Context) : View(context) {
         y: Float,
         size: Float,
         color: Int,
-        align: Paint.Align = Paint.Align.LEFT
+        align: Paint.Align = Paint.Align.LEFT,
+        maxWidth: Float = 0f
     ) {
         paint.clearShadowLayer()
         paint.style = Paint.Style.FILL
-        paint.color = color
         paint.color = if (highContrast && color == muted) Color.WHITE else color
+        val renderedText = localizeUiText(text)
         paint.textSize = (size * minDim * (if (largeUi) 1.16f else 1f)).coerceAtLeast(8f * density)
         paint.typeface = TypefaceFactory.bold
+        if (maxWidth > 0f) {
+            while (paint.measureText(renderedText) > maxWidth && paint.textSize > 8f * density) {
+                paint.textSize = (paint.textSize * 0.92f).coerceAtLeast(8f * density)
+            }
+        }
         paint.textAlign = align
-        canvas.drawText(localizeUiText(text), x * viewW, y * viewH, paint)
+        canvas.drawText(renderedText, x * viewW, y * viewH, paint)
     }
 
     private fun drawButton(
@@ -3269,23 +3318,12 @@ private class GameView(context: Context) : View(context) {
         color: Int,
         enabled: Boolean = true
     ) {
-        // Use the actual button artwork as-is. Its visible size is constrained by
-        // the layout rectangle while its original proportions are preserved.
+        // The artwork stays strictly inside the same normalized rectangle used by
+        // touch handling. This prevents neighboring buttons from visually colliding.
         val hitRect = RectF(left * viewW, top * viewH, right * viewW, bottom * viewH)
-        // Slightly enlarge the button artwork without stretching or changing hit bounds.
-        val buttonExpansion = if (
-            (right - left) < 0.24f && label != "Ⅱ" &&
-            !label.contains("NOVA") && label != "BLADE SHOP"
-        ) 0.015f else 0.055f
-        val artBounds = RectF(
-            hitRect.left - hitRect.width() * buttonExpansion,
-            hitRect.top - hitRect.height() * buttonExpansion,
-            hitRect.right + hitRect.width() * buttonExpansion,
-            hitRect.bottom + hitRect.height() * buttonExpansion
-        )
         val buttonBitmap = bitmapAsset("UI Elements/Button.png")
-        val visualRect = buttonBitmap?.let { fitAssetRect(it, artBounds) } ?: artBounds
-        drawAsset(canvas, "UI Elements/Button.png", artBounds, if (enabled) 255 else 125)
+        val visualRect = buttonBitmap?.let { fitAssetRect(it, hitRect) } ?: hitRect
+        drawAsset(canvas, "UI Elements/Button.png", hitRect, if (enabled) 255 else 125)
 
         val iconPath = when {
             label == "Ⅱ" -> "UI Elements/Pause Icon.png"
@@ -3296,21 +3334,27 @@ private class GameView(context: Context) : View(context) {
             label.contains("SHOP") -> "UI Elements/Star Icon.png"
             else -> null
         }
-        if (iconPath != null) {
-            val iconSize = min(visualRect.height() * 0.62f, minDim * 0.060f)
-            val iconX = if (label == "Ⅱ") visualRect.centerX() else visualRect.left + iconSize * 0.82f
-            drawAssetCentered(canvas, iconPath, iconX, visualRect.centerY(), iconSize, if (enabled) 255 else 120)
-            if (label == "Ⅱ") return
+        if (label == "Ⅱ" && iconPath != null) {
+            val iconSize = min(visualRect.height() * 0.56f, minDim * 0.052f)
+            drawAssetCentered(canvas, iconPath, visualRect.centerX(), visualRect.centerY(), iconSize, if (enabled) 255 else 120)
+            return
         }
-        val shift = if (iconPath == null) 0f else minDim * 0.018f
+        val iconSize = if (iconPath == null) 0f else min(visualRect.height() * 0.48f, minDim * 0.045f)
+        if (iconPath != null) {
+            drawAssetCentered(canvas, iconPath, visualRect.left + iconSize * 0.95f, visualRect.centerY(), iconSize, if (enabled) 255 else 120)
+        }
+        val horizontalPadding = minDim * 0.018f
+        val availableTextWidth = (visualRect.width() - horizontalPadding * 2f - if (iconPath == null) 0f else iconSize * 1.55f).coerceAtLeast(8f * density)
+        val textCenterX = visualRect.centerX() + if (iconPath == null) 0f else iconSize * 0.42f
         drawText(
             canvas,
             localizeButtonLabel(label),
-            (visualRect.centerX() + shift) / viewW,
-            visualRect.centerY() / viewH + 0.010f,
+            textCenterX / viewW,
+            visualRect.centerY() / viewH + 0.008f,
             if (label.length > 18) 0.022f else 0.028f,
             if (enabled) color else muted,
-            Paint.Align.CENTER
+            Paint.Align.CENTER,
+            availableTextWidth
         )
     }
 
@@ -3711,10 +3755,28 @@ private class GameView(context: Context) : View(context) {
                         return true
                     }
                     GameScreen.WORLDS -> {
-                        if(inRect(nx,ny,0.20f,0.83f,0.80f,0.915f)) screen=GameScreen.MENU else {
-                            val unlocked=prefs.getInt("unlocked_level",1).coerceIn(1,levels.size)
-                            for(w in 0 until CampaignWorlds.WORLD_COUNT){val top=0.375f+w*0.088f;if(inRect(nx,ny,0.10f,top,0.90f,top+0.076f)){if(unlocked>=CampaignWorlds.firstLevelForWorld(w)){selectedWorld=w;screen=GameScreen.LEVELS}else showMessage("CLEAR EARLIER WORLDS FIRST");break}}
-                        };invalidate();return true
+                        if (inRect(nx, ny, 0.20f, 0.875f, 0.80f, 0.955f)) {
+                            screen = GameScreen.MENU
+                        } else {
+                            val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
+                            for (w in 0 until CampaignWorlds.WORLD_COUNT) {
+                                val row = w % 5
+                                val col = w / 5
+                                val left = if (col == 0) 0.045f else 0.515f
+                                val top = 0.225f + row * 0.126f
+                                if (inRect(nx, ny, left, top, left + 0.44f, top + 0.105f)) {
+                                    if (unlocked >= CampaignWorlds.firstLevelForWorld(w)) {
+                                        selectedWorld = w
+                                        screen = GameScreen.LEVELS
+                                    } else {
+                                        showMessage("CLEAR EARLIER WORLDS FIRST")
+                                    }
+                                    break
+                                }
+                            }
+                        }
+                        invalidate()
+                        return true
                     }
                     GameScreen.LEVELS -> {
                         if(inRect(nx,ny,0.20f,0.83f,0.80f,0.915f)) screen=GameScreen.WORLDS else {
