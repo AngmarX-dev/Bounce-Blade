@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -343,10 +343,38 @@ jobs:
           print("Verified image-load trimming removes transparent borders while preserving source PNGs.")
           PY
 
-      - name: Upload debug APK
+      - name: Verify standalone APK output
         if: success()
-        uses: actions/upload-artifact@v4
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          file app/build/outputs/apk/debug/app-debug.apk
+          python3 - <<'PY'
+          from pathlib import Path
+          apk = Path("app/build/outputs/apk/debug/app-debug.apk")
+          with apk.open("rb") as stream:
+              if stream.read(4) != bytes((0x50, 0x4b, 0x03, 0x04)):
+                  raise SystemExit("APK does not have a valid ZIP-based Android package header.")
+          print(f"Verified standalone APK: {apk.name} ({apk.stat().st_size} bytes).")
+          PY
+
+      # Actions artifacts are downloaded as ZIP archives. Publish the APK as a
+      # Release asset instead so Android can download app-debug.apk directly.
+      - name: Move latest debug tag to this build
+        if: success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          git tag --force latest-debug "$GITHUB_SHA"
+          git push --force origin refs/tags/latest-debug
+
+      - name: Publish standalone APK download
+        if: success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
         with:
-          name: bounce-blade-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          tag_name: latest-debug
+          name: Bounce Blade - Latest Debug APK
+          body: |
+            Latest successful debug build of Bounce Blade.
+            Download app-debug.apk directly; it is not wrapped in a ZIP archive.
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          files: app/build/outputs/apk/debug/app-debug.apk
