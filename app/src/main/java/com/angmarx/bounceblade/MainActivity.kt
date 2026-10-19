@@ -3895,12 +3895,12 @@ private class GameView(context: Context) : View(context) {
                     }
                     GameScreen.CUSTOMIZE -> {
                         when {
-                            inRect(nx, ny, 0.14f, 0.33f, 0.86f, 0.415f) -> {
+                            inRect(nx, ny, 0.18f, 0.185f, 0.82f, 0.235f) -> {
                                 themeId = (themeId + 1) % 6
                                 prefs.edit().putInt("theme_id", themeId).apply()
                                 applyTheme()
                             }
-                            inRect(nx, ny, 0.14f, 0.475f, 0.86f, 0.545f) -> {
+                            inRect(nx, ny, 0.18f, 0.282f, 0.82f, 0.332f) -> {
                                 val next = (bladeSkin + 1) % 6
                                 val key = "blade_skin_unlocked_" + next
                                 if (next == 0 || prefs.getBoolean(key, false)) bladeSkin = next
@@ -3911,7 +3911,7 @@ private class GameView(context: Context) : View(context) {
                                 } else showMessage("NEED 150 COINS")
                                 prefs.edit().putInt("blade_skin", bladeSkin).apply()
                             }
-                            inRect(nx, ny, 0.14f, 0.605f, 0.86f, 0.675f) -> {
+                            inRect(nx, ny, 0.18f, 0.374f, 0.82f, 0.424f) -> {
                                 val next = (shieldSkin + 1) % 6
                                 val key = "shield_skin_unlocked_" + next
                                 if (next == 0 || prefs.getBoolean(key, false)) shieldSkin = next
