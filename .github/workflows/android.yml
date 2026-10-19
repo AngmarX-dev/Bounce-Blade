@@ -178,6 +178,51 @@ jobs:
           print("Verified drone pursuit/breach, healer, explosive, teleporter, sniper, armored and boss behaviors.")
           PY
 
+      - name: Verify per-enemy health bars and piercing blade damage
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+
+          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
+          required = [
+              "var maxHealth: Int = health, var bladeHitCooldown: Float = 0f",
+              "enemy.bladeHitCooldown = (enemy.bladeHitCooldown - rawDt).coerceAtLeast(0f)",
+              "private fun drawEnemyHealthBar(canvas: Canvas, enemy: EnemyState, x: Float, y: Float, drawSize: Float)",
+              "drawEnemyHealthBar(canvas, enemy, x, y, drawSize)",
+              "val healthRatio = (enemy.health.toFloat() / maxHealth).coerceIn(0f, 1f)",
+              "val fillColor = when {",
+              "enemy.bladeHitCooldown = 0.32f",
+              "val piercingBoost = (activeEffects[\"piercing\"] ?: 0f) > 0f",
+              "enemy.health -= if (piercingBoost) 2 else 1",
+              "val passDistance = hitRadius + minDim * 0.008f",
+              "px = ex + (velocityX / adjustedSpeed) * passDistance",
+              "py = ey + (velocityY / adjustedSpeed) * passDistance",
+              "ENEMY DAMAGED",
+          ]
+          missing = [marker for marker in required if marker not in source]
+          if missing:
+              sys.exit("Missing enemy health/pass-through behavior: " + ", ".join(missing))
+
+          sim_start = source.index("    private fun simulateStep(dt: Float) {")
+          arcade_start = source.index("    /**\n     * Arcade mode:", sim_start)
+          normal = source[sim_start:arcade_start]
+          hit_start = normal.index("        val pendingSlimes = mutableListOf<EnemyState>()")
+          hit_end = normal.index("        enemies.addAll(pendingSlimes)", hit_start)
+          normal_enemy_hits = normal[hit_start:hit_end]
+          if "reflectFrom(dx, dy)" in normal_enemy_hits or "useBounce()" in normal_enemy_hits:
+              sys.exit("Normal-mode enemy hits must pierce without reflecting or spending a bounce.")
+
+          wall_start = source.index("    private fun simulateWallGuardStep(dt: Float) {")
+          wall_after = source.index("\n    private fun ", wall_start + 20)
+          wall_guard = source[wall_start:wall_after]
+          if "if (!enemy.alive || enemy.bladeHitCooldown > 0f) continue" not in wall_guard:
+              sys.exit("Wall-guard enemy hits must honor the per-enemy damage cooldown.")
+          if "reflectFrom(" in wall_guard[wall_guard.index("val pendingSpawns"):wall_guard.index("enemies.addAll(pendingSpawns)")]:
+              sys.exit("Wall-guard ordinary enemy hits must not reflect the blade.")
+          print("Verified health bars for all enemies, per-enemy damage cooldowns, and pass-through hits.")
+          PY
+
       - name: Verify blade shop, coin rewards, and purchased powers
         run: |
           python3 - <<'PY'
