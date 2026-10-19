@@ -36,6 +36,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 import kotlin.math.sin
+import kotlin.math.atan2
 import kotlin.math.cos
 
 class MainActivity : Activity() {
@@ -105,6 +106,16 @@ private data class GameLevel(
     val requiresSwitch: Boolean = true
 )
 private data class PickupState(val type: String, val x: Float, val y: Float, var active: Boolean = true)
+private data class PlayerMinigunState(
+    var rotationOffset: Float = 0f,
+    var fireCooldown: Float = 0.45f,
+    var muzzleFlash: Float = 0f,
+    var targetIndex: Int = -1,
+    var targetX: Float = 0f,
+    var targetY: Float = 0f,
+    var muzzleX: Float = 0f,
+    var muzzleY: Float = 0f
+)
 private data class Particle(
     var x: Float,
     var y: Float,
@@ -114,7 +125,7 @@ private data class Particle(
     val color: Int,
     val radius: Float
 )
-private enum class GameScreen { MENU, STORY, WORLDS, LEVELS, PLAYING, PAUSED, SETTINGS, HELP, DIFFICULTY, SHOP, FEATURES, MODES, CHALLENGES, ACHIEVEMENTS, STATS, CUSTOMIZE, EDITOR, ACCESSIBILITY, JUKEBOX, EXTRAS, LOCAL_SCORES, REPLAYS, PHOTO_MODE, SEASONAL, ONLINE_FEATURES, WON, FAILED, CAMPAIGN_COMPLETE }
+private enum class GameScreen { MENU, STORY, WORLDS, LEVELS, PLAYING, PAUSED, SETTINGS, HELP, DIFFICULTY, SHOP, FEATURES, MODES, CHALLENGES, ACHIEVEMENTS, STATS, CUSTOMIZE, MINIGUNS, EDITOR, ACCESSIBILITY, JUKEBOX, EXTRAS, LOCAL_SCORES, REPLAYS, PHOTO_MODE, SEASONAL, ONLINE_FEATURES, WON, FAILED, CAMPAIGN_COMPLETE }
 
 private data class ShopItem(
     val id: String,
@@ -206,6 +217,13 @@ private class GameView(context: Context) : View(context) {
     private var bladeSkin = prefs.getInt("blade_skin", 0).coerceIn(0, 5)
     private var shieldSkin = prefs.getInt("shield_skin", 0).coerceIn(0, 5)
     private var enemySkin = prefs.getInt("enemy_skin", 0).coerceIn(0, 3)
+    private val playerMinigunKeys = listOf(
+        "NeonGrid", "CrimsonCircuit", "AzureVault", "MagentaMaze", "GoldenCore",
+        "ObsidianRift", "SolarFlare", "QuantumAbyss", "StormCitadel", "CelestialForge"
+    )
+    private var selectedPlayerMinigun = prefs.getInt("player_minigun", 0).coerceIn(0, 9)
+    private var lastUnlockedPlayerMinigun = -1
+    private val playerMiniguns = listOf(PlayerMinigunState(), PlayerMinigunState())
     private var highContrast = prefs.getBoolean("high_contrast", false)
     private var colorblindMode = prefs.getBoolean("colorblind_mode", false)
     private var hapticLevel = prefs.getInt("haptic_level", 2).coerceIn(0, 3)
@@ -319,7 +337,7 @@ private class GameView(context: Context) : View(context) {
         playSfx("UI & Feedback SFX/Button Back.wav")
         when (screen) {
             GameScreen.PLAYING -> screen = GameScreen.PAUSED
-            GameScreen.PAUSED, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.STORY, GameScreen.DIFFICULTY, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.EDITOR, GameScreen.ACCESSIBILITY, GameScreen.JUKEBOX, GameScreen.EXTRAS, GameScreen.LOCAL_SCORES, GameScreen.REPLAYS, GameScreen.PHOTO_MODE, GameScreen.SEASONAL, GameScreen.ONLINE_FEATURES -> screen = when (screen) { GameScreen.FEATURES, GameScreen.STORY -> GameScreen.MENU; GameScreen.EXTRAS -> GameScreen.FEATURES; else -> GameScreen.EXTRAS }
+            GameScreen.PAUSED, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.STORY, GameScreen.DIFFICULTY, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.MINIGUNS, GameScreen.EDITOR, GameScreen.ACCESSIBILITY, GameScreen.JUKEBOX, GameScreen.EXTRAS, GameScreen.LOCAL_SCORES, GameScreen.REPLAYS, GameScreen.PHOTO_MODE, GameScreen.SEASONAL, GameScreen.ONLINE_FEATURES -> screen = when (screen) { GameScreen.FEATURES, GameScreen.STORY -> GameScreen.MENU; GameScreen.MINIGUNS -> GameScreen.CUSTOMIZE; GameScreen.CUSTOMIZE -> GameScreen.FEATURES; GameScreen.EXTRAS -> GameScreen.FEATURES; else -> GameScreen.EXTRAS }
             GameScreen.SHOP -> {
                 screen = shopReturnScreen
                 if (screen == GameScreen.PLAYING) lastFrame = System.nanoTime()
@@ -401,6 +419,7 @@ private class GameView(context: Context) : View(context) {
             GameScreen.ACHIEVEMENTS -> drawAchievements(canvas)
             GameScreen.STATS -> drawStats(canvas)
             GameScreen.CUSTOMIZE -> drawCustomize(canvas)
+            GameScreen.MINIGUNS -> drawMinigunArmory(canvas)
             GameScreen.EDITOR -> drawEditor(canvas)
             GameScreen.ACCESSIBILITY -> drawAccessibility(canvas)
             GameScreen.JUKEBOX -> drawJukebox(canvas)
@@ -412,7 +431,10 @@ private class GameView(context: Context) : View(context) {
             GameScreen.ONLINE_FEATURES -> drawOnlineFeatures(canvas)
             GameScreen.WON -> {
                 drawGame(canvas)
-                drawOverlay(canvas, "LEVEL CLEARED", "Nice shot! The exit is open.")
+                val unlockMessage = if (lastUnlockedPlayerMinigun in 1..playerMinigunKeys.lastIndex)
+                    "MINIGUN UNLOCKED: " + CampaignWorlds.worldName(lastUnlockedPlayerMinigun).uppercase()
+                else "Nice shot! The exit is open."
+                drawOverlay(canvas, "LEVEL CLEARED", unlockMessage)
                 drawButton(canvas, 0.18f, 0.50f, 0.82f, 0.60f, "NEXT LEVEL", cyan)
                 drawButton(canvas, 0.18f, 0.625f, 0.82f, 0.725f, "LEVEL SELECT", gold)
             }
@@ -472,6 +494,7 @@ private class GameView(context: Context) : View(context) {
             teleportCooldown = (teleportCooldown - rawDt).coerceAtLeast(0f)
             novaCooldownRemaining = (novaCooldownRemaining - rawDt).coerceAtLeast(0f)
             if (wallGuardMode) updateHostileEnemies(rawDt)
+            if (screen == GameScreen.PLAYING) updatePlayerMiniguns(rawDt)
             if (!wallGuardMode) {
                 val timeLeft = GameRules.timeLimitSeconds(levelId, difficulty) - levelElapsedSeconds
                 if (timeLeft <= 5f && timeLeft > 0f && !timerWarningPlayed) {
@@ -1362,6 +1385,14 @@ private class GameView(context: Context) : View(context) {
         velocityX = 0f
         velocityY = 0f
         val nextId = levelId + 1
+        val minigunRewardIndex = if (levelId % CampaignWorlds.LEVELS_PER_WORLD == 0) {
+            (levelId / CampaignWorlds.LEVELS_PER_WORLD).coerceIn(1, playerMinigunKeys.lastIndex)
+        } else -1
+        lastUnlockedPlayerMinigun = -1
+        if (minigunRewardIndex in 1..playerMinigunKeys.lastIndex && !isPlayerMinigunUnlocked(minigunRewardIndex)) {
+            prefs.edit().putBoolean("player_minigun_unlocked_" + minigunRewardIndex, true).apply()
+            lastUnlockedPlayerMinigun = minigunRewardIndex
+        }
         val currentUnlocked = prefs.getInt("unlocked_level", 1)
         val newUnlocked = max(currentUnlocked, min(nextId, levels.size))
         val allTargetsDestroyed = enemies.none { it.alive } && crates.none { it.alive }
@@ -1579,6 +1610,13 @@ private class GameView(context: Context) : View(context) {
         prefs.edit().putInt("total_runs", prefs.getInt("total_runs", 0) + 1).apply()
         runTrace.clear()
         traceTimer = 0f
+        playerMiniguns.forEachIndexed { index, gun ->
+            gun.rotationOffset = 0f
+            gun.fireCooldown = 0.35f + index * 0.25f
+            gun.muzzleFlash = 0f
+            gun.targetIndex = -1
+        }
+        lastUnlockedPlayerMinigun = -1
         loadLevel(id)
         screen = GameScreen.PLAYING
         if (wallGuardMode) launchWallGuardBlade()
@@ -1853,7 +1891,7 @@ private class GameView(context: Context) : View(context) {
 
     private fun updateMusicForScreen() {
         val target = when (screen) {
-            GameScreen.MENU, GameScreen.STORY, GameScreen.WORLDS, GameScreen.LEVELS, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY, GameScreen.SHOP, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.EDITOR, GameScreen.ACCESSIBILITY, GameScreen.EXTRAS, GameScreen.LOCAL_SCORES, GameScreen.REPLAYS, GameScreen.SEASONAL, GameScreen.ONLINE_FEATURES ->
+            GameScreen.MENU, GameScreen.STORY, GameScreen.WORLDS, GameScreen.LEVELS, GameScreen.SETTINGS, GameScreen.HELP, GameScreen.DIFFICULTY, GameScreen.SHOP, GameScreen.FEATURES, GameScreen.MODES, GameScreen.CHALLENGES, GameScreen.ACHIEVEMENTS, GameScreen.STATS, GameScreen.CUSTOMIZE, GameScreen.MINIGUNS, GameScreen.EDITOR, GameScreen.ACCESSIBILITY, GameScreen.EXTRAS, GameScreen.LOCAL_SCORES, GameScreen.REPLAYS, GameScreen.SEASONAL, GameScreen.ONLINE_FEATURES ->
                 "Music & Ambience/Main Menu Theme.wav"
             GameScreen.PLAYING, GameScreen.PAUSED -> "Music & Ambience/Gameplay Background.wav"
             GameScreen.WON, GameScreen.CAMPAIGN_COMPLETE -> "Music & Ambience/Victory Theme.wav"
@@ -2258,6 +2296,7 @@ private class GameView(context: Context) : View(context) {
             drawAssetCentered(canvas, "Effects & Particles/Impact Spark.png", lastImpactX, lastImpactY, minDim * 0.09f, alpha)
         }
         for ((index, enemy) in enemies.withIndex()) if (enemy.alive) drawEnemy(canvas, enemy, index)
+        drawPlayerMiniguns(canvas)
 
         // Player-controlled barrier occupying a short segment of the left wall.
         val paddleHalf = guardPaddleHalf()
@@ -2452,6 +2491,167 @@ private class GameView(context: Context) : View(context) {
         drawAssetCentered(canvas, "Gameplay Sprites/Portal.png", x, y, minDim * 0.12f, if (ready) 255 else 150)
         drawText(canvas, if (ready) "EXIT" else "LOCKED", x / viewW, (y + minDim * 0.065f) / viewH, 0.014f,
             if (ready) cyan else muted, Paint.Align.CENTER)
+        paint.style = Paint.Style.FILL
+    }
+
+    private fun isPlayerMinigunUnlocked(index: Int): Boolean {
+        if (index !in playerMinigunKeys.indices) return false
+        if (index == 0) return true
+        val milestoneLevel = minigunUnlockLevel(index)
+        return prefs.getBoolean("player_minigun_unlocked_" + index, false) ||
+            prefs.getInt("unlocked_level", 1) > milestoneLevel ||
+            prefs.getInt(bestStarsKey(milestoneLevel), 0) > 0
+    }
+
+    private fun minigunUnlockLevel(index: Int): Int =
+        index.coerceIn(1, playerMinigunKeys.lastIndex) * CampaignWorlds.LEVELS_PER_WORLD
+
+    private fun effectivePlayerMinigunIndex(): Int =
+        selectedPlayerMinigun.takeIf { isPlayerMinigunUnlocked(it) } ?: 0
+
+    private fun playerMinigunAssetPath(index: Int, menu: Boolean): String {
+        val safeIndex = index.coerceIn(0, playerMinigunKeys.lastIndex)
+        val folder = if (menu) "Menu" else "Gameplay"
+        return "Player Miniguns/" + folder + "/Minigun_" + playerMinigunKeys[safeIndex] + ".png"
+    }
+
+    private fun normalizedAngle(degrees: Float): Float {
+        var normalized = (degrees + 180f) % 360f
+        if (normalized < 0f) normalized += 360f
+        return normalized - 180f
+    }
+
+    private fun updatePlayerMiniguns(dt: Float) {
+        if (screen != GameScreen.PLAYING || dt <= 0f) return
+        val aliveTargets = enemies.withIndex().filter { it.value.alive }
+        if (aliveTargets.isEmpty()) {
+            playerMiniguns.forEach { gun ->
+                gun.targetIndex = -1
+                gun.muzzleFlash = (gun.muzzleFlash - dt).coerceAtLeast(0f)
+            }
+            return
+        }
+
+        val assignedTargets = mutableSetOf<Int>()
+        playerMiniguns.forEachIndexed { gunIndex, gun ->
+            gun.muzzleFlash = (gun.muzzleFlash - dt).coerceAtLeast(0f)
+            val turretX = viewW * 0.125f
+            val turretY = viewH * if (gunIndex == 0) 0.235f else 0.815f
+            val availableTargets = aliveTargets.filter { it.value.alive && it.index !in assignedTargets }
+            val target = (availableTargets.ifEmpty { aliveTargets.filter { it.value.alive } })
+                .minByOrNull { entry ->
+                    val center = enemyCenter(entry.value, entry.index)
+                    distanceSquared(turretX, turretY, center.x * viewW, center.y * viewH)
+                }
+
+            if (target == null) {
+                gun.targetIndex = -1
+                return@forEachIndexed
+            }
+            if (target.value.alive) assignedTargets.add(target.index)
+            gun.targetIndex = target.index
+            val center = enemyCenter(target.value, target.index)
+            val targetX = center.x * viewW
+            val targetY = center.y * viewH
+            gun.targetX = targetX
+            gun.targetY = targetY
+
+            val bearing = Math.toDegrees(atan2((targetY - turretY).toDouble(), (targetX - turretX).toDouble())).toFloat()
+            // The original sprites point LEFT, so rotation is relative to a 180-degree heading.
+            val desiredOffset = normalizedAngle(bearing - 180f)
+            val turnDelta = normalizedAngle(desiredOffset - gun.rotationOffset).coerceIn(-300f * dt, 300f * dt)
+            gun.rotationOffset = normalizedAngle(gun.rotationOffset + turnDelta)
+
+            val muzzleBearing = Math.toRadians((180f + gun.rotationOffset).toDouble())
+            gun.muzzleX = turretX + kotlin.math.cos(muzzleBearing).toFloat() * minDim * 0.075f
+            gun.muzzleY = turretY + kotlin.math.sin(muzzleBearing).toFloat() * minDim * 0.075f
+
+            gun.fireCooldown = (gun.fireCooldown - dt).coerceAtLeast(0f)
+            val angularError = abs(normalizedAngle(bearing - 180f - gun.rotationOffset))
+            if (gun.fireCooldown <= 0f && angularError <= 17f && target.value.alive) {
+                gun.fireCooldown = 1.10f
+                gun.muzzleFlash = 0.12f
+                applyPlayerMinigunDamage(target.index, targetX, targetY)
+            }
+        }
+    }
+
+    private fun applyPlayerMinigunDamage(enemyIndex: Int, x: Float, y: Float) {
+        val enemy = enemies.getOrNull(enemyIndex) ?: return
+        if (!enemy.alive) return
+
+        if (enemy.kind == 9 && enemy.shieldHits > 0) {
+            enemy.shieldHits--
+            addBurst(x, y, cyan, 5)
+            playSfx("Optional - Extra Sounds/Shield Break.wav")
+            return
+        }
+
+        enemy.health -= 1
+        addBurst(x, y, if (enemy.health <= 0) pink else gold, if (enemy.health <= 0) 9 else 4)
+        if (enemy.health > 0) {
+            score += 5
+            return
+        }
+
+        enemy.alive = false
+        registerTargetHit(if (enemy.kind == 3) 90 else 45, x, y, cyan)
+        if (enemy.kind == 2 && enemy.canSplit) {
+            enemies.add(EnemyState(
+                (enemy.x - 0.03f).coerceIn(0.12f, 0.90f),
+                (enemy.y - 0.025f).coerceIn(0.18f, 0.82f), true, 2, 1, 8f, false
+            ))
+            enemies.add(EnemyState(
+                (enemy.x + 0.03f).coerceIn(0.12f, 0.90f),
+                (enemy.y + 0.025f).coerceIn(0.18f, 0.82f), true, 2, 1, 8f, false
+            ))
+            showMessage("SLIME SPLIT")
+        }
+        if (enemy.kind == 5) {
+            val blastTargets = enemies.withIndex().filter { entry ->
+                entry.index != enemyIndex && entry.value.alive &&
+                    distanceSquared(entry.value.x, entry.value.y, enemy.x, enemy.y) < 0.13f * 0.13f
+            }
+            blastTargets.forEach { entry ->
+                val nearby = entry.value
+                nearby.health -= 1
+                val nearbyCenter = enemyCenter(nearby, entry.index)
+                addBurst(nearbyCenter.x * viewW, nearbyCenter.y * viewH, Color.rgb(255, 105, 35), 4)
+                if (nearby.health <= 0) nearby.alive = false
+            }
+            addBurst(x, y, Color.rgb(255, 100, 28), 18)
+        }
+        playSfx("Core Gameplay SFX/Enemy Slice (Variation 1).wav")
+    }
+
+    private fun drawPlayerMiniguns(canvas: Canvas) {
+        playerMiniguns.forEachIndexed { index, gun ->
+            val centerX = viewW * 0.125f
+            val centerY = viewH * if (index == 0) 0.235f else 0.815f
+            val gunHeight = minDim * 0.115f
+            val gunWidth = minDim * 0.19f
+
+            if (gun.muzzleFlash > 0f && gun.targetIndex >= 0) {
+                val alpha = (gun.muzzleFlash / 0.12f * 220f).toInt().coerceIn(0, 220)
+                paint.style = Paint.Style.STROKE
+                paint.strokeCap = Paint.Cap.ROUND
+                paint.strokeWidth = max(1.5f, density * 1.5f)
+                paint.color = Color.argb(alpha, 58, 233, 255)
+                paint.setShadowLayer(density * 5f, 0f, 0f, cyan)
+                canvas.drawLine(gun.muzzleX, gun.muzzleY, gun.targetX, gun.targetY, paint)
+                paint.clearShadowLayer()
+                paint.style = Paint.Style.FILL
+                paint.color = Color.argb(alpha, 255, 214, 110)
+                canvas.drawCircle(gun.targetX, gun.targetY, max(2f, density * 2f), paint)
+            }
+
+            canvas.save()
+            canvas.rotate(gun.rotationOffset, centerX, centerY)
+            drawAsset(canvas, playerMinigunAssetPath(effectivePlayerMinigunIndex(), menu = false),
+                RectF(centerX - gunWidth / 2f, centerY - gunHeight / 2f,
+                    centerX + gunWidth / 2f, centerY + gunHeight / 2f), 255)
+            canvas.restore()
+        }
         paint.style = Paint.Style.FILL
     }
 
@@ -2918,22 +3118,80 @@ private class GameView(context: Context) : View(context) {
 
     private fun drawCustomize(canvas: Canvas) {
         drawMenuBackdrop(canvas)
-        drawText(canvas, "BLADE & SHIELD LAB", 0.5f, 0.20f, 0.060f, Color.WHITE, Paint.Align.CENTER)
-        drawText(canvas, "THEME  " + themeName(), 0.5f, 0.29f, 0.023f, cyan, Paint.Align.CENTER)
-        drawButton(canvas, 0.14f, 0.33f, 0.86f, 0.415f, "CYCLE THEME", cyan)
+        drawText(canvas, "PLAYER ARMORY", 0.5f, 0.105f, 0.055f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "THEME  " + themeName(), 0.5f, 0.172f, 0.020f, cyan, Paint.Align.CENTER)
+        drawButton(canvas, 0.18f, 0.185f, 0.82f, 0.235f, "CYCLE THEME", cyan)
+
         val nextBlade = (bladeSkin + 1) % 6
         val bladeUnlocked = nextBlade == 0 || prefs.getBoolean("blade_skin_unlocked_" + nextBlade, false)
-        drawText(canvas, "BLADE SKIN  " + (bladeSkin + 1) + "/6", 0.5f, 0.455f, 0.021f, bladeSkinColor(), Paint.Align.CENTER)
-        drawButton(canvas, 0.14f, 0.475f, 0.86f, 0.545f, if (bladeUnlocked) "NEXT BLADE SKIN" else "UNLOCK BLADE SKIN • 150 COINS", gold)
+        drawText(canvas, "BLADE SKIN  " + (bladeSkin + 1) + "/6", 0.5f, 0.272f, 0.018f, bladeSkinColor(), Paint.Align.CENTER)
+        drawButton(canvas, 0.18f, 0.282f, 0.82f, 0.332f, if (bladeUnlocked) "NEXT BLADE SKIN" else "UNLOCK BLADE • 150 COINS", gold)
+
         val nextShield = (shieldSkin + 1) % 6
         val shieldUnlocked = nextShield == 0 || prefs.getBoolean("shield_skin_unlocked_" + nextShield, false)
-        drawText(canvas, "SHIELD SKIN  " + (shieldSkin + 1) + "/6", 0.5f, 0.585f, 0.021f, shieldSkinColor(), Paint.Align.CENTER)
-        drawButton(canvas, 0.14f, 0.605f, 0.86f, 0.675f, if (shieldUnlocked) "NEXT SHIELD SKIN" else "UNLOCK SHIELD SKIN • 150 COINS", pink)
-        drawText(canvas, "ENEMY STYLE  " + (enemySkin + 1) + "/4", 0.5f, 0.715f, 0.021f, enemySkinColor(), Paint.Align.CENTER)
+        drawText(canvas, "SHIELD SKIN  " + (shieldSkin + 1) + "/6", 0.5f, 0.364f, 0.018f, shieldSkinColor(), Paint.Align.CENTER)
+        drawButton(canvas, 0.18f, 0.374f, 0.82f, 0.424f, if (shieldUnlocked) "NEXT SHIELD SKIN" else "UNLOCK SHIELD • 150 COINS", pink)
+
         val nextEnemy = (enemySkin + 1) % 4
         val enemyUnlocked = nextEnemy == 0 || prefs.getBoolean("enemy_skin_unlocked_" + nextEnemy, false)
-        drawButton(canvas, 0.14f, 0.735f, 0.86f, 0.80f, if (enemyUnlocked) "NEXT ENEMY STYLE" else "UNLOCK ENEMY STYLE • 200 COINS", cyan)
-        drawButton(canvas, 0.24f, 0.845f, 0.76f, 0.915f, "BACK", cyan)
+        drawText(canvas, "ENEMY STYLE  " + (enemySkin + 1) + "/4", 0.5f, 0.456f, 0.018f, enemySkinColor(), Paint.Align.CENTER)
+        drawButton(canvas, 0.18f, 0.466f, 0.82f, 0.516f, if (enemyUnlocked) "NEXT ENEMY STYLE" else "UNLOCK ENEMY • 200 COINS", cyan)
+
+        val activeMinigun = effectivePlayerMinigunIndex()
+        drawText(canvas, "PLAYER MINIGUN  " + CampaignWorlds.worldName(activeMinigun).uppercase(), 0.5f, 0.572f, 0.021f, gold, Paint.Align.CENTER)
+        drawAsset(canvas, playerMinigunAssetPath(activeMinigun, menu = true),
+            RectF(viewW * 0.36f, viewH * 0.59f, viewW * 0.64f, viewH * 0.72f), 255)
+        drawText(canvas, "TWO AUTO-AIM TURRETS • LIGHT ENEMY DAMAGE", 0.5f, 0.744f, 0.015f, muted, Paint.Align.CENTER)
+        drawButton(canvas, 0.14f, 0.775f, 0.86f, 0.835f, "CHOOSE PLAYER MINIGUN", gold)
+        drawButton(canvas, 0.24f, 0.86f, 0.76f, 0.925f, "BACK", cyan)
+    }
+
+    private fun minigunCardBounds(index: Int): FloatArray {
+        val column = index % 5
+        val row = index / 5
+        val left = 0.025f + column * 0.19f
+        val top = if (row == 0) 0.205f else 0.505f
+        return floatArrayOf(left, top, left + 0.175f, top + 0.275f)
+    }
+
+    private fun drawMinigunArmory(canvas: Canvas) {
+        drawMenuBackdrop(canvas)
+        drawText(canvas, "PLAYER MINIGUN ARMORY", 0.5f, 0.085f, 0.048f, Color.WHITE, Paint.Align.CENTER)
+        drawText(canvas, "UNLOCK DESIGNS BY CLEARING CAMPAIGN MILESTONES", 0.5f, 0.145f, 0.015f, cyan, Paint.Align.CENTER)
+
+        for (index in playerMinigunKeys.indices) {
+            val bounds = minigunCardBounds(index)
+            val rect = RectF(bounds[0] * viewW, bounds[1] * viewH, bounds[2] * viewW, bounds[3] * viewH)
+            val unlocked = isPlayerMinigunUnlocked(index)
+            val equipped = effectivePlayerMinigunIndex() == index
+            val accent = if (equipped) gold else if (unlocked) cyan else muted
+            paint.style = Paint.Style.FILL
+            paint.color = Color.argb(if (unlocked) 205 else 160, 5, 13, 29)
+            canvas.drawRoundRect(rect, density * 9f, density * 9f, paint)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = if (equipped) max(2f, density * 2.2f) else max(1f, density * 1.1f)
+            paint.color = Color.argb(if (unlocked) 225 else 100, Color.red(accent), Color.green(accent), Color.blue(accent))
+            if (equipped) paint.setShadowLayer(density * 6f, 0f, 0f, accent)
+            canvas.drawRoundRect(rect, density * 9f, density * 9f, paint)
+            paint.clearShadowLayer()
+            paint.style = Paint.Style.FILL
+
+            val centerX = (bounds[0] + bounds[2]) / 2f
+            drawAsset(canvas, playerMinigunAssetPath(index, menu = true),
+                RectF(centerX * viewW - viewW * 0.073f, viewH * (bounds[1] + 0.025f),
+                    centerX * viewW + viewW * 0.073f, viewH * (bounds[1] + 0.166f)),
+                if (unlocked) 255 else 95)
+            drawText(canvas, CampaignWorlds.worldName(index).uppercase(), centerX, bounds[1] + 0.198f,
+                0.013f, if (unlocked) Color.WHITE else muted, Paint.Align.CENTER, viewW * 0.165f)
+            val status = when {
+                !unlocked -> "CLEAR LVL " + minigunUnlockLevel(index)
+                equipped -> "EQUIPPED"
+                else -> "SELECT"
+            }
+            val statusColor = if (!unlocked) muted else if (equipped) gold else cyan
+            drawText(canvas, status, centerX, bounds[1] + 0.246f, 0.013f, statusColor, Paint.Align.CENTER, viewW * 0.165f)
+        }
+        drawButton(canvas, 0.36f, 0.835f, 0.64f, 0.925f, "BACK", pink)
     }
 
     private fun drawEditor(canvas: Canvas) {
@@ -3616,6 +3874,25 @@ private class GameView(context: Context) : View(context) {
                         invalidate()
                         return true
                     }
+                    GameScreen.MINIGUNS -> {
+                        val selectedCard = playerMinigunKeys.indices.firstOrNull { index ->
+                            val b = minigunCardBounds(index)
+                            inRect(nx, ny, b[0], b[1], b[2], b[3])
+                        }
+                        if (selectedCard != null) {
+                            if (isPlayerMinigunUnlocked(selectedCard)) {
+                                selectedPlayerMinigun = selectedCard
+                                prefs.edit().putInt("player_minigun", selectedCard).apply()
+                                showMessage("EQUIPPED: " + CampaignWorlds.worldName(selectedCard).uppercase())
+                            } else {
+                                showMessage("CLEAR LEVEL " + minigunUnlockLevel(selectedCard) + " TO UNLOCK")
+                            }
+                        } else if (inRect(nx, ny, 0.36f, 0.835f, 0.64f, 0.925f)) {
+                            screen = GameScreen.CUSTOMIZE
+                        }
+                        invalidate()
+                        return true
+                    }
                     GameScreen.CUSTOMIZE -> {
                         when {
                             inRect(nx, ny, 0.14f, 0.33f, 0.86f, 0.415f) -> {
@@ -3645,7 +3922,7 @@ private class GameView(context: Context) : View(context) {
                                 } else showMessage("NEED 150 COINS")
                                 prefs.edit().putInt("shield_skin", shieldSkin).apply()
                             }
-                            inRect(nx, ny, 0.14f, 0.735f, 0.86f, 0.80f) -> {
+                            inRect(nx, ny, 0.18f, 0.466f, 0.82f, 0.516f) -> {
                                 val next = (enemySkin + 1) % 4
                                 val key = "enemy_skin_unlocked_" + next
                                 if (next == 0 || prefs.getBoolean(key, false)) enemySkin = next
@@ -3656,7 +3933,8 @@ private class GameView(context: Context) : View(context) {
                                 } else showMessage("NEED 200 COINS")
                                 prefs.edit().putInt("enemy_skin", enemySkin).apply()
                             }
-                            inRect(nx, ny, 0.24f, 0.845f, 0.76f, 0.915f) -> screen = GameScreen.FEATURES
+                            inRect(nx, ny, 0.14f, 0.775f, 0.86f, 0.835f) -> screen = GameScreen.MINIGUNS
+                            inRect(nx, ny, 0.24f, 0.86f, 0.76f, 0.925f) -> screen = GameScreen.FEATURES
                         }
                         invalidate()
                         return true
