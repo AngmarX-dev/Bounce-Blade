@@ -393,8 +393,7 @@ jobs:
           missing = [path for path in required if not Path(path).is_file() or Path(path).stat().st_size == 0]
           if missing:
               sys.exit("Missing replacement artwork: " + ", ".join(missing))
-          if Path("New Image").exists():
-              sys.exit("Temporary New Image directory should be removed after migration.")
+          # Keep New Image/MiniGun and MiniGun_UP as the user-managed source art; CI checks their runtime copies separately.
           legacy = [
               "Images/UI Elements/Button.jpeg",
               "Images/Gameplay Sprites/Floor Tile.png",
