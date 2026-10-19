@@ -79,7 +79,8 @@ private data class PointN(val x: Float, val y: Float)
 private data class EnemyState(
     var x: Float, var y: Float, var alive: Boolean = true, val kind: Int = 0,
     var health: Int = 1, var fireCooldown: Float = 1.6f, val canSplit: Boolean = true,
-    var jumpTime: Float = 0f, var jumpCooldown: Float = 1.4f, var shieldHits: Int = 0
+    var jumpTime: Float = 0f, var jumpCooldown: Float = 1.4f, var shieldHits: Int = 0,
+    var maxHealth: Int = health, var bladeHitCooldown: Float = 0f
 )
 private data class TurretProjectile(var x: Float, var y: Float, var vx: Float, var vy: Float, var life: Float)
 private data class CrateState(val x: Float, val y: Float, var alive: Boolean = true)
@@ -444,6 +445,9 @@ private class GameView(context: Context) : View(context) {
         val rawDt = ((now - lastFrame) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.025f)
         lastFrame = now
         animationTime += rawDt
+        enemies.forEach { enemy ->
+            enemy.bladeHitCooldown = (enemy.bladeHitCooldown - rawDt).coerceAtLeast(0f)
+        }
         if (screen == GameScreen.PLAYING) {
             traceTimer += rawDt
             if (traceTimer >= 0.06f && runTrace.size < 1000) {
@@ -652,6 +656,7 @@ private class GameView(context: Context) : View(context) {
                             .minByOrNull { distanceSquared(it.x, it.y, enemy.x, enemy.y) }
                         if (ally != null && distanceSquared(ally.x, ally.y, enemy.x, enemy.y) < 0.18f * 0.18f) {
                             ally.health = min(ally.health + 1, 8)
+                            ally.maxHealth = max(ally.maxHealth, ally.health)
                             addBurst(ally.x * viewW, ally.y * viewH, Color.rgb(90, 255, 150), 5)
                             showMessage("HEALER RESTORED AN ENEMY")
                         }
@@ -776,12 +781,14 @@ private class GameView(context: Context) : View(context) {
 
         val pendingSlimes = mutableListOf<EnemyState>()
         for ((index, enemy) in enemies.toList().withIndex()) {
-            if (!enemy.alive) continue
+            if (!enemy.alive || enemy.bladeHitCooldown > 0f) continue
             val c = enemyCenter(enemy, index); val ex = c.x * viewW; val ey = c.y * viewH
             val dx = px - ex; val dy = py - ey
             val hitRadius = radius + minDim * (if (enemy.kind == 3 && enemy.health > 1) 0.04f else 0.027f)
             if (dx * dx + dy * dy <= hitRadius * hitRadius) {
+                enemy.bladeHitCooldown = 0.32f
                 enemy.health -= 1
+                addBurst(ex, ey, if (enemy.health <= 0) pink else gold, 12)
                 if (enemy.health <= 0) {
                     enemy.alive = false
                     if (enemy.kind == 2 && enemy.canSplit) {
@@ -792,12 +799,16 @@ private class GameView(context: Context) : View(context) {
                     registerTargetHit(if (enemy.kind == 3) 160 else 100, ex, ey, pink)
                     playSfx(if (index % 2 == 0) "Core Gameplay SFX/Enemy Slice (Variation 1).wav" else "Core Gameplay SFX/Enemy Slice (Variation 2).wav")
                 } else {
-                    score += 50; addBurst(ex, ey, gold, 10)
-                    showMessage(if (levelId == 50 && index == 0) "BOSS SHIELD DAMAGED" else "SHIELD BREAK")
+                    score += 50
+                    showMessage("ENEMY DAMAGED")
                     playSfx("Optional - Extra Sounds/Shield Break.wav")
                 }
-                reflectFrom(dx, dy); velocityX *= 0.90f; velocityY *= 0.90f
-                useBounce(); haptic()
+                // Pierce straight through the enemy instead of reflecting or consuming a bounce.
+                val travelSpeed = sqrt(velocityX * velocityX + velocityY * velocityY).coerceAtLeast(1f)
+                val passDistance = hitRadius + minDim * 0.008f
+                px = ex + (velocityX / travelSpeed) * passDistance
+                py = ey + (velocityY / travelSpeed) * passDistance
+                haptic()
                 if (screen != GameScreen.PLAYING) return
             }
         }
@@ -1073,7 +1084,7 @@ private class GameView(context: Context) : View(context) {
 
         val pendingSpawns = mutableListOf<EnemyState>()
         for ((index, enemy) in enemies.withIndex()) {
-            if (!enemy.alive) continue
+            if (!enemy.alive || enemy.bladeHitCooldown > 0f) continue
             val center = enemyCenter(enemy, index)
             val ex = center.x * viewW
             val ey = center.y * viewH
@@ -1100,8 +1111,9 @@ private class GameView(context: Context) : View(context) {
                 playSfx("Optional - Extra Sounds/Shield Break.wav")
                 break
             }
-            val cameFromLeft = velocityX > 0f
-            enemy.health -= 1
+            val piercingBoost = (activeEffects["piercing"] ?: 0f) > 0f
+            enemy.health -= if (piercingBoost) 2 else 1
+            enemy.bladeHitCooldown = 0.32f
             if (enemy.health <= 0) {
                 enemy.alive = false
                 registerTargetHit(if (enemy.kind == 3) 500 else if (enemy.kind == 5) 300 else 100, ex, ey, pink)
@@ -1128,22 +1140,18 @@ private class GameView(context: Context) : View(context) {
                 playSfx("Optional - Extra Sounds/Shield Break.wav")
             }
 
-            val speed = sqrt(velocityX * velocityX + velocityY * velocityY)
-                .coerceIn(
-                    minDim * 0.46f * bladeSpeedScale(),
-                    minDim * 0.90f * bladeSpeedScale()
-                )
-            val piercing = (activeEffects["piercing"] ?: 0f) > 0f
-            if (!piercing) velocityX = if (cameFromLeft) -abs(velocityX) else abs(velocityX)
-            velocityY += ((py - ey) / hitRadius).coerceIn(-1f, 1f) * minDim * 0.16f
+            // Keep the incoming direction and move the blade beyond the enemy's hitbox.
+            val currentSpeed = sqrt(velocityX * velocityX + velocityY * velocityY).coerceAtLeast(1f)
+            val speed = currentSpeed.coerceIn(
+                minDim * 0.46f * bladeSpeedScale(),
+                minDim * 0.90f * bladeSpeedScale()
+            )
+            velocityX *= speed / currentSpeed
+            velocityY *= speed / currentSpeed
             val adjustedSpeed = sqrt(velocityX * velocityX + velocityY * velocityY).coerceAtLeast(1f)
-            velocityX *= speed / adjustedSpeed
-            velocityY *= speed / adjustedSpeed
-            px = if (piercing) {
-                if (cameFromLeft) ex + hitRadius else ex - hitRadius
-            } else {
-                if (cameFromLeft) ex - hitRadius else ex + hitRadius
-            }
+            val passDistance = hitRadius + minDim * 0.008f
+            px = ex + (velocityX / adjustedSpeed) * passDistance
+            py = ey + (velocityY / adjustedSpeed) * passDistance
             addBurst(ex, ey, pink, 14)
             haptic()
             break
@@ -2508,6 +2516,7 @@ private class GameView(context: Context) : View(context) {
             paint.clearShadowLayer()
         }
         drawAssetCentered(canvas, path, x, y, drawSize)
+        drawEnemyHealthBar(canvas, enemy, x, y, drawSize)
         if (isTurret) drawText(
             canvas,
             enemy.health.toString(),
@@ -2517,6 +2526,42 @@ private class GameView(context: Context) : View(context) {
             if (enemy.health > 1) gold else cyan,
             Paint.Align.CENTER
         )
+        paint.style = Paint.Style.FILL
+    }
+
+    private fun drawEnemyHealthBar(canvas: Canvas, enemy: EnemyState, x: Float, y: Float, drawSize: Float) {
+        val maxHealth = enemy.maxHealth.coerceAtLeast(1)
+        val healthRatio = (enemy.health.toFloat() / maxHealth).coerceIn(0f, 1f)
+        val barWidth = (drawSize * 1.22f).coerceIn(minDim * 0.07f, minDim * 0.24f)
+        val barHeight = max(density * 3f, minDim * 0.008f)
+        val barBottom = y - drawSize * 0.62f - density * 3f
+        val barLeft = x - barWidth / 2f
+        val barTop = barBottom - barHeight
+        val barRect = RectF(barLeft, barTop, barLeft + barWidth, barBottom)
+        val inset = max(1f, density)
+
+        paint.style = Paint.Style.FILL
+        paint.color = Color.argb(225, 7, 12, 25)
+        canvas.drawRoundRect(barRect, barHeight / 2f, barHeight / 2f, paint)
+
+        val fillColor = when {
+            healthRatio > 0.60f -> Color.rgb(65, 238, 144)
+            healthRatio > 0.30f -> gold
+            else -> Color.rgb(255, 75, 92)
+        }
+        val fillRight = barLeft + inset + (barWidth - inset * 2f) * healthRatio
+        if (fillRight > barLeft + inset) {
+            paint.color = fillColor
+            canvas.drawRoundRect(
+                RectF(barLeft + inset, barTop + inset, fillRight, barBottom - inset),
+                barHeight / 2f, barHeight / 2f, paint
+            )
+        }
+
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = max(1f, density)
+        paint.color = Color.argb(210, 130, 205, 240)
+        canvas.drawRoundRect(barRect, barHeight / 2f, barHeight / 2f, paint)
         paint.style = Paint.Style.FILL
     }
 
