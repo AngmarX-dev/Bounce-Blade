@@ -1092,24 +1092,11 @@ private class GameView(context: Context) : View(context) {
             if (distanceSquared(px, py, ex, ey) > hitRadius * hitRadius) continue
 
             if (enemy.kind == 9 && enemy.shieldHits > 0) {
+                // The shield loses a charge, but no longer reflects the player's blade.
                 enemy.shieldHits--
-                val cameFromLeft = velocityX > 0f
-                velocityX = if (cameFromLeft) -abs(velocityX) else abs(velocityX)
-                px = if (cameFromLeft) ex - hitRadius else ex + hitRadius
                 addBurst(ex, ey, cyan, 14)
-                showMessage("ENERGY SHIELD BLOCKED HIT • " + enemy.shieldHits + " CHARGES")
+                showMessage("ENERGY SHIELD HIT • " + enemy.shieldHits + " CHARGES")
                 playSfx("Optional - Extra Sounds/Shield Break.wav")
-                break
-            }
-            if (enemy.kind == 9 && enemy.shieldHits > 0) {
-                enemy.shieldHits--
-                val shieldHitFromLeft = velocityX > 0f
-                velocityX = if (shieldHitFromLeft) -abs(velocityX) else abs(velocityX)
-                px = if (shieldHitFromLeft) ex - hitRadius else ex + hitRadius
-                addBurst(ex, ey, cyan, 14)
-                showMessage("ENERGY SHIELD BLOCKED HIT • " + enemy.shieldHits + " CHARGES")
-                playSfx("Optional - Extra Sounds/Shield Break.wav")
-                break
             }
             val piercingBoost = (activeEffects["piercing"] ?: 0f) > 0f
             enemy.health -= if (piercingBoost) 2 else 1
