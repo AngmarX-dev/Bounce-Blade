@@ -249,6 +249,65 @@ jobs:
           print("Verified shop economy, persistent upgrades, Nova Pulse, larger buttons, and slower drones.")
           PY
 
+      - name: Verify player minigun artwork, armory unlocks, and auto-aim damage
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+
+          artwork = [
+              "Images/Player Miniguns/Gameplay/Minigun_AzureVault.png",
+              "Images/Player Miniguns/Menu/Minigun_AzureVault.png",
+              "Images/Player Miniguns/Gameplay/Minigun_CelestialForge.png",
+              "Images/Player Miniguns/Menu/Minigun_CelestialForge.png",
+              "Images/Player Miniguns/Gameplay/Minigun_CrimsonCircuit.png",
+              "Images/Player Miniguns/Menu/Minigun_CrimsonCircuit.png",
+              "Images/Player Miniguns/Gameplay/Minigun_GoldenCore.png",
+              "Images/Player Miniguns/Menu/Minigun_GoldenCore.png",
+              "Images/Player Miniguns/Gameplay/Minigun_MagentaMaze.png",
+              "Images/Player Miniguns/Menu/Minigun_MagentaMaze.png",
+              "Images/Player Miniguns/Gameplay/Minigun_NeonGrid.png",
+              "Images/Player Miniguns/Menu/Minigun_NeonGrid.png",
+              "Images/Player Miniguns/Gameplay/Minigun_ObsidianRift.png",
+              "Images/Player Miniguns/Menu/Minigun_ObsidianRift.png",
+              "Images/Player Miniguns/Gameplay/Minigun_QuantumAbyss.png",
+              "Images/Player Miniguns/Menu/Minigun_QuantumAbyss.png",
+              "Images/Player Miniguns/Gameplay/Minigun_SolarFlare.png",
+              "Images/Player Miniguns/Menu/Minigun_SolarFlare.png",
+              "Images/Player Miniguns/Gameplay/Minigun_StormCitadel.png",
+              "Images/Player Miniguns/Menu/Minigun_StormCitadel.png",
+          ]
+          missing_art = [path for path in artwork if not Path(path).is_file() or Path(path).stat().st_size == 0]
+          if missing_art:
+              sys.exit("Missing player minigun artwork: " + ", ".join(missing_art))
+
+          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
+          required = [
+              "private val playerMinigunKeys = listOf(",
+              "\"NeonGrid\", \"CrimsonCircuit\", \"AzureVault\", \"MagentaMaze\", \"GoldenCore\",",
+              "\"ObsidianRift\", \"SolarFlare\", \"QuantumAbyss\", \"StormCitadel\", \"CelestialForge\"",
+              "private fun drawMinigunArmory(canvas: Canvas)",
+              "private fun isPlayerMinigunUnlocked(index: Int): Boolean",
+              "private fun minigunCardBounds(index: Int): FloatArray",
+              "private fun updatePlayerMiniguns(dt: Float)",
+              "private fun applyPlayerMinigunDamage(enemyIndex: Int, x: Float, y: Float)",
+              "private fun drawPlayerMiniguns(canvas: Canvas)",
+              "val turretX = viewW * 0.125f",
+              "val turretY = viewH * if (gunIndex == 0) 0.235f else 0.815f",
+              "val desiredOffset = normalizedAngle(bearing - 180f)",
+              "if (gun.fireCooldown <= 0f && angularError <= 17f && target.value.alive)",
+              "gun.fireCooldown = 1.10f",
+              "putBoolean(\"player_minigun_unlocked_\" + minigunRewardIndex, true)",
+              "GameScreen.MINIGUNS -> drawMinigunArmory(canvas)",
+              "selectedPlayerMinigun = selectedCard",
+              "return \"Player Miniguns/\" + folder + \"/Minigun_\"",
+          ]
+          missing = [marker for marker in required if marker not in source]
+          if missing:
+              sys.exit("Missing player minigun gameplay or unlock logic: " + ", ".join(missing))
+          print(f"Verified {len(artwork)} player minigun images, armory selection, unlock milestones, auto-aim and light damage.")
+          PY
+
       - name: Verify large and tappable game buttons
         run: |
           python3 - <<'PY'
