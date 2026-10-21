@@ -602,6 +602,10 @@ private class GameView(context: Context) : View(context) {
         else -> 1
     }
 
+    /** One direct hit removes exactly one third of a drone's maximum health. */
+    private fun droneHitDamage(enemy: EnemyState): Int =
+        ((enemy.maxHealth.coerceAtLeast(1) + 2) / 3).coerceAtLeast(1)
+
     private fun enemyCenter(enemy: EnemyState, index: Int): PointF {
         val d = when (enemy.kind) {
             0 -> PointF(sin(animationTime * 1.7f + index * 1.2f) * 0.014f, cos(animationTime * 1.3f + index) * 0.012f)
@@ -678,8 +682,8 @@ private class GameView(context: Context) : View(context) {
                         val ally = enemies.filter { it.alive && it !== enemy }
                             .minByOrNull { distanceSquared(it.x, it.y, enemy.x, enemy.y) }
                         if (ally != null && distanceSquared(ally.x, ally.y, enemy.x, enemy.y) < 0.18f * 0.18f) {
-                            ally.health = min(ally.health + 1, 8)
-                            ally.maxHealth = max(ally.maxHealth, ally.health)
+                            ally.health = min(ally.health + 1, if (ally.kind == 0) 3 else 8)
+                            ally.maxHealth = if (ally.kind == 0) 3 else max(ally.maxHealth, ally.health)
                             addBurst(ally.x * viewW, ally.y * viewH, Color.rgb(90, 255, 150), 5)
                             showMessage("HEALER RESTORED AN ENEMY")
                         }
@@ -810,7 +814,7 @@ private class GameView(context: Context) : View(context) {
             val hitRadius = radius + minDim * (if (enemy.kind == 3 && enemy.health > 1) 0.04f else 0.027f)
             if (dx * dx + dy * dy <= hitRadius * hitRadius) {
                 enemy.bladeHitCooldown = 0.32f
-                enemy.health -= 1
+                enemy.health -= if (enemy.kind == 0) droneHitDamage(enemy) else 1
                 addBurst(ex, ey, if (enemy.health <= 0) pink else gold, 12)
                 if (enemy.health <= 0) {
                     enemy.alive = false
@@ -1122,7 +1126,7 @@ private class GameView(context: Context) : View(context) {
                 playSfx("Optional - Extra Sounds/Shield Break.wav")
             }
             val piercingBoost = (activeEffects["piercing"] ?: 0f) > 0f
-            enemy.health -= if (piercingBoost) 2 else 1
+            enemy.health -= if (enemy.kind == 0) droneHitDamage(enemy) else if (piercingBoost) 2 else 1
             enemy.bladeHitCooldown = 0.32f
             if (enemy.health <= 0) {
                 enemy.alive = false
@@ -1543,8 +1547,10 @@ private class GameView(context: Context) : View(context) {
             val bossRush = gameMode == "boss_rush"
             val finalBoss = levelId == levels.size && index == 0
             val kind = if (bossRush || finalBoss) 3 else enemyKindForCampaignLevel(levelId, index)
-            EnemyState(point.x, point.y, true, kind,
-                if (bossRush) 10 + index * 2 else if (finalBoss) 18 else enemyHealthForLevel(levelId, index),
+            val configuredHealth = if (bossRush) 10 + index * 2 else if (finalBoss) 18 else enemyHealthForLevel(levelId, index)
+            // Drones have exactly three health units, so a minigun bullet or blade hit is one third.
+            val initialHealth = if (kind == 0) 3 else configuredHealth
+            EnemyState(point.x, point.y, true, kind, initialHealth,
                 1.2f + (index % 3) * 0.6f, true, shieldHits = if (kind == 9) 2 else 0)
         }.toMutableList()
         pickups.clear()
@@ -1985,14 +1991,15 @@ private class GameView(context: Context) : View(context) {
     private fun drawMenu(canvas: Canvas) {
         drawMenuBackdrop(canvas)
         drawAsset(canvas, "App Icon & Logo/Game Logo.png", RectF(viewW * 0.16f, viewH * 0.13f, viewW * 0.84f, viewH * 0.29f), 255)
-        drawText(canvas, "BOUNCE OFF ENEMIES  •  GUARD THE LEFT WALL", 0.5f, 0.418f, 0.018f, muted, Paint.Align.CENTER)
+        drawText(canvas, "BOUNCE OFF ENEMIES  •  GUARD THE LEFT WALL", 0.5f, 0.322f, 0.018f, muted, Paint.Align.CENTER)
         drawText(canvas, "◈ " + coinBalance(), 0.91f, 0.105f, 0.026f, gold, Paint.Align.RIGHT)
-        drawButton(canvas, 0.10f, 0.432f, 0.90f, 0.492f, "PLAY CAMPAIGN", if (menuSelection == 0) gold else cyan)
-        drawButton(canvas, 0.10f, 0.495f, 0.90f, 0.555f, "LEVEL SELECT", if (menuSelection == 1) pink else gold)
-        drawButton(canvas, 0.10f, 0.558f, 0.90f, 0.618f, "MORE FEATURES", if (menuSelection == 2) cyan else pink)
-        drawButton(canvas, 0.10f, 0.621f, 0.90f, 0.681f, "BLADE SHOP", if (menuSelection == 3) pink else gold)
-        drawButton(canvas, 0.10f, 0.684f, 0.90f, 0.744f, "SETTINGS", if (menuSelection == 4) gold else cyan)
-        drawButton(canvas, 0.10f, 0.747f, 0.90f, 0.807f, "THE STORY", cyan)
+        // Wider, taller buttons with matching hitboxes for landscape phone touchscreens.
+        drawButton(canvas, 0.075f, 0.342f, 0.925f, 0.414f, "PLAY CAMPAIGN", if (menuSelection == 0) gold else cyan)
+        drawButton(canvas, 0.075f, 0.419f, 0.925f, 0.491f, "LEVEL SELECT", if (menuSelection == 1) pink else gold)
+        drawButton(canvas, 0.075f, 0.496f, 0.925f, 0.568f, "MORE FEATURES", if (menuSelection == 2) cyan else pink)
+        drawButton(canvas, 0.075f, 0.573f, 0.925f, 0.645f, "BLADE SHOP", if (menuSelection == 3) pink else gold)
+        drawButton(canvas, 0.075f, 0.650f, 0.925f, 0.722f, "SETTINGS", if (menuSelection == 4) gold else cyan)
+        drawButton(canvas, 0.075f, 0.727f, 0.925f, 0.799f, "THE STORY", cyan)
         val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
         val bestTotal = totalBestStarsAfter(0, 0)
         drawText(canvas, "UNLOCKED  " + unlocked + "/" + levels.size + "     BEST STARS  " + bestTotal + "/" + (levels.size * 3),
@@ -2587,7 +2594,7 @@ private class GameView(context: Context) : View(context) {
             return
         }
 
-        enemy.health -= 1
+        enemy.health -= if (enemy.kind == 0) droneHitDamage(enemy) else 1
         addBurst(x, y, if (enemy.health <= 0) pink else gold, if (enemy.health <= 0) 9 else 4)
         if (enemy.health > 0) {
             score += 5
@@ -3641,7 +3648,7 @@ private class GameView(context: Context) : View(context) {
             localizeButtonLabel(label),
             textCenterX / viewW,
             visualRect.centerY() / viewH + 0.008f,
-            if (label.length > 18) 0.036f else 0.042f,
+            if (label.length > 18) 0.041f else 0.047f,
             if (enabled) color else muted,
             Paint.Align.CENTER,
             availableTextWidth
@@ -3791,12 +3798,12 @@ private class GameView(context: Context) : View(context) {
                 when (screen) {
                     GameScreen.MENU -> {
                         when {
-                            inRect(nx, ny, 0.10f, 0.432f, 0.90f, 0.492f) -> screen = GameScreen.DIFFICULTY
-                            inRect(nx, ny, 0.10f, 0.495f, 0.90f, 0.555f) -> screen = GameScreen.WORLDS
-                            inRect(nx, ny, 0.10f, 0.558f, 0.90f, 0.618f) -> screen = GameScreen.FEATURES
-                            inRect(nx, ny, 0.10f, 0.621f, 0.90f, 0.681f) -> openShop(GameScreen.MENU)
-                            inRect(nx, ny, 0.10f, 0.684f, 0.90f, 0.744f) -> screen = GameScreen.SETTINGS
-                            inRect(nx, ny, 0.10f, 0.747f, 0.90f, 0.807f) -> { storyPage = 0; screen = GameScreen.STORY }
+                            inRect(nx, ny, 0.075f, 0.342f, 0.925f, 0.414f) -> screen = GameScreen.DIFFICULTY
+                            inRect(nx, ny, 0.075f, 0.419f, 0.925f, 0.491f) -> screen = GameScreen.WORLDS
+                            inRect(nx, ny, 0.075f, 0.496f, 0.925f, 0.568f) -> screen = GameScreen.FEATURES
+                            inRect(nx, ny, 0.075f, 0.573f, 0.925f, 0.645f) -> openShop(GameScreen.MENU)
+                            inRect(nx, ny, 0.075f, 0.650f, 0.925f, 0.722f) -> screen = GameScreen.SETTINGS
+                            inRect(nx, ny, 0.075f, 0.727f, 0.925f, 0.799f) -> { storyPage = 0; screen = GameScreen.STORY }
                         }
                         invalidate()
                         return true
@@ -4312,4 +4319,3 @@ private class GameView(context: Context) : View(context) {
         }
     }
 }
-
