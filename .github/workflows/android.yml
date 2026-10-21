@@ -321,7 +321,7 @@ jobs:
               "drawAsset(canvas, \"UI Elements/Button.png\", hitRect, if (enabled) 255 else 125)",
               "availableTextWidth",
               "maxWidth: Float = 0f",
-              "if (label.length > 18) 0.036f else 0.042f",
+              "if (label.length > 18) 0.041f else 0.047f",
               "drawButton(canvas, 0.825f, 0.027f, 0.97f, 0.110f, \"Ⅱ\", pink)",
               "val novaLeft = if (oneHandedMode)",
               "val novaTop = if (oneHandedMode)",
@@ -330,7 +330,7 @@ jobs:
               "val abilityHit = if (oneHandedMode)",
               "inRect(nx, ny, 0.82f, 0.025f, 0.98f, 0.115f)",
               "inRect(nx, ny, 0.775f, 0.790f, 0.98f, 0.935f)",
-              "0.10f, 0.432f, 0.90f, 0.492f",
+              "inRect(nx, ny, 0.10f, 0.405f, 0.90f, 0.495f)",
               "private fun inRect(x: Float, y: Float, left: Float, top: Float, right: Float, bottom: Float): Boolean {",
           ]
           missing = [marker for marker in required if marker not in source]
