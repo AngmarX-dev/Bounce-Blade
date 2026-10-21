@@ -814,7 +814,13 @@ private class GameView(context: Context) : View(context) {
             val hitRadius = radius + minDim * (if (enemy.kind == 3 && enemy.health > 1) 0.04f else 0.027f)
             if (dx * dx + dy * dy <= hitRadius * hitRadius) {
                 enemy.bladeHitCooldown = 0.32f
-                enemy.health -= if (enemy.kind == 0) droneHitDamage(enemy) else 1
+                val piercingBoost = (activeEffects["piercing"] ?: 0f) > 0f
+                if (enemy.kind == 0) {
+                    // Drone hits always remove exactly one third of maximum health.
+                    enemy.health -= droneHitDamage(enemy)
+                } else {
+                    enemy.health -= if (piercingBoost) 2 else 1
+                }
                 addBurst(ex, ey, if (enemy.health <= 0) pink else gold, 12)
                 if (enemy.health <= 0) {
                     enemy.alive = false
@@ -1126,7 +1132,12 @@ private class GameView(context: Context) : View(context) {
                 playSfx("Optional - Extra Sounds/Shield Break.wav")
             }
             val piercingBoost = (activeEffects["piercing"] ?: 0f) > 0f
-            enemy.health -= if (enemy.kind == 0) droneHitDamage(enemy) else if (piercingBoost) 2 else 1
+            if (enemy.kind == 0) {
+                // Keep the requested one-third-health drone damage with the boost active.
+                enemy.health -= droneHitDamage(enemy)
+            } else {
+                enemy.health -= if (piercingBoost) 2 else 1
+            }
             enemy.bladeHitCooldown = 0.32f
             if (enemy.health <= 0) {
                 enemy.alive = false
@@ -4319,3 +4330,4 @@ private class GameView(context: Context) : View(context) {
         }
     }
 }
+
