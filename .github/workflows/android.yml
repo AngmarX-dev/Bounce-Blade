@@ -142,7 +142,7 @@ jobs:
                   sys.exit(f"{path}: expected world {expected_world!r}, found {data['world']!r}")
               if any(h.get("type") == "teleporter" for h in data["hazards"]) and sum(h.get("type") == "teleporter" for h in data["hazards"]) < 2:
                   sys.exit(f"{path}: a teleporter level must have a pair")
-          print(f"Validated {len(files)} levels across five worlds.")
+          print(f"Validated {len(files)} levels across ten worlds.")
           PY
 
       - name: Verify hostile enemy behavior and turret durability
@@ -187,7 +187,7 @@ jobs:
           source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
           required = [
               "var maxHealth: Int = health, var bladeHitCooldown: Float = 0f",
-              "enemy.bladeHitCooldown = (enemy.bladeHitCooldown - rawDt).coerceAtLeast(0f)",
+              "enemy.bladeHitCooldown = (enemy.bladeHitCooldown - rawDt * timeScale).coerceAtLeast(0f)",
               "private fun drawEnemyHealthBar(canvas: Canvas, enemy: EnemyState, x: Float, y: Float, drawSize: Float)",
               "drawEnemyHealthBar(canvas, enemy, x, y, drawSize)",
               "val healthRatio = (enemy.health.toFloat() / maxHealth).coerceIn(0f, 1f)",
@@ -332,6 +332,12 @@ jobs:
               "inRect(nx, ny, 0.775f, 0.790f, 0.98f, 0.935f)",
               "inRect(nx, ny, 0.10f, 0.405f, 0.90f, 0.495f)",
               "private fun inRect(x: Float, y: Float, left: Float, top: Float, right: Float, bottom: Float): Boolean {",
+              "inRect(nx, ny, 0.305f, 0.340f, 0.695f, 0.415f) -> screen = GameScreen.DIFFICULTY",
+              "inRect(nx, ny, 0.305f, 0.430f, 0.695f, 0.505f) -> screen = GameScreen.WORLDS",
+              "inRect(nx, ny, 0.305f, 0.520f, 0.695f, 0.595f) -> screen = GameScreen.FEATURES",
+              "inRect(nx, ny, 0.305f, 0.610f, 0.695f, 0.685f) -> openShop(GameScreen.MENU)",
+              "inRect(nx, ny, 0.305f, 0.700f, 0.695f, 0.775f) -> screen = GameScreen.SETTINGS",
+              "inRect(nx, ny, 0.355f, 0.805f, 0.645f, 0.880f) -> { storyPage = 0; screen = GameScreen.STORY }",
           ]
           missing = [marker for marker in required if marker not in source]
           if missing:
@@ -355,6 +361,7 @@ jobs:
               "The Guardians created the Bounce Blade",
               "NEXT CHAPTER",
               "storyPage++",
+              "inRect(nx, ny, 0.355f, 0.805f, 0.645f, 0.880f) -> { storyPage = 0; screen = GameScreen.STORY }",
               "GameScreen.FEATURES, GameScreen.STORY -> GameScreen.MENU",
           ]
           missing = [marker for marker in required if marker not in source]
@@ -421,6 +428,34 @@ jobs:
           if missing_wiring:
               sys.exit("Missing new-art or safe-layout integration: " + ", ".join(missing_wiring))
           print(f"Verified {len(required)} replacement images, legacy cleanup, world artwork, and bounded UI layout.")
+          PY
+
+      - name: Verify slow motion, handed controls, and render allocations
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
+          required = [
+              "val timeScale = if (screen == GameScreen.PLAYING",
+              "updateHostileEnemies(rawDt * timeScale)",
+              "updatePlayerMiniguns(rawDt * timeScale)",
+              "updateTurrets(rawDt * timeScale)",
+              "updateTurretProjectiles(rawDt * timeScale)",
+              "themeId = (themeId + 1) % 6",
+              "val breachX = if (leftHandedMode) 0.892f else 0.108f",
+              "val advanceDirection = if (leftHandedMode) 1f else -1f",
+              "bladeX = if (leftHandedMode) 0.855f else 0.145f",
+              "velocityX = if (leftHandedMode) -speed else speed",
+              "private val pendingWallGuardSpawns = ArrayList<EnemyState>(4)",
+              "private val maxParticleCount = 480",
+              "val measuredWidth = paint.measureText(renderedText)",
+              "lastImpactTier = when {",
+          ]
+          missing = [marker for marker in required if marker not in source]
+          if missing:
+              sys.exit("Missing gameplay/performance fixes: " + ", ".join(missing))
+          print("Verified synchronized slow motion, handed controls, and bounded Canvas effects.")
           PY
 
       - name: Run unit tests and build debug APK
