@@ -166,6 +166,7 @@ private class GameView(context: Context) : View(context) {
     private val enemyHealthFillBounds = RectF()
     private val bladePath = Path()
     private val assignedMinigunTargets = HashSet<Int>()
+    private val minigunTargetCenter = PointF()
     private val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 20)
     private val soundPool = SoundPool.Builder()
         .setMaxStreams(10)
@@ -640,21 +641,39 @@ private class GameView(context: Context) : View(context) {
     private fun droneHitDamage(enemy: EnemyState): Int =
         ((enemy.maxHealth.coerceAtLeast(1) + 2) / 3).coerceAtLeast(1)
 
-    private fun enemyCenter(enemy: EnemyState, index: Int): PointF {
-        val d = when (enemy.kind) {
-            0 -> PointF(sin(animationTime * 1.7f + index * 1.2f) * 0.014f, cos(animationTime * 1.3f + index) * 0.012f)
-            2 -> PointF(sin(animationTime * 1.25f + index * 1.4f) * if (enemy.canSplit) 0.035f else 0.02f, cos(animationTime * 1.8f + index) * 0.02f)
-            3 -> PointF(sin(animationTime * 0.75f + index) * 0.009f, 0f)
-            else -> PointF(0f, 0f)
+    private fun enemyCenter(enemy: EnemyState, index: Int): PointF =
+        enemyCenterInto(enemy, index, PointF())
+
+    private fun enemyCenterInto(enemy: EnemyState, index: Int, out: PointF): PointF {
+        val dx: Float
+        val dy: Float
+        when (enemy.kind) {
+            0 -> {
+                dx = sin(animationTime * 1.7f + index * 1.2f) * 0.014f
+                dy = cos(animationTime * 1.3f + index) * 0.012f
+            }
+            2 -> {
+                dx = sin(animationTime * 1.25f + index * 1.4f) * if (enemy.canSplit) 0.035f else 0.02f
+                dy = cos(animationTime * 1.8f + index) * 0.02f
+            }
+            3 -> {
+                dx = sin(animationTime * 0.75f + index) * 0.009f
+                dy = 0f
+            }
+            else -> {
+                dx = 0f
+                dy = 0f
+            }
         }
-        val jumpProgress = if (enemy.kind == 2 && enemy.jumpTime > 0f)
-            (1f - enemy.jumpTime / 0.58f).coerceIn(0f, 1f) else 0f
-        val jumpArc = if (enemy.kind == 2 && enemy.jumpTime > 0f)
-            -sin(jumpProgress * 3.1415926f) * 0.075f else 0f
-        return PointF(
-            (enemy.x + d.x).coerceIn(0.1f, 0.9f),
-            (enemy.y + d.y + jumpArc).coerceIn(0.17f, 0.84f)
+        val jumpArc = if (enemy.kind == 2 && enemy.jumpTime > 0f) {
+            val jumpProgress = (1f - enemy.jumpTime / 0.58f).coerceIn(0f, 1f)
+            -sin(jumpProgress * 3.1415926f) * 0.075f
+        } else 0f
+        out.set(
+            (enemy.x + dx).coerceIn(0.1f, 0.9f),
+            (enemy.y + dy + jumpArc).coerceIn(0.17f, 0.84f)
         )
+        return out
     }
 
     /**
@@ -2707,7 +2726,8 @@ private class GameView(context: Context) : View(context) {
         if (screen != GameScreen.PLAYING || dt <= 0f) return
         assignedMinigunTargets.clear()
 
-        for ((gunIndex, gun) in playerMiniguns.withIndex()) {
+        for (gunIndex in playerMiniguns.indices) {
+            val gun = playerMiniguns[gunIndex]
             gun.muzzleFlash = (gun.muzzleFlash - dt).coerceAtLeast(0f)
             val turretX = viewW * if (leftHandedMode) 0.875f else 0.125f
             val turretY = viewH * if (gunIndex == 0) 0.235f else 0.815f
@@ -2719,9 +2739,9 @@ private class GameView(context: Context) : View(context) {
             for (candidateIndex in enemies.indices) {
                 val candidate = enemies[candidateIndex]
                 if (!candidate.alive) continue
-                val center = enemyCenter(candidate, candidateIndex)
-                val targetX = center.x * viewW
-                val targetY = center.y * viewH
+                enemyCenterInto(candidate, candidateIndex, minigunTargetCenter)
+                val targetX = minigunTargetCenter.x * viewW
+                val targetY = minigunTargetCenter.y * viewH
                 val distance = distanceSquared(turretX, turretY, targetX, targetY)
                 if (distance < nearestAliveDistance) {
                     nearestAliveDistance = distance
@@ -2741,9 +2761,9 @@ private class GameView(context: Context) : View(context) {
             assignedMinigunTargets.add(targetIndex)
             gun.targetIndex = targetIndex
             val target = enemies[targetIndex]
-            val center = enemyCenter(target, targetIndex)
-            val targetX = center.x * viewW
-            val targetY = center.y * viewH
+            enemyCenterInto(target, targetIndex, minigunTargetCenter)
+            val targetX = minigunTargetCenter.x * viewW
+            val targetY = minigunTargetCenter.y * viewH
             gun.targetX = targetX
             gun.targetY = targetY
 
