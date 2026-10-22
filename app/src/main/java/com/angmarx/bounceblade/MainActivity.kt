@@ -3852,6 +3852,15 @@ private class GameView(context: Context) : View(context) {
         val hitRect = buttonHitBounds
         val buttonBitmap = bitmapAsset("UI Elements/Button.png")
         val visualRect = buttonBitmap?.let { fitAssetRect(it, hitRect) } ?: hitRect
+        // Copy geometry to primitives: fittedAssetBounds is reused by later icon draws.
+        val visualLeft = visualLeft
+        val visualTop = visualRect.top
+        val visualRight = visualRect.right
+        val visualBottom = visualRect.bottom
+        val visualWidth = visualRight - visualLeft
+        val visualHeight = visualBottom - visualTop
+        val visualCenterX = (visualLeft + visualRight) / 2f
+        val visualCenterY = (visualTop + visualBottom) / 2f
         drawAsset(canvas, "UI Elements/Button.png", hitRect, if (enabled) 255 else 125)
         if (enabled && !reducedMotion) {
             val pulse = 0.5f + 0.5f * sin(animationTime * 3.2f + top * 17f + left * 9f)
@@ -3879,22 +3888,22 @@ private class GameView(context: Context) : View(context) {
             else -> null
         }
         if (label == "Ⅱ" && iconPath != null) {
-            val iconSize = min(visualRect.height() * 0.68f, minDim * 0.075f)
-            drawAssetCentered(canvas, iconPath, visualRect.centerX(), visualRect.centerY(), iconSize, if (enabled) 255 else 120)
+            val iconSize = min(visualHeight * 0.68f, minDim * 0.075f)
+            drawAssetCentered(canvas, iconPath, visualCenterX, visualCenterY, iconSize, if (enabled) 255 else 120)
             return
         }
-        val iconSize = if (iconPath == null) 0f else min(visualRect.height() * 0.62f, minDim * 0.060f)
+        val iconSize = if (iconPath == null) 0f else min(visualHeight * 0.62f, minDim * 0.060f)
         if (iconPath != null) {
-            drawAssetCentered(canvas, iconPath, visualRect.left + iconSize * 0.95f, visualRect.centerY(), iconSize, if (enabled) 255 else 120)
+            drawAssetCentered(canvas, iconPath, visualLeft + iconSize * 0.95f, visualCenterY, iconSize, if (enabled) 255 else 120)
         }
         val horizontalPadding = minDim * 0.018f
-        val availableTextWidth = (visualRect.width() - horizontalPadding * 2f - if (iconPath == null) 0f else iconSize * 1.55f).coerceAtLeast(8f * density)
-        val textCenterX = visualRect.centerX() + if (iconPath == null) 0f else iconSize * 0.42f
+        val availableTextWidth = (visualWidth - horizontalPadding * 2f - if (iconPath == null) 0f else iconSize * 1.55f).coerceAtLeast(8f * density)
+        val textCenterX = visualCenterX + if (iconPath == null) 0f else iconSize * 0.42f
         drawText(
             canvas,
             localizeButtonLabel(label),
             textCenterX / viewW,
-            visualRect.centerY() / viewH + 0.008f,
+            visualCenterY / viewH + 0.008f,
             if (label.length > 18) 0.041f else 0.047f,
             if (enabled) color else muted,
             Paint.Align.CENTER,
