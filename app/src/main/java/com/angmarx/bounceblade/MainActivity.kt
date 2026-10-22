@@ -108,7 +108,7 @@ private data class GameLevel(
 private data class PickupState(val type: String, val x: Float, val y: Float, var active: Boolean = true)
 private data class PlayerMinigunState(
     var rotationOffset: Float = 0f,
-    var fireCooldown: Float = 0.45f,
+    var fireCooldown: Float = 5.0f,
     var muzzleFlash: Float = 0f,
     var targetIndex: Int = -1,
     var targetX: Float = 0f,
@@ -453,7 +453,7 @@ private class GameView(context: Context) : View(context) {
                 drawButton(canvas, 0.15f, 0.680f, 0.85f, 0.780f, "LEVEL SELECT", gold)
             }
         }
-        if (screen == GameScreen.PLAYING || flying || particles.isNotEmpty() || turretProjectiles.isNotEmpty() || screen == GameScreen.JUKEBOX) postInvalidateDelayed(frameDelayMillis())
+        postInvalidateDelayed(frameDelayMillis())
     }
 
     private fun frameDelayMillis(): Long {
@@ -2014,14 +2014,6 @@ private class GameView(context: Context) : View(context) {
         paint.strokeWidth = max(1f, density * 0.6f)
         for (i in 1..5) canvas.drawLine(viewW * i / 6f, viewH * 0.02f, viewW * i / 6f, viewH * 0.98f, paint)
         for (i in 1..12) canvas.drawLine(viewW * 0.02f, viewH * i / 13f, viewW * 0.98f, viewH * i / 13f, paint)
-        if (!reducedMotion) {
-            val scanY = ((animationTime * 0.18f) % 1f) * viewH
-            paint.color = Color.argb(28, Color.red(cyan), Color.green(cyan), Color.blue(cyan))
-            paint.strokeWidth = max(2f, density * 2f)
-            canvas.drawLine(0f, scanY, viewW, scanY, paint)
-            paint.color = Color.argb(13, Color.red(pink), Color.green(pink), Color.blue(pink))
-            canvas.drawRect(0f, scanY - viewH * 0.035f, viewW, scanY + viewH * 0.035f, paint)
-        }
         paint.style = Paint.Style.FILL
     }
 
@@ -2033,24 +2025,6 @@ private class GameView(context: Context) : View(context) {
         paint.style = Paint.Style.FILL
         paint.color = Color.argb(62, 3, 6, 18)
         canvas.drawRect(0f, 0f, viewW, viewH, paint)
-        if (!reducedMotion) {
-            paint.style = Paint.Style.STROKE
-            paint.strokeCap = Paint.Cap.ROUND
-            for (i in 0..8) {
-                val phase = (animationTime * (0.10f + (i % 3) * 0.025f) + i * 0.137f) % 1f
-                val x = phase * viewW
-                val y = viewH * (0.18f + (i % 6) * 0.125f)
-                val streak = minDim * (0.018f + (i % 3) * 0.009f)
-                paint.strokeWidth = max(1f, density * (if (i % 3 == 0) 2f else 1f))
-                paint.color = Color.argb((28 + (abs(sin(animationTime * 2f + i)) * 36f)).toInt(),
-                    if (i % 2 == 0) Color.red(cyan) else Color.red(pink),
-                    if (i % 2 == 0) Color.green(cyan) else Color.green(pink),
-                    if (i % 2 == 0) Color.blue(cyan) else Color.blue(pink))
-                canvas.drawLine(x, y, x - streak, y + streak * 0.45f, paint)
-            }
-            paint.strokeCap = Paint.Cap.BUTT
-            paint.style = Paint.Style.FILL
-        }
     }
 
     private fun drawMenu(canvas: Canvas) {
@@ -2058,18 +2032,18 @@ private class GameView(context: Context) : View(context) {
         drawAsset(canvas, "App Icon & Logo/Game Logo.png", RectF(viewW * 0.16f, viewH * 0.13f, viewW * 0.84f, viewH * 0.29f), 255)
         drawText(canvas, "BOUNCE OFF ENEMIES  •  GUARD THE LEFT WALL", 0.5f, 0.322f, 0.018f, muted, Paint.Align.CENTER)
         drawText(canvas, "◈ " + coinBalance(), 0.91f, 0.105f, 0.026f, gold, Paint.Align.RIGHT)
-        // Wider, taller buttons with matching hitboxes for landscape phone touchscreens.
-        drawButton(canvas, 0.075f, 0.342f, 0.925f, 0.414f, "PLAY CAMPAIGN", if (menuSelection == 0) gold else cyan)
-        drawButton(canvas, 0.075f, 0.419f, 0.925f, 0.491f, "LEVEL SELECT", if (menuSelection == 1) pink else gold)
-        drawButton(canvas, 0.075f, 0.496f, 0.925f, 0.568f, "MORE FEATURES", if (menuSelection == 2) cyan else pink)
-        drawButton(canvas, 0.075f, 0.573f, 0.925f, 0.645f, "BLADE SHOP", if (menuSelection == 3) pink else gold)
-        drawButton(canvas, 0.075f, 0.650f, 0.925f, 0.722f, "SETTINGS", if (menuSelection == 4) gold else cyan)
-        drawButton(canvas, 0.075f, 0.727f, 0.925f, 0.799f, "THE STORY", cyan)
+        // Larger touch targets; lower items intentionally require vertical scrolling.
+        drawButton(canvas, 0.055f, 0.340f, 0.945f, 0.425f, "PLAY CAMPAIGN", if (menuSelection == 0) gold else cyan)
+        drawButton(canvas, 0.055f, 0.438f, 0.945f, 0.523f, "LEVEL SELECT", if (menuSelection == 1) pink else gold)
+        drawButton(canvas, 0.055f, 0.536f, 0.945f, 0.621f, "MORE FEATURES", if (menuSelection == 2) cyan else pink)
+        drawButton(canvas, 0.055f, 0.634f, 0.945f, 0.719f, "BLADE SHOP", if (menuSelection == 3) pink else gold)
+        drawButton(canvas, 0.055f, 0.732f, 0.945f, 0.817f, "SETTINGS", if (menuSelection == 4) gold else cyan)
+        drawButton(canvas, 0.055f, 0.830f, 0.945f, 0.915f, "THE STORY", cyan)
         val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
         val bestTotal = totalBestStarsAfter(0, 0)
         drawText(canvas, "UNLOCKED  " + unlocked + "/" + levels.size + "     BEST STARS  " + bestTotal + "/" + (levels.size * 3),
-            0.5f, 0.85f, 0.017f, muted, Paint.Align.CENTER)
-        drawText(canvas, "COLLECT COINS • UPGRADE YOUR BLADE • SURVIVE EVERY WAVE", 0.5f, 0.91f, 0.014f, muted, Paint.Align.CENTER)
+            0.5f, 0.965f, 0.017f, muted, Paint.Align.CENTER)
+        drawText(canvas, "COLLECT COINS • UPGRADE YOUR BLADE • SURVIVE EVERY WAVE", 0.5f, 1.035f, 0.014f, muted, Paint.Align.CENTER)
     }
 
     private fun drawStory(canvas: Canvas) {
@@ -2478,20 +2452,8 @@ private class GameView(context: Context) : View(context) {
         paint.style = Paint.Style.FILL
         when (world) {
             1 -> {
-                // Crimson Circuit: animated gold circuit rails and red data pulses.
-                paint.style = Paint.Style.STROKE
-                paint.strokeWidth = max(1f, density * 1.4f)
-                for (i in 0..6) {
-                    val phase = (animationTime * (0.14f + i * 0.012f) + i * 0.19f) % 1f
-                    val y = viewH * (0.20f + i * 0.095f)
-                    paint.color = Color.argb((22f + 42f * abs(sin(animationTime * 2.4f + i))).toInt(), 255, 176, 50)
-                    canvas.drawLine(viewW * 0.05f, y, viewW * (0.18f + phase * 0.76f), y, paint)
-                    val pulseX = viewW * (0.08f + phase * 0.84f)
-                    paint.style = Paint.Style.FILL
-                    paint.color = Color.argb(130, 255, 196, 70)
-                    canvas.drawCircle(pulseX, y, density * (1.8f + abs(sin(animationTime * 4f + i)) * 2.5f), paint)
-                    paint.style = Paint.Style.STROKE
-                }
+                // Crimson Circuit decorative colored horizontal rails removed.
+                paint.style = Paint.Style.FILL
             }
             5 -> {
                 paint.color = Color.argb(22, 100, 38, 150)
@@ -2698,7 +2660,7 @@ private class GameView(context: Context) : View(context) {
             gun.fireCooldown = (gun.fireCooldown - dt).coerceAtLeast(0f)
             val angularError = abs(normalizedAngle(bearing - 180f - gun.rotationOffset))
             if (gun.fireCooldown <= 0f && angularError <= 17f && target.value.alive) {
-                gun.fireCooldown = 1.10f
+                gun.fireCooldown = 5.0f
                 gun.muzzleFlash = 0.12f
                 applyPlayerMinigunDamage(target.index, targetX, targetY)
             }
@@ -3958,12 +3920,12 @@ private class GameView(context: Context) : View(context) {
                 when (screen) {
                     GameScreen.MENU -> {
                         when {
-                            inRect(nx, ny, 0.075f, 0.342f, 0.925f, 0.414f) -> screen = GameScreen.DIFFICULTY
-                            inRect(nx, ny, 0.075f, 0.419f, 0.925f, 0.491f) -> screen = GameScreen.WORLDS
-                            inRect(nx, ny, 0.075f, 0.496f, 0.925f, 0.568f) -> screen = GameScreen.FEATURES
-                            inRect(nx, ny, 0.075f, 0.573f, 0.925f, 0.645f) -> openShop(GameScreen.MENU)
-                            inRect(nx, ny, 0.075f, 0.650f, 0.925f, 0.722f) -> screen = GameScreen.SETTINGS
-                            inRect(nx, ny, 0.075f, 0.727f, 0.925f, 0.799f) -> { storyPage = 0; screen = GameScreen.STORY }
+                            inRect(nx, ny, 0.055f, 0.340f, 0.945f, 0.425f) -> screen = GameScreen.DIFFICULTY
+                            inRect(nx, ny, 0.055f, 0.438f, 0.945f, 0.523f) -> screen = GameScreen.WORLDS
+                            inRect(nx, ny, 0.055f, 0.536f, 0.945f, 0.621f) -> screen = GameScreen.FEATURES
+                            inRect(nx, ny, 0.055f, 0.634f, 0.945f, 0.719f) -> openShop(GameScreen.MENU)
+                            inRect(nx, ny, 0.055f, 0.732f, 0.945f, 0.817f) -> screen = GameScreen.SETTINGS
+                            inRect(nx, ny, 0.055f, 0.830f, 0.945f, 0.915f) -> { storyPage = 0; screen = GameScreen.STORY }
                         }
                         invalidate()
                         return true
