@@ -30,14 +30,14 @@ class MainActivity : Activity() {
     override fun onDestroy() { if (::game.isInitialized) game.close(); super.onDestroy() }
 }
 
-private object Campaign {
+internal object Campaign {
     const val COUNT = 50
     val names = listOf("NEON GRID", "CRIMSON CIRCUIT", "AZURE VAULT", "MAGENTA MAZE", "GOLDEN CORE")
     val short = listOf("NEON", "CRIMSON", "AZURE", "MAGENTA", "GOLDEN")
     val colors = intArrayOf(0xFF00FFFF.toInt(), 0xFFFF2B4A.toInt(), 0xFF44AAFF.toInt(), 0xFFFF00FF.toInt(), 0xFFFFDD00.toInt())
     fun world(stage: Int) = ((stage.coerceIn(1, COUNT) - 1) / 10).coerceIn(0, 4)
     fun local(stage: Int) = (stage.coerceIn(1, COUNT) - 1) % 10
-    fun enemyCount(stage: Int) = min(18, 3 + world(stage) * 2 + floor(local(stage) * 0.8f).toInt())
+    fun enemyCount(stage: Int) = min(18, 3 + world(stage) * 2 + (local(stage) * 0.8f).toInt())
     fun stars(lives: Int, combo: Int) = if (lives >= 3 && combo >= 3) 3 else if (lives >= 2) 2 else 1
 }
 private enum class Kind { DRONE, TURRET, SLIME }
