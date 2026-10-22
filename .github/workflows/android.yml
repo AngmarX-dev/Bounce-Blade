@@ -348,7 +348,7 @@ jobs:
           source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
           required = [
               "GameScreen.STORY -> drawStory(canvas)",
-              'drawButton(canvas, 0.055f, 0.925f, 0.945f, 1.015f, "THE STORY", cyan)',
+              'drawButton(canvas, 0.355f, 0.805f, 0.645f, 0.880f, "THE STORY", cyan)',
               "private fun drawStory(canvas: Canvas)",
               "Lumen Grid",
               "Golden Core",
