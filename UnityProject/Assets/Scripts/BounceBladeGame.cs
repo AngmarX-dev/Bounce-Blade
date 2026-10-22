@@ -42,6 +42,8 @@ public sealed class BounceBladeGame : MonoBehaviour
     private Transform arena;
     private AudioSource music, sfx;
     private SpriteRenderer blade, shield;
+    private TrailRenderer bladeTrail;
+    private Material bladeTrailMaterial;
     private readonly SpriteRenderer[] guns = new SpriteRenderer[2];
     private Text hudStage, hudScore, hudLives, hudCombo, hudPower, hudSlow;
     private Page page;
@@ -82,6 +84,12 @@ public sealed class BounceBladeGame : MonoBehaviour
         music = gameObject.AddComponent<AudioSource>(); music.loop = true; music.volume = .45f;
         sfx = gameObject.AddComponent<AudioSource>();
         Show(Page.Menu);
+    }
+
+    private void OnDestroy()
+    {
+        if (bladeTrailMaterial != null) Destroy(bladeTrailMaterial);
+        if (music != null) music.Stop();
     }
 
     private void Update()
@@ -135,7 +143,7 @@ public sealed class BounceBladeGame : MonoBehaviour
 
     private void ClearArena()
     {
-        if(arena==null)return; Clear(arena); targets.Clear();bolts.Clear();hazards.Clear();effects.Clear();blade=null;shield=null;guns[0]=guns[1]=null;
+        if(arena==null)return; Clear(arena); targets.Clear();bolts.Clear();hazards.Clear();effects.Clear();blade=null;shield=null;bladeTrail=null;guns[0]=guns[1]=null;
         if(cam!=null)cam.transform.position=cameraHome;
     }
 
@@ -147,6 +155,8 @@ public sealed class BounceBladeGame : MonoBehaviour
         shield=WorldSprite("Shield",null,new Vector3(SX,shieldY,0),new Vector2(.18f,shieldH),12,Accent).GetComponent<SpriteRenderer>();
         shield.sprite=MakeGenerated("shield",Color.white,16,128,true); Fit(shield,new Vector2(.18f,shieldH));
         blade=WorldSprite("Bounce Blade","BounceBlade/Images/Gameplay Sprites/Blade",new Vector3(SX+.45f,shieldY,0),new Vector2(.48f,.48f),20,Color.white).GetComponent<SpriteRenderer>();
+        if(bladeTrailMaterial==null){Shader shader=Shader.Find("Sprites/Default");if(shader!=null)bladeTrailMaterial=new Material(shader){name="Bounce Blade Neon Trail"};}
+        bladeTrail=blade.gameObject.AddComponent<TrailRenderer>();bladeTrail.time=.22f;bladeTrail.startWidth=.11f;bladeTrail.endWidth=.005f;bladeTrail.minVertexDistance=.025f;bladeTrail.numCapVertices=4;bladeTrail.startColor=Accent;bladeTrail.endColor=new Color(Accent.r,Accent.g,Accent.b,0f);bladeTrail.sortingOrder=19;if(bladeTrailMaterial!=null)bladeTrail.material=bladeTrailMaterial;
         for(int i=0;i<2;i++)
         {
             Vector3 pos=new Vector3(L+1.05f,i==0?HH-1f:-HH+1f,0);
@@ -230,6 +240,7 @@ public sealed class BounceBladeGame : MonoBehaviour
         if(slowTime<=0)slowMeter=Mathf.Min(4f+slowLevel*1.4f,slowMeter+dt*.32f);
         float sh=shieldH+(expandTime>0?.7f:0);shieldY=Mathf.Clamp(shieldY,B+sh*.5f,T-sh*.5f);
         if(shield!=null){shield.transform.position=new Vector3(SX,shieldY,0);Fit(shield,new Vector2(.18f,sh));shield.color=expandTime>0?WorldColor[4]:Accent;}
+        if(bladeTrail!=null){bladeTrail.startColor=Accent;bladeTrail.endColor=new Color(Accent.r,Accent.g,Accent.b,0f);}
         TickTargets(dt);TickHazards(dt);TickGuns(dt);TickBolts(dt);TickBlade(dt);
         hudTime-=unscaled;if(hudTime<=0){UpdateHud();hudTime=.08f;}
     }
@@ -306,6 +317,7 @@ public sealed class BounceBladeGame : MonoBehaviour
 
     private void Launch()
     {
+        if(bladeTrail!=null)bladeTrail.Clear();
         Target t=Closest(blade.transform.position,shieldY,false);Vector2 v=t!=null?(Vector2)(t.go.transform.position-blade.transform.position).normalized:new Vector2(1,UnityEngine.Random.Range(-.22f,.22f)).normalized;
         if(v.x<.4f)v.x=.4f;direction=v.normalized;held=false;flying=true;PlaySfx("Core Gameplay SFX/Blade Launch");
     }
@@ -319,6 +331,7 @@ public sealed class BounceBladeGame : MonoBehaviour
 
     private void Catch()
     {
+        if(bladeTrail!=null)bladeTrail.Clear();
         flying=false;held=true;launchIn=.48f;catches++;catchStreak++;score+=25*catchStreak;if(multiCatch){score+=25;slowMeter=Mathf.Min(4f+slowLevel*1.4f,slowMeter+.25f);}
         PlaySfx("Core Gameplay SFX/Wall Ricochet (Variation 1)");if(catchStreak>=2)PlaySfx("UI & Feedback SFX/Combo - Streak");
         FxAt(new Vector3(SX,shieldY,0),"BounceBlade/Images/Effects & Particles/Impact Spark",.9f,.36f);if(vibrateOn)Handheld.Vibrate();if(CountTargets()==0)Complete();
@@ -326,7 +339,7 @@ public sealed class BounceBladeGame : MonoBehaviour
 
     private void Miss()
     {
-        if(!flying)return;flying=false;held=true;launchIn=.75f;lives--;catchStreak=0;combo=1;missed=true;PlaySfx("Core Gameplay SFX/Level Fail - Death");
+        if(!flying)return;if(bladeTrail!=null)bladeTrail.Clear();flying=false;held=true;launchIn=.75f;lives--;catchStreak=0;combo=1;missed=true;PlaySfx("Core Gameplay SFX/Level Fail - Death");
         FxAt(blade.transform.position,"BounceBlade/Images/Effects & Particles/Explosion",.9f,.45f);shake=.25f;shakeTime=.2f;if(vibrateOn)Handheld.Vibrate();if(lives<=0)Fail();else UpdateHud();
     }
 
