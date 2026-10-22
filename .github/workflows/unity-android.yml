@@ -1,0 +1,65 @@
+name: Unity Android APK
+on:
+  push:
+    branches: ["feature/unity-full-game"]
+  pull_request:
+    branches: ["feature/unity-full-game"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    name: Validate Unity source and bundled resources
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate gameplay systems and assets
+        run: python3 UnityProject/Tools/validate_project.py
+      - name: Validate Unity package, version and build entry point
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("UnityProject")
+          manifest = json.loads((root / "Packages/manifest.json").read_text())
+          assert "com.unity.ugui" in manifest["dependencies"]
+          assert "2022.3." in (root / "ProjectSettings/ProjectVersion.txt").read_text()
+          editor = (root / "Assets/Editor/BounceBladeBuild.cs").read_text()
+          assert "BuildPipeline.BuildPlayer" in editor
+          assert "Assets/Scenes/Main.unity" in editor
+          print("Unity package, version and Android build entry point checks passed.")
+          PY
+
+  build-android:
+    name: Build Android APK if a Unity license is available
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Explain skipped build when no Unity license is configured
+        if: ${{ secrets.UNITY_LICENSE == '' }}
+        run: |
+          echo "Source validation passed. APK build skipped because UNITY_LICENSE is not configured."
+          {
+            echo "### APK build skipped"
+            echo "Source and resource validation passed. Add a valid Unity license XML as repository Actions secret UNITY_LICENSE, then re-run this workflow to build and upload the APK."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Build Unity Android player
+        if: ${{ secrets.UNITY_LICENSE != '' }}
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          projectPath: UnityProject
+          unityVersion: 2022.3.62f1
+          targetPlatform: Android
+          buildMethod: BounceBlade.Editor.BounceBladeBuild.BuildAndroid
+          allowDirtyBuild: true
+      - name: Upload standalone APK
+        if: ${{ secrets.UNITY_LICENSE != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: BounceBlade-Unity-Android-APK
+          path: UnityProject/Build/Android/BounceBlade.apk
+          if-no-files-found: error
+          retention-days: 30
