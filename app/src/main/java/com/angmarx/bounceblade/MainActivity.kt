@@ -2786,7 +2786,7 @@ private class GameView(context: Context) : View(context) {
 
     private fun drawPlayerMiniguns(canvas: Canvas) {
         playerMiniguns.forEachIndexed { index, gun ->
-            val centerX = viewW * 0.125f
+            val centerX = viewW * if (leftHandedMode) 0.875f else 0.125f
             val centerY = viewH * if (index == 0) 0.235f else 0.815f
             val gunHeight = minDim * 0.115f
             val gunWidth = minDim * 0.19f
