@@ -1,7 +1,7 @@
 name: Bounce Blade Kotlin APK
 on:
   push:
-    branches: ["feature/kotlin-native-from-html"]
+    branches: ["feature/kotlin-native-from-html", "feature/kotlin-surfaceview-from-spec"]
   workflow_dispatch:
 permissions:
   contents: write
@@ -56,7 +56,7 @@ jobs:
         with:
           tag_name: bounce-blade-kotlin-${{ github.run_number }}
           name: Bounce Blade Kotlin APK (build ${{ github.run_number }})
-          body: Native Kotlin Android edition of Bounce Blade. Install `app-debug.apk` on an Android device.
+          body: Native Kotlin Android edition of Bounce Blade using SurfaceView, a Canvas render loop, landscape immersive display, 50 campaign stages, touch shield controls, hazards, power-ups, progression saves, and procedural sound effects. Install `app-debug.apk` on an Android device.
           files: app/build/outputs/apk/debug/app-debug.apk
           draft: false
           prerelease: true
