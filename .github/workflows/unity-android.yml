@@ -58,7 +58,7 @@ jobs:
           buildMethod: BounceBlade.Editor.BounceBladeBuild.BuildAndroid
           allowDirtyBuild: true
       - name: Upload standalone APK
-        if: ${{ secrets.UNITY_LICENSE != '' }}
+        if: env.UNITY_LICENSE != ''
         uses: actions/upload-artifact@v4
         with:
           name: BounceBlade-Unity-Android-APK
