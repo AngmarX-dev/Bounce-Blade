@@ -3736,7 +3736,7 @@ private class GameView(context: Context) : View(context) {
     ) {
         // The artwork stays strictly inside the same normalized rectangle used by
         // touch handling. This prevents neighboring buttons from visually colliding.
-        val hitRect = RectF(left * viewW, top * viewH, right * viewW, bottom * viewH)
+        val hitRect = RectF(left * viewW, (top - 0.0025f) * viewH, right * viewW, (bottom + 0.0025f) * viewH)
         val buttonBitmap = bitmapAsset("UI Elements/Button.png")
         val visualRect = buttonBitmap?.let { fitAssetRect(it, hitRect) } ?: hitRect
         drawAsset(canvas, "UI Elements/Button.png", hitRect, if (enabled) 255 else 125)
@@ -3941,7 +3941,7 @@ private class GameView(context: Context) : View(context) {
                             inRect(nx, ny, 0.055f, 0.536f, 0.945f, 0.621f) -> screen = GameScreen.FEATURES
                             inRect(nx, ny, 0.055f, 0.634f, 0.945f, 0.719f) -> openShop(GameScreen.MENU)
                             inRect(nx, ny, 0.055f, 0.732f, 0.945f, 0.817f) -> screen = GameScreen.SETTINGS
-                            inRect(nx, ny, 0.055f, 0.830f, 0.945f, 0.915f) -> { storyPage = 0; screen = GameScreen.STORY }
+                            inRect(nx, ny, 0.055f, 0.925f, 0.945f, 1.015f) -> { storyPage = 0; screen = GameScreen.STORY }
                         }
                         invalidate()
                         return true
