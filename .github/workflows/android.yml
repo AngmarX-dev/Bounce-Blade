@@ -1,534 +1,65 @@
-name: Android CI
-
+name: Bounce Blade Kotlin APK
 on:
   push:
-    branches: [main, develop, "feature/**"]
-  pull_request:
+    branches: ["feature/kotlin-native-from-html"]
   workflow_dispatch:
-
 permissions:
   contents: write
-
 jobs:
   build:
-    name: Test and build Android APK
+    name: Test and build standalone Kotlin APK
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
-      - name: Check out source
+      - name: Checkout source
         uses: actions/checkout@v4
-
+      - name: Verify isolated Kotlin project
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          required = ["settings.gradle.kts", "build.gradle.kts", "gradle.properties",
+            "app/build.gradle.kts", "app/src/main/AndroidManifest.xml",
+            "app/src/main/java/com/angmarx/bounceblade/MainActivity.kt",
+            "app/src/test/java/com/angmarx/bounceblade/GameRulesTest.kt"]
+          missing = [p for p in required if not Path(p).is_file()]
+          if missing: sys.exit("Missing project files: " + ", ".join(missing))
+          if Path("index.html").exists() or Path("Images").exists() or Path("SoundTrack").exists():
+            sys.exit("This branch must contain the native game only, not HTML or unrelated assets.")
+          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text()
+          for marker in ["class MainActivity : Activity()", "private fun start(n:Int)", "private fun catchBlade()", "private fun drawStages(c:Canvas)", "private fun drawHow(c:Canvas)"]:
+            if marker not in source: sys.exit("Missing gameplay implementation: " + marker)
+          PY
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-
-      - name: Set up Gradle 8.9
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-
-      - name: Verify image, icon, and soundtrack assets
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import sys
-          required = [
-              "Images/App Icon & Logo/App Icon.png",
-              "Images/App Icon & Logo/Game Logo.png",
-              "Images/Backgrounds & Environments/Gameplay Background.png",
-              "Images/Backgrounds & Environments/Menu Background.png",
-              "Images/Backgrounds & Environments/Victory Background.png",
-              "Images/Backgrounds & Environments/Game Over Background.png",
-              "Images/Gameplay Sprites/Blade.png",
-              "Images/Gameplay Sprites/Enemy Drone.png",
-              "Images/Gameplay Sprites/Enemy Slime.png",
-              "Images/Gameplay Sprites/Enemy Turret.png",
-              "Images/Gameplay Sprites/Portal.png",
-              "Images/UI Elements/Button.png",
-              "SoundTrack/Music & Ambience/Main Menu Theme.wav",
-              "SoundTrack/Music & Ambience/Gameplay Background.wav",
-              "SoundTrack/Music & Ambience/Victory Theme.wav",
-              "SoundTrack/Music & Ambience/Game Over Theme.wav",
-              "SoundTrack/Core Gameplay SFX/Blade Launch.wav",
-              "SoundTrack/Core Gameplay SFX/Level Complete.wav",
-              "SoundTrack/Core Gameplay SFX/Level Fail - Death.wav",
-              "SoundTrack/UI & Feedback SFX/Button Click.wav",
-              "SoundTrack/Optional - Extra Sounds/Power-Up Collect.wav",
-          ]
-          missing = [path for path in required if not Path(path).is_file() or Path(path).stat().st_size == 0]
-          if missing:
-              sys.exit("Missing required game assets: " + ", ".join(missing))
-          print(f"Verified {len(required)} artwork/audio files.")
-          PY
-
-
-      - name: Verify landscape orientation
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import sys
-          manifest = Path("app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
-          activity = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
-          if 'android:screenOrientation="landscape"' not in manifest:
-              sys.exit("AndroidManifest must declare landscape orientation.")
-          if "SCREEN_ORIENTATION_LANDSCAPE" not in activity:
-              sys.exit("MainActivity must request landscape orientation.")
-          print("Verified landscape orientation in the manifest and Activity.")
-          PY
-
-      - name: Verify left-wall guard gameplay
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import sys
-          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
-          required = [
-              "simulateWallGuardStep",
-              "launchWallGuardBlade",
-              "drawWallGuardGame",
-              "guardPaddleY = clampGuardPaddleY(ny)",
-              "THE BLADE PASSED THE LEFT WALL",
-          ]
-          missing = [marker for marker in required if marker not in source]
-          if missing:
-              sys.exit("Missing wall-guard gameplay wiring: " + ", ".join(missing))
-          print("Verified automatic blade launch, movable shield, arcade renderer, and fail condition.")
-          PY
-
-      - name: Validate campaign level JSON
-        run: |
-          python3 - <<'PY'
-          import json
-          import pathlib
-          import sys
-
-          folder = pathlib.Path("app/src/main/assets/levels")
-          files = sorted(folder.glob("level_[0-9][0-9][0-9].json"))
-          if len(files) < 100:
-              sys.exit(f"Expected at least 100 level files, found {len(files)}")
-          required = {"id", "name", "world", "maxBounces", "playerSpawn", "exit", "switch", "enemies", "crates", "hazards", "requiresAllTargets", "requiresSwitch"}
-          for path in files:
-              data = json.loads(path.read_text(encoding="utf-8"))
-              expected_id = int(path.stem[-3:])
-              missing = required - data.keys()
-              if missing:
-                  sys.exit(f"{path}: missing keys {sorted(missing)}")
-              if data["id"] != expected_id:
-                  sys.exit(f"{path}: id {data['id']} does not match filename id {expected_id}")
-              if data["requiresAllTargets"] and (not data["enemies"] or not data["crates"]):
-                  sys.exit(f"{path}: target-required levels need enemies and crates")
-              if not isinstance(data["maxBounces"], int) or data["maxBounces"] < 1:
-                  sys.exit(f"{path}: maxBounces must be a positive integer")
-              for point_name in ("playerSpawn", "exit", "switch"):
-                  point = data[point_name]
-                  if not all(key in point and 0 <= float(point[key]) <= 1 for key in ("x", "y")):
-                      sys.exit(f"{path}: {point_name} must use normalized x/y coordinates")
-              supported_hazards = {"spikes", "laser", "moving_hazard", "sticky_wall", "teleporter", "power_up", "moving_spikes", "rotating_laser", "gravity_well", "conveyor_belt", "breakable_wall", "switch", "key", "door"}
-              for hazard in data["hazards"]:
-                  if hazard.get("type") not in supported_hazards:
-                      sys.exit(f"{path}: unsupported hazard type {hazard.get('type')!r}")
-                  if not all(key in hazard and 0 <= float(hazard[key]) <= 1
-                             for key in ("x", "y", "width", "height")):
-                      sys.exit(f"{path}: hazard data must use normalized coordinates/sizes")
-          if len(files) != 100:
-              sys.exit(f"Expected exactly 100 campaign levels, found {len(files)}")
-          worlds = ["Neon Grid", "Crimson Circuit", "Azure Vault", "Magenta Maze", "Golden Core", "Obsidian Rift", "Solar Flare", "Quantum Abyss", "Storm Citadel", "Celestial Forge"]
-          for path in files:
-              data = json.loads(path.read_text(encoding="utf-8"))
-              expected_world = worlds[(data["id"] - 1) // 10]
-              if data["world"] != expected_world:
-                  sys.exit(f"{path}: expected world {expected_world!r}, found {data['world']!r}")
-              if any(h.get("type") == "teleporter" for h in data["hazards"]) and sum(h.get("type") == "teleporter" for h in data["hazards"]) < 2:
-                  sys.exit(f"{path}: a teleporter level must have a pair")
-          print(f"Validated {len(files)} levels across ten worlds.")
-          PY
-
-      - name: Verify hostile enemy behavior and turret durability
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import sys
-
-          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
-          required = [
-              "private fun updateHostileEnemies(dt: Float)",
-              "val droneSpeed =",
-              "enemy.jumpTime = 0.58f",
-              "id in 21..30 || id >= 41 -> 3",
-              "DRONE HIT THE WALL — YOU BURNED",
-              "val isTurret = enemy.kind == 1 || enemy.kind == 3 || enemy.kind == 7 || enemy.kind == 8 || enemy.kind == 9",
-          ]
-          missing = [marker for marker in required if marker not in source]
-          if missing:
-              sys.exit("Missing hostile enemy behavior: " + ", ".join(missing))
-          extra_required = [
-              "private fun enemyKindForCampaignLevel(id: Int, index: Int): Int",
-              "4 -> {",
-              "5 -> {",
-              "6 -> {",
-              "1, 3, 7, 8, 9 -> {",
-              "HEALER RESTORED AN ENEMY",
-              "EXPLOSIVE BREACHED THE WALL",
-          ]
-          missing_extra = [marker for marker in extra_required if marker not in source]
-          if missing_extra:
-              sys.exit("Missing expanded enemy variants: " + ", ".join(missing_extra))
-          print("Verified drone pursuit/breach, healer, explosive, teleporter, sniper, armored and boss behaviors.")
-          PY
-
-      - name: Verify per-enemy health bars and piercing blade damage
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import sys
-
-          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
-          required = [
-              "var maxHealth: Int = health, var bladeHitCooldown: Float = 0f",
-              "enemy.bladeHitCooldown = (enemy.bladeHitCooldown - rawDt * timeScale).coerceAtLeast(0f)",
-              "private fun drawEnemyHealthBar(canvas: Canvas, enemy: EnemyState, x: Float, y: Float, drawSize: Float)",
-              "drawEnemyHealthBar(canvas, enemy, x, y, drawSize)",
-              "val healthRatio = (enemy.health.toFloat() / maxHealth).coerceIn(0f, 1f)",
-              "val fillColor = when {",
-              "enemy.bladeHitCooldown = 0.32f",
-              "val piercingBoost = (activeEffects[\"piercing\"] ?: 0f) > 0f",
-              "enemy.health -= if (piercingBoost) 2 else 1",
-              "val passDistance = hitRadius + minDim * 0.008f",
-              "px = ex + (velocityX / adjustedSpeed) * passDistance",
-              "py = ey + (velocityY / adjustedSpeed) * passDistance",
-              "ENEMY DAMAGED",
-          ]
-          missing = [marker for marker in required if marker not in source]
-          if missing:
-              sys.exit("Missing enemy health/pass-through behavior: " + ", ".join(missing))
-
-          sim_start = source.index("    private fun simulateStep(dt: Float) {")
-          arcade_start = source.index("    /**\n     * Arcade mode:", sim_start)
-          normal = source[sim_start:arcade_start]
-          hit_start = normal.index("        val pendingSlimes = mutableListOf<EnemyState>()")
-          hit_end = normal.index("        enemies.addAll(pendingSlimes)", hit_start)
-          normal_enemy_hits = normal[hit_start:hit_end]
-          if "reflectFrom(dx, dy)" in normal_enemy_hits or "useBounce()" in normal_enemy_hits:
-              sys.exit("Normal-mode enemy hits must pierce without reflecting or spending a bounce.")
-
-          wall_start = source.index("    private fun simulateWallGuardStep(dt: Float) {")
-          wall_after = source.index("\n    private fun ", wall_start + 20)
-          wall_guard = source[wall_start:wall_after]
-          if "if (!enemy.alive || enemy.bladeHitCooldown > 0f) continue" not in wall_guard:
-              sys.exit("Wall-guard enemy hits must honor the per-enemy damage cooldown.")
-          if "reflectFrom(" in wall_guard[wall_guard.index("val pendingSpawns"):wall_guard.index("enemies.addAll(pendingSpawns)")]:
-              sys.exit("Wall-guard ordinary enemy hits must not reflect the blade.")
-          print("Verified health bars for all enemies, per-enemy damage cooldowns, and pass-through hits.")
-          PY
-
-      - name: Verify blade shop, coin rewards, and purchased powers
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import sys
-
-          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
-          required = [
-              "private fun drawShop(canvas: Canvas)",
-              "private fun purchaseShopItem(index: Int)",
-              "private fun activateNovaPulse()",
-              "private fun drawNovaFlash(canvas: Canvas)",
-              "val baseCoinReward = 80 + levelId * 8 + earnedStars * 30",
-              "private fun bladeSpeedScale(): Float",
-              "private fun coinBalance(): Int",
-              "NOVA READY",
-              "BLADE SHOP",
-              "val droneSpeed = (0.022f + min(levelId, 20) * 0.00045f)",
-              "private fun guardPaddleHalf(): Float = viewH * when (difficulty)",
-          ]
-          missing = [marker for marker in required if marker not in source]
-          if missing:
-              sys.exit("Missing shop/power/economy wiring: " + ", ".join(missing))
-          print("Verified shop economy, persistent upgrades, Nova Pulse, larger buttons, and slower drones.")
-          PY
-
-      - name: Verify player minigun artwork, armory unlocks, and auto-aim damage
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import sys
-
-          artwork = [
-              "Images/Player Miniguns/Gameplay/Minigun_AzureVault.png",
-              "Images/Player Miniguns/Menu/Minigun_AzureVault.png",
-              "Images/Player Miniguns/Gameplay/Minigun_CelestialForge.png",
-              "Images/Player Miniguns/Menu/Minigun_CelestialForge.png",
-              "Images/Player Miniguns/Gameplay/Minigun_CrimsonCircuit.png",
-              "Images/Player Miniguns/Menu/Minigun_CrimsonCircuit.png",
-              "Images/Player Miniguns/Gameplay/Minigun_GoldenCore.png",
-              "Images/Player Miniguns/Menu/Minigun_GoldenCore.png",
-              "Images/Player Miniguns/Gameplay/Minigun_MagentaMaze.png",
-              "Images/Player Miniguns/Menu/Minigun_MagentaMaze.png",
-              "Images/Player Miniguns/Gameplay/Minigun_NeonGrid.png",
-              "Images/Player Miniguns/Menu/Minigun_NeonGrid.png",
-              "Images/Player Miniguns/Gameplay/Minigun_ObsidianRift.png",
-              "Images/Player Miniguns/Menu/Minigun_ObsidianRift.png",
-              "Images/Player Miniguns/Gameplay/Minigun_QuantumAbyss.png",
-              "Images/Player Miniguns/Menu/Minigun_QuantumAbyss.png",
-              "Images/Player Miniguns/Gameplay/Minigun_SolarFlare.png",
-              "Images/Player Miniguns/Menu/Minigun_SolarFlare.png",
-              "Images/Player Miniguns/Gameplay/Minigun_StormCitadel.png",
-              "Images/Player Miniguns/Menu/Minigun_StormCitadel.png",
-          ]
-          missing_art = [path for path in artwork if not Path(path).is_file() or Path(path).stat().st_size == 0]
-          if missing_art:
-              sys.exit("Missing player minigun artwork: " + ", ".join(missing_art))
-
-          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
-          required = [
-              "private val playerMinigunKeys = listOf(",
-              "\"NeonGrid\", \"CrimsonCircuit\", \"AzureVault\", \"MagentaMaze\", \"GoldenCore\",",
-              "\"ObsidianRift\", \"SolarFlare\", \"QuantumAbyss\", \"StormCitadel\", \"CelestialForge\"",
-              "private fun drawMinigunArmory(canvas: Canvas)",
-              "private fun isPlayerMinigunUnlocked(index: Int): Boolean",
-              "private fun minigunCardBounds(index: Int): FloatArray",
-              "private fun updatePlayerMiniguns(dt: Float)",
-              "private fun applyPlayerMinigunDamage(enemyIndex: Int, x: Float, y: Float)",
-              "private fun drawPlayerMiniguns(canvas: Canvas)",
-              "val centerX = viewW * if (leftHandedMode) 0.875f else 0.125f",
-              "val turretX = viewW * if (leftHandedMode) 0.875f else 0.125f",
-              "val turretY = viewH * if (gunIndex == 0) 0.235f else 0.815f",
-              "val desiredOffset = normalizedAngle(bearing - 180f)",
-              "if (gun.fireCooldown <= 0f && angularError <= 17f && target.alive)",
-              "gun.fireCooldown = 5.0f",
-              "putBoolean(\"player_minigun_unlocked_\" + minigunRewardIndex, true)",
-              "GameScreen.MINIGUNS -> drawMinigunArmory(canvas)",
-              "selectedPlayerMinigun = selectedCard",
-              "return \"Player Miniguns/\" + folder + \"/Minigun_\"",
-          ]
-          missing = [marker for marker in required if marker not in source]
-          if missing:
-              sys.exit("Missing player minigun gameplay or unlock logic: " + ", ".join(missing))
-          print(f"Verified {len(artwork)} player minigun images, armory selection, unlock milestones, auto-aim and light damage.")
-          PY
-
-      - name: Verify large and tappable game buttons
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import sys
-
-          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
-          required = [
-              "buttonHitBounds.set(left * viewW, (top - 0.0025f) * viewH, right * viewW, (bottom + 0.0025f) * viewH)",
-              "val hitRect = buttonHitBounds",
-              "val visualRect = buttonBitmap?.let { fitAssetRect(it, hitRect) } ?: hitRect",
-              "drawAsset(canvas, \"UI Elements/Button.png\", hitRect, if (enabled) 255 else 125)",
-              "availableTextWidth",
-              "maxWidth: Float = 0f",
-              "if (label.length > 18) 0.041f else 0.047f",
-              "drawButton(canvas, 0.825f, 0.027f, 0.97f, 0.110f, \"Ⅱ\", pink)",
-              "val novaLeft = if (oneHandedMode)",
-              "val novaTop = if (oneHandedMode)",
-              "if (leftHandedMode) drawButton(canvas, novaLeft, novaTop, novaRight, novaBottom, novaLabel, gold, true)",
-              "else drawButton(canvas, novaLeftRight, novaTop, novaRightRight, novaBottom, novaLabel, gold, true)",
-              "val abilityHit = if (oneHandedMode)",
-              "inRect(nx, ny, 0.82f, 0.025f, 0.98f, 0.115f)",
-              "inRect(nx, ny, 0.775f, 0.790f, 0.98f, 0.935f)",
-              "inRect(nx, ny, 0.10f, 0.405f, 0.90f, 0.495f)",
-              "private fun inRect(x: Float, y: Float, left: Float, top: Float, right: Float, bottom: Float): Boolean {",
-              "inRect(nx, ny, 0.305f, 0.340f, 0.695f, 0.415f) -> screen = GameScreen.DIFFICULTY",
-              "inRect(nx, ny, 0.305f, 0.430f, 0.695f, 0.505f) -> screen = GameScreen.WORLDS",
-              "inRect(nx, ny, 0.305f, 0.520f, 0.695f, 0.595f) -> screen = GameScreen.FEATURES",
-              "inRect(nx, ny, 0.305f, 0.610f, 0.695f, 0.685f) -> openShop(GameScreen.MENU)",
-              "inRect(nx, ny, 0.305f, 0.700f, 0.695f, 0.775f) -> screen = GameScreen.SETTINGS",
-              "inRect(nx, ny, 0.355f, 0.805f, 0.645f, 0.880f) -> { storyPage = 0; screen = GameScreen.STORY }",
-          ]
-          missing = [marker for marker in required if marker not in source]
-          if missing:
-              sys.exit("Missing larger button or matching hitbox wiring: " + ", ".join(missing))
-          print("Verified larger button artwork, type, and matching touch zones.")
-          PY
-
-      - name: Verify in-game story chapters and navigation
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import sys
-
-          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
-          required = [
-              "GameScreen.STORY -> drawStory(canvas)",
-              'drawButton(canvas, 0.355f, 0.805f, 0.645f, 0.880f, "THE STORY", cyan)',
-              "private fun drawStory(canvas: Canvas)",
-              "Lumen Grid",
-              "Golden Core",
-              "The Guardians created the Bounce Blade",
-              "NEXT CHAPTER",
-              "storyPage++",
-              "inRect(nx, ny, 0.355f, 0.805f, 0.645f, 0.880f) -> { storyPage = 0; screen = GameScreen.STORY }",
-              "GameScreen.FEATURES, GameScreen.STORY -> GameScreen.MENU",
-          ]
-          missing = [marker for marker in required if marker not in source]
-          if missing:
-              sys.exit("Missing in-game story feature: " + ", ".join(missing))
-          print("Verified story menu entry, three narrative chapters, and navigation.")
-          PY
-
-      - name: Verify replacement artwork and safe layout bounds
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import sys
-
-          required = [
-              "Images/App Icon & Logo/Splash Screen.png",
-              "Images/Backgrounds & Environments/Game Over Background.png",
-              "Images/Backgrounds & Environments/Gameplay Background.png",
-              "Images/Backgrounds & Environments/Menu Background.png",
-              "Images/Backgrounds & Environments/Victory Background.png",
-              "Images/Banners & Text/Game Over Banner.png",
-              "Images/Banners & Text/Level Complete Banner.png",
-              "Images/Banners & Text/Victory Banner.png",
-              "Images/Effects & Particles/Impact Spark.png",
-              "Images/Effects & Particles/Portal Enter Effect.png",
-              "Images/Effects & Particles/Slice Effect.png",
-              "Images/Gameplay Sprites/Floor Tile.jpg",
-              "Images/Gameplay Sprites/Switch.jpg",
-              "Images/Gameplay Sprites/Wall Segment.jpg",
-              "Images/World Art/Neon Grid.png",
-              "Images/World Art/Crimson Circuit.png",
-              "Images/World Art/Azure Vault.png",
-              "Images/World Art/Magenta Maze.png",
-              "Images/World Art/Golden Core.png",
-          ]
-          missing = [path for path in required if not Path(path).is_file() or Path(path).stat().st_size == 0]
-          if missing:
-              sys.exit("Missing replacement artwork: " + ", ".join(missing))
-          # Keep New Image/MiniGun and MiniGun_UP as the user-managed source art; CI checks their runtime copies separately.
-          legacy = [
-              "Images/UI Elements/Button.jpeg",
-              "Images/Gameplay Sprites/Floor Tile.png",
-              "Images/Gameplay Sprites/Switch.png",
-              "Images/Gameplay Sprites/Wall Segment.png",
-          ]
-          present = [path for path in legacy if Path(path).exists()]
-          if present:
-              sys.exit("Legacy artwork still present: " + ", ".join(present))
-
-          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
-          required_wiring = [
-              "World Art/Neon Grid.png",
-              "World Art/Crimson Circuit.png",
-              "World Art/Azure Vault.png",
-              "World Art/Magenta Maze.png",
-              "World Art/Golden Core.png",
-              "availableTextWidth",
-              "val top = 0.225f + row * 0.126f",
-              "inRect(nx, ny, left, top, left + 0.44f, top + 0.105f)",
-              "Gameplay Sprites/Switch.jpg",
-              "Effects & Particles/Impact Spark.png",
-          ]
-          missing_wiring = [marker for marker in required_wiring if marker not in source]
-          if missing_wiring:
-              sys.exit("Missing new-art or safe-layout integration: " + ", ".join(missing_wiring))
-          print(f"Verified {len(required)} replacement images, legacy cleanup, world artwork, and bounded UI layout.")
-          PY
-
-      - name: Verify slow motion, handed controls, and render allocations
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import sys
-          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
-          required = [
-              "val timeScale = if (screen == GameScreen.PLAYING",
-              "updateHostileEnemies(rawDt * timeScale)",
-              "updatePlayerMiniguns(rawDt * timeScale)",
-              "updateTurrets(rawDt * timeScale)",
-              "updateTurretProjectiles(rawDt * timeScale)",
-              "themeId = (themeId + 1) % 6",
-              "val breachX = if (leftHandedMode) 0.892f else 0.108f",
-              "val advanceDirection = if (leftHandedMode) 1f else -1f",
-              "bladeX = if (leftHandedMode) 0.855f else 0.145f",
-              "velocityX = if (leftHandedMode) -speed else speed",
-              "private val pendingWallGuardSpawns = ArrayList<EnemyState>(4)",
-              "private val maxParticleCount = 480",
-              "val measuredWidth = paint.measureText(renderedText)",
-              "lastImpactTier = when {",
-              "private fun shouldAnimateContinuously(): Boolean",
-              "if (shouldAnimateContinuously()) postInvalidateDelayed(frameDelayMillis())",
-              "private val fittedAssetBounds = RectF()",
-              "private val centeredAssetBounds = RectF()",
-              "private val bladePath = Path()",
-              "bladePath.reset()",
-              "private val assignedMinigunTargets = HashSet<Int>()",
-              "private val minigunTargetCenter = PointF()",
-              "private fun enemyCenterInto(enemy: EnemyState, index: Int, out: PointF): PointF",
-              "enemyHealthFillBounds.set(barLeft + inset, barTop + inset, fillRight, barBottom - inset)",
-              "private val wallGuardArenaBounds = RectF()",
-              "private val shieldHighlightBounds = RectF()",
-              "gameplayArenaBounds.set(",
-              "wallGuardBladeBounds.set(",
-          ]
-          missing = [marker for marker in required if marker not in source]
-          if missing:
-              sys.exit("Missing gameplay/performance fixes: " + ", ".join(missing))
-          print("Verified synchronized timing, mirrored controls, bounded Canvas effects, and idle-frame/allocation optimizations.")
-          PY
-
-      - name: Run unit tests and build debug APK
-        run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug
-
-      - name: Verify transparent-padding trimming is enabled
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import sys
-
-          source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
-          required = [
-              "private fun trimTransparentPadding(source: Bitmap)",
-              "source.getPixels(pixels, 0, width, 0, 0, width, height)",
-              "if (alpha > 12)",
-              "Bitmap.createBitmap(source, left, top, right - left, bottom - top)",
-              "val bitmap = trimTransparentPadding(decoded)",
-          ]
-          missing = [marker for marker in required if marker not in source]
-          if missing:
-              sys.exit("Missing transparent-padding trimming implementation: " + ", ".join(missing))
-          print("Verified image-load trimming removes transparent borders while preserving source PNGs.")
-          PY
-
-      - name: Verify standalone APK output
-        if: success()
-        run: |
-          test -s app/build/outputs/apk/debug/app-debug.apk
-          file app/build/outputs/apk/debug/app-debug.apk
-          python3 - <<'PY'
-          from pathlib import Path
-          apk = Path("app/build/outputs/apk/debug/app-debug.apk")
-          with apk.open("rb") as stream:
-              if stream.read(4) != bytes((0x50, 0x4b, 0x03, 0x04)):
-                  raise SystemExit("APK does not have a valid ZIP-based Android package header.")
-          print(f"Verified standalone APK: {apk.name} ({apk.stat().st_size} bytes).")
-          PY
-
-      # Actions artifacts are downloaded as ZIP archives. Publish the APK as a
-      # Release asset instead so Android can download app-debug.apk directly.
-      - name: Move latest debug tag to this build
-        if: success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        run: |
-          git tag --force latest-debug "$GITHUB_SHA"
-          git push --force origin refs/tags/latest-debug
-
-      - name: Publish standalone APK download
-        if: success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+      - name: Run unit tests and build APK
+        run: gradle --no-daemon testDebugUnitTest assembleDebug
+      - name: Verify APK
+        run: test -s app/build/outputs/apk/debug/app-debug.apk
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BounceBlade-Kotlin-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish APK Release
+        if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest-debug
-          name: Bounce Blade - Latest Debug APK
-          body: |
-            Latest successful debug build of Bounce Blade.
-            Download app-debug.apk directly; it is not wrapped in a ZIP archive.
+          tag_name: bounce-blade-kotlin-${{ github.run_number }}
+          name: Bounce Blade Kotlin APK (build ${{ github.run_number }})
+          body: Native Kotlin Android edition of Bounce Blade. Install `app-debug.apk` on an Android device.
+          files: app/build/outputs/apk/debug/app-debug.apk
+          draft: false
           prerelease: true
           make_latest: false
-          overwrite_files: true
-          files: app/build/outputs/apk/debug/app-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
