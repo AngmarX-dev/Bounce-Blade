@@ -49,7 +49,8 @@ public sealed class BounceBladeGame : MonoBehaviour
     private int bestCombo = 1, combo = 1, catchStreak, catches;
     private int[] stars = new int[MaxStages + 1], high = new int[MaxStages + 1];
     private bool musicOn = true, sfxOn = true, vibrateOn = true, multiCatch, held = true, flying, missed;
-    private float shieldY, shieldH, launchIn, bladeAngle, stageTime, bladeSpeed = 7.4f, doubleTime, expandTime, stickyTime, slowMeter = 4f, slowTime, hazardLock, gunCooldown;
+    private float shieldY, shieldH, launchIn, bladeAngle, stageTime, bladeSpeed = 7.4f, doubleTime, expandTime, stickyTime, slowMeter = 4f, slowTime, hazardLock;
+    private readonly float[] gunCooldown = new float[2];
     private float shake, shakeTime, powerTime, hudTime;
     private string powerLabel = "";
     private Vector2 direction = Vector2.right;
@@ -125,7 +126,7 @@ public sealed class BounceBladeGame : MonoBehaviour
     {
         stage=Mathf.Clamp(n,1,MaxStages); world=(stage-1)/10; selectedWorld=world; score=0;lives=3;combo=bestCombo=1;catchStreak=catches=0;stageTime=0;missed=false;
         shieldH=(1.65f+shieldLevel*.12f)*ShieldDifficulty();shieldY=0;launchIn=.7f;held=true;flying=false;direction=Vector2.right;
-        doubleTime=expandTime=stickyTime=hazardLock=slowTime=gunCooldown=0;slowMeter=4f+slowLevel*1.4f;powerTime=0;powerLabel="";
+        doubleTime=expandTime=stickyTime=hazardLock=slowTime=0;gunCooldown[0]=gunCooldown[1]=0;slowMeter=4f+slowLevel*1.4f;powerTime=0;powerLabel="";
         ClearArena(); BuildArena(); SpawnStage(); Show(Page.Game); PlayMusic("Music & Ambience/Gameplay Background"); PlaySfx("Core Gameplay SFX/Blade Launch");
     }
 
@@ -271,12 +272,12 @@ public sealed class BounceBladeGame : MonoBehaviour
 
     private void TickGuns(float dt)
     {
-        if(gunLevel<=0)return;gunCooldown-=dt;
+        if(gunLevel<=0)return;for(int i=0;i<gunCooldown.Length;i++)gunCooldown[i]-=dt;
         for(int i=0;i<guns.Length;i++)
         {
             SpriteRenderer gun=guns[i];if(gun==null||!gun.enabled)continue;Target t=Closest(gun.transform.position,i==0?T-.8f:B+.8f,true);if(t==null)continue;
             Vector2 v=t.go.transform.position-gun.transform.position;gun.transform.rotation=Quaternion.Euler(0,0,Mathf.Atan2(v.y,v.x)*Mathf.Rad2Deg);
-            if(gunCooldown<=0&&i==1){Shoot(gun.transform.position,t,Mathf.Max(1,Mathf.CeilToInt(t.maxHp/3f)));gunCooldown=Mathf.Max(.22f,.72f-gunLevel*.075f);}
+            if(gunCooldown[i]<=0){Shoot(gun.transform.position,t,Mathf.Max(1,Mathf.CeilToInt(t.maxHp/3f)));gunCooldown[i]=Mathf.Max(.30f,.82f-gunLevel*.075f);}
         }
     }
 
