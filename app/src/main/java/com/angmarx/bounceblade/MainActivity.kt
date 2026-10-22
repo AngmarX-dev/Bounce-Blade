@@ -303,6 +303,11 @@ private class GameView(context: Context) : View(context) {
     private val collectedPowerUps = mutableSetOf<Int>()
     private val turretProjectiles = mutableListOf<TurretProjectile>()
     private var animationTime = 0f
+    private var menuScrollOffset = 0f
+    private var scrollTouchStartY = 0f
+    private var scrollOffsetAtTouchStart = 0f
+    private var scrollGesture = false
+    private var lastScrollScreen = GameScreen.MENU
     private var slowMeter = 1f
     private val bladeTrail = mutableListOf<PointF>()
     private var aimStartX = 0f
@@ -382,6 +387,10 @@ private class GameView(context: Context) : View(context) {
         super.onDraw(canvas)
         viewW = width.toFloat().coerceAtLeast(1f)
         viewH = height.toFloat().coerceAtLeast(1f)
+        if (screen != lastScrollScreen) {
+            menuScrollOffset = 0f
+            lastScrollScreen = screen
+        }
         contentDescription = when (screen) {
             GameScreen.MENU -> "Bounce Blade main menu. Campaign progress " + prefs.getInt("unlocked_level", 1) + " of " + levels.size + "."
             GameScreen.WORLDS -> "World selection. Choose an unlocked world."
@@ -396,6 +405,8 @@ private class GameView(context: Context) : View(context) {
         updateMusicForScreen()
         updateBladeIdleLoop()
         drawBackground(canvas)
+        canvas.save()
+        if (screen != GameScreen.PLAYING) canvas.translate(0f, -menuScrollOffset * viewH)
         when (screen) {
             GameScreen.MENU -> drawMenu(canvas)
             GameScreen.STORY -> drawStory(canvas)
@@ -453,6 +464,7 @@ private class GameView(context: Context) : View(context) {
                 drawButton(canvas, 0.15f, 0.680f, 0.85f, 0.780f, "LEVEL SELECT", gold)
             }
         }
+        canvas.restore()
         postInvalidateDelayed(frameDelayMillis())
     }
 
@@ -2038,12 +2050,12 @@ private class GameView(context: Context) : View(context) {
         drawButton(canvas, 0.055f, 0.536f, 0.945f, 0.621f, "MORE FEATURES", if (menuSelection == 2) cyan else pink)
         drawButton(canvas, 0.055f, 0.634f, 0.945f, 0.719f, "BLADE SHOP", if (menuSelection == 3) pink else gold)
         drawButton(canvas, 0.055f, 0.732f, 0.945f, 0.817f, "SETTINGS", if (menuSelection == 4) gold else cyan)
-        drawButton(canvas, 0.055f, 0.830f, 0.945f, 0.915f, "THE STORY", cyan)
+        drawButton(canvas, 0.055f, 0.925f, 0.945f, 1.015f, "THE STORY", cyan)
         val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
         val bestTotal = totalBestStarsAfter(0, 0)
         drawText(canvas, "UNLOCKED  " + unlocked + "/" + levels.size + "     BEST STARS  " + bestTotal + "/" + (levels.size * 3),
-            0.5f, 0.965f, 0.017f, muted, Paint.Align.CENTER)
-        drawText(canvas, "COLLECT COINS • UPGRADE YOUR BLADE • SURVIVE EVERY WAVE", 0.5f, 1.035f, 0.014f, muted, Paint.Align.CENTER)
+            0.5f, 1.065f, 0.017f, muted, Paint.Align.CENTER)
+        drawText(canvas, "COLLECT COINS • UPGRADE YOUR BLADE • SURVIVE EVERY WAVE", 0.5f, 1.135f, 0.014f, muted, Paint.Align.CENTER)
     }
 
     private fun drawStory(canvas: Canvas) {
@@ -3894,7 +3906,8 @@ private class GameView(context: Context) : View(context) {
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val nx = event.x / viewW
-        val ny = event.y / viewH
+        val rawNy = event.y / viewH
+        val ny = rawNy + if (screen == GameScreen.PLAYING) 0f else menuScrollOffset
         when (event.actionMasked) {
             MotionEvent.ACTION_POINTER_DOWN -> {
                 if (screen == GameScreen.PLAYING && gameMode == "local_coop") {
@@ -3915,6 +3928,9 @@ private class GameView(context: Context) : View(context) {
                 return true
             }
             MotionEvent.ACTION_DOWN -> {
+                scrollTouchStartY = event.y
+                scrollOffsetAtTouchStart = menuScrollOffset
+                scrollGesture = false
                 primaryPointerId = event.getPointerId(0)
                 if (screen != GameScreen.PLAYING) playSfx("UI & Feedback SFX/Button Click.wav")
                 when (screen) {
@@ -4355,6 +4371,16 @@ private class GameView(context: Context) : View(context) {
                 }
             }
             MotionEvent.ACTION_MOVE -> {
+                if (screen != GameScreen.PLAYING) {
+                    val drag = (scrollTouchStartY - event.y) / viewH
+                    if (scrollGesture || abs(drag) > 0.018f) {
+                        scrollGesture = true
+                        val maxScroll = if (screen == GameScreen.MENU) 0.30f else 0.22f
+                        menuScrollOffset = (scrollOffsetAtTouchStart + drag).coerceIn(0f, maxScroll)
+                        invalidate()
+                        return true
+                    }
+                }
                 if (touchingAbility) return true
                 if (screen == GameScreen.PLAYING && gameMode == "local_coop") {
                     for (index in 0 until event.pointerCount) {
@@ -4381,6 +4407,11 @@ private class GameView(context: Context) : View(context) {
             }
             MotionEvent.ACTION_UP -> {
                 primaryPointerId = -1
+                if (scrollGesture) {
+                    scrollGesture = false
+                    invalidate()
+                    return true
+                }
                 secondPointerId = -1
                 if (touchingAbility) {
                     touchingAbility = false
@@ -4430,7 +4461,7 @@ private class GameView(context: Context) : View(context) {
 
     private fun inRect(x: Float, y: Float, left: Float, top: Float, right: Float, bottom: Float): Boolean {
         val padX = (right - left) * 0.025f
-        val padY = (bottom - top) * 0.025f
+        val padY = max((bottom - top) * 0.025f, 0.012f)
         return x >= left - padX && x <= right + padX &&
             y >= top - padY && y <= bottom + padY
     }
