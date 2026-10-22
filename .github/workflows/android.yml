@@ -452,11 +452,19 @@ jobs:
               "private val maxParticleCount = 480",
               "val measuredWidth = paint.measureText(renderedText)",
               "lastImpactTier = when {",
+              "private fun shouldAnimateContinuously(): Boolean",
+              "if (shouldAnimateContinuously()) postInvalidateDelayed(frameDelayMillis())",
+              "private val fittedAssetBounds = RectF()",
+              "private val centeredAssetBounds = RectF()",
+              "private val bladePath = Path()",
+              "bladePath.reset()",
+              "private val assignedMinigunTargets = HashSet<Int>()",
+              "enemyHealthFillBounds.set(barLeft + inset, barTop + inset, fillRight, barBottom - inset)",
           ]
           missing = [marker for marker in required if marker not in source]
           if missing:
               sys.exit("Missing gameplay/performance fixes: " + ", ".join(missing))
-          print("Verified synchronized slow motion, handed controls, and bounded Canvas effects.")
+          print("Verified synchronized timing, mirrored controls, bounded Canvas effects, and idle-frame/allocation optimizations.")
           PY
 
       - name: Run unit tests and build debug APK
