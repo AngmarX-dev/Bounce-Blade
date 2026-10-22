@@ -164,6 +164,18 @@ private class GameView(context: Context) : View(context) {
     private val coverTargetBounds = RectF()
     private val enemyHealthBarBounds = RectF()
     private val enemyHealthFillBounds = RectF()
+    private val gameplayArenaBounds = RectF()
+    private val gameplayPanelBounds = RectF()
+    private val timerIconBounds = RectF()
+    private val comboIconBounds = RectF()
+    private val comboTextBounds = RectF()
+    private val gameplayBladeBounds = RectF()
+    private val wallGuardArenaBounds = RectF()
+    private val wallGuardPanelBounds = RectF()
+    private val shieldBounds = RectF()
+    private val shieldHighlightBounds = RectF()
+    private val secondShieldBounds = RectF()
+    private val wallGuardBladeBounds = RectF()
     private val bladePath = Path()
     private val assignedMinigunTargets = HashSet<Int>()
     private val minigunTargetCenter = PointF()
@@ -2319,12 +2331,16 @@ private class GameView(context: Context) : View(context) {
         val timeLeft=GameRules.timeLimitSeconds(levelId,difficulty)-levelElapsedSeconds
         drawText(canvas,"SCORE "+score,0.07f,0.092f,0.018f,gold)
         drawText(canvas,"TIME "+formatTime(timeLeft),0.47f,0.092f,0.018f,if(levelElapsedSeconds<=GameRules.targetTimeSeconds(levelId,difficulty)) cyan else pink,Paint.Align.CENTER)
-        drawAsset(canvas, "UI Elements/Timer Icon.png", RectF(viewW * 0.365f, viewH * 0.077f, viewW * 0.405f, viewH * 0.11f), 240)
+        timerIconBounds.set(viewW * 0.365f, viewH * 0.077f, viewW * 0.405f, viewH * 0.11f)
+        drawAsset(canvas, "UI Elements/Timer Icon.png", timerIconBounds, 240)
         drawText(canvas,"COMBO x"+comboCount,0.775f,0.092f,0.018f,pink,Paint.Align.RIGHT)
-        drawAsset(canvas, "UI Elements/Combo Icon.png", RectF(viewW * 0.785f, viewH * 0.077f, viewW * 0.815f, viewH * 0.11f), 240)
-        val rect = RectF(viewW * 0.05f, viewH * 0.13f, viewW * 0.95f, viewH * 0.94f)
+        comboIconBounds.set(viewW * 0.785f, viewH * 0.077f, viewW * 0.815f, viewH * 0.11f)
+        drawAsset(canvas, "UI Elements/Combo Icon.png", comboIconBounds, 240)
+        gameplayArenaBounds.set(viewW * 0.05f, viewH * 0.13f, viewW * 0.95f, viewH * 0.94f)
+        val rect = gameplayArenaBounds
         drawAssetCover(canvas, "Backgrounds & Environments/Gameplay Background.png", rect, 220)
-        drawAsset(canvas, "UI Elements/UI Panel.png", RectF(viewW * 0.03f, viewH * 0.012f, viewW * 0.97f, viewH * 0.125f), 105)
+        gameplayPanelBounds.set(viewW * 0.03f, viewH * 0.012f, viewW * 0.97f, viewH * 0.125f)
+        drawAsset(canvas, "UI Elements/UI Panel.png", gameplayPanelBounds, 105)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(2f, density * 2f)
         paint.color = cyan
@@ -2351,7 +2367,8 @@ private class GameView(context: Context) : View(context) {
             drawAssetCentered(canvas, "Effects & Particles/Impact Spark.png", lastImpactX, lastImpactY, minDim * 0.09f, alpha)
         }
         if (comboCount >= 2 && comboWindow > 0f) {
-            drawAsset(canvas, "Effects & Particles/Combo Text.png", RectF(viewW * 0.34f, viewH * 0.82f, viewW * 0.66f, viewH * 0.89f), 240)
+            comboTextBounds.set(viewW * 0.34f, viewH * 0.82f, viewW * 0.66f, viewH * 0.89f)
+            drawAsset(canvas, "Effects & Particles/Combo Text.png", comboTextBounds, 240)
         }
         if (aiming && !flying) drawAim(canvas)
         for (pickup in pickups) if (pickup.active) {
@@ -2385,8 +2402,9 @@ private class GameView(context: Context) : View(context) {
         canvas.save()
         canvas.rotate(angle, bladePx, bladePy)
         val bladeSize = minDim * 0.078f * bladePulse
-        drawAsset(canvas, if (flying) "Gameplay Sprites/Blade.png" else "Gameplay Sprites/Blade Idle.png",
-            RectF(bladePx - bladeSize / 2f, bladePy - bladeSize / 2f, bladePx + bladeSize / 2f, bladePy + bladeSize / 2f), 255)
+        gameplayBladeBounds.set(bladePx - bladeSize / 2f, bladePy - bladeSize / 2f,
+            bladePx + bladeSize / 2f, bladePy + bladeSize / 2f)
+        drawAsset(canvas, if (flying) "Gameplay Sprites/Blade.png" else "Gameplay Sprites/Blade Idle.png", gameplayBladeBounds, 255)
         canvas.restore()
 
         val targetsLeft = enemies.count { it.alive } + crates.count { it.alive }
@@ -2417,10 +2435,11 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas, "TARGETS " + enemies.count { it.alive }, 0.50f, 0.092f, 0.019f, pink, Paint.Align.CENTER)
         drawText(canvas, "SAVE STREAK $comboCount", 0.78f, 0.092f, 0.016f, cyan, Paint.Align.RIGHT)
 
-        val arena = RectF(viewW * 0.035f, viewH * 0.135f, viewW * 0.965f, viewH * 0.94f)
+        wallGuardArenaBounds.set(viewW * 0.035f, viewH * 0.135f, viewW * 0.965f, viewH * 0.94f)
+        val arena = wallGuardArenaBounds
         drawAssetCover(canvas, "Backgrounds & Environments/Gameplay Background.png", arena, 230)
-        drawAsset(canvas, "UI Elements/UI Panel.png",
-            RectF(viewW * 0.025f, viewH * 0.012f, viewW * 0.975f, viewH * 0.125f), 115)
+        wallGuardPanelBounds.set(viewW * 0.025f, viewH * 0.012f, viewW * 0.975f, viewH * 0.125f)
+        drawAsset(canvas, "UI Elements/UI Panel.png", wallGuardPanelBounds, 115)
         drawEnvironmentEffects(canvas)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(2f, density * 2f)
@@ -2482,11 +2501,12 @@ private class GameView(context: Context) : View(context) {
         // Player-controlled barrier occupying a short segment of the left wall.
         val paddleHalf = guardPaddleHalf()
         val paddleCenter = guardPaddleY * viewH
-        val paddle = if (leftHandedMode) RectF(
+        if (leftHandedMode) shieldBounds.set(
             viewW * 0.902f, paddleCenter - paddleHalf, viewW * 0.957f, paddleCenter + paddleHalf
-        ) else RectF(
+        ) else shieldBounds.set(
             viewW * 0.043f, paddleCenter - paddleHalf, viewW * 0.098f, paddleCenter + paddleHalf
         )
+        val paddle = shieldBounds
         paint.style = Paint.Style.FILL
         val shieldColor = shieldSkinColor()
         paint.color = Color.argb(105, Color.red(shieldColor), Color.green(shieldColor), Color.blue(shieldColor))
@@ -2499,16 +2519,15 @@ private class GameView(context: Context) : View(context) {
         canvas.drawRoundRect(paddle, density * 8f, density * 8f, paint)
         paint.style = Paint.Style.FILL
         paint.color = Color.WHITE
-        canvas.drawRoundRect(
-            RectF(paddle.centerX() - density, paddle.top + density * 7f,
-                paddle.centerX() + density, paddle.bottom - density * 7f),
-            density, density, paint
-        )
+        shieldHighlightBounds.set(paddle.centerX() - density, paddle.top + density * 7f,
+            paddle.centerX() + density, paddle.bottom - density * 7f)
+        canvas.drawRoundRect(shieldHighlightBounds, density, density, paint)
         if (gameMode == "local_coop") {
             val secondCenter = secondGuardPaddleY * viewH
-            val secondPaddle = if (leftHandedMode) RectF(viewW * 0.902f, secondCenter - paddleHalf,
+            if (leftHandedMode) secondShieldBounds.set(viewW * 0.902f, secondCenter - paddleHalf,
                 viewW * 0.957f, secondCenter + paddleHalf)
-            else RectF(viewW * 0.043f, secondCenter - paddleHalf, viewW * 0.098f, secondCenter + paddleHalf)
+            else secondShieldBounds.set(viewW * 0.043f, secondCenter - paddleHalf, viewW * 0.098f, secondCenter + paddleHalf)
+            val secondPaddle = secondShieldBounds
             paint.style = Paint.Style.FILL
             paint.color = Color.argb(if (secondPointerId >= 0) 145 else 70, Color.red(pink), Color.green(pink), Color.blue(pink))
             paint.setShadowLayer(density * 9f, 0f, 0f, pink)
@@ -2528,9 +2547,9 @@ private class GameView(context: Context) : View(context) {
         canvas.save()
         canvas.rotate(angle, bladePx, bladePy)
         val bladeSize = minDim * 0.078f
-        drawAsset(canvas, if (flying) "Gameplay Sprites/Blade.png" else "Gameplay Sprites/Blade Idle.png",
-            RectF(bladePx - bladeSize / 2f, bladePy - bladeSize / 2f,
-                bladePx + bladeSize / 2f, bladePy + bladeSize / 2f), 255)
+        wallGuardBladeBounds.set(bladePx - bladeSize / 2f, bladePy - bladeSize / 2f,
+            bladePx + bladeSize / 2f, bladePy + bladeSize / 2f)
+        drawAsset(canvas, if (flying) "Gameplay Sprites/Blade.png" else "Gameplay Sprites/Blade Idle.png", wallGuardBladeBounds, 255)
         canvas.restore()
         drawNovaFlash(canvas)
 

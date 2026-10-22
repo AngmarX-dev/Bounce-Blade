@@ -462,6 +462,10 @@ jobs:
               "private val minigunTargetCenter = PointF()",
               "private fun enemyCenterInto(enemy: EnemyState, index: Int, out: PointF): PointF",
               "enemyHealthFillBounds.set(barLeft + inset, barTop + inset, fillRight, barBottom - inset)",
+              "private val wallGuardArenaBounds = RectF()",
+              "private val shieldHighlightBounds = RectF()",
+              "gameplayArenaBounds.set(",
+              "wallGuardBladeBounds.set(",
           ]
           missing = [marker for marker in required if marker not in source]
           if missing:
