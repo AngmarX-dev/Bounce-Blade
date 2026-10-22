@@ -34,7 +34,7 @@ object GameRules {
     }
 
     fun targetTimeSeconds(levelId: Int, difficultyStars: Int): Float {
-        val id = levelId.coerceIn(1, 50)
+        val id = levelId.coerceAtLeast(1)
         val world = (id - 1) / 10
         val local = (id - 1) % 10
         return (32f - world * 1.4f - local * 0.25f - (difficultyStars.coerceIn(1, 3) - 1) * 2f).coerceAtLeast(16f)

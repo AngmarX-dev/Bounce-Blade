@@ -51,6 +51,16 @@ class GameRulesTest {
     @Test fun deadlineIsLongerThanStarTarget(){assertTrue(GameRules.timeLimitSeconds(25,2)>GameRules.targetTimeSeconds(25,2))}
 
     @Test
+    fun targetTimeSupportsLevelsPastFifty() {
+        val level50 = GameRules.targetTimeSeconds(50, 2)
+        val level51 = GameRules.targetTimeSeconds(51, 2)
+        val level100 = GameRules.targetTimeSeconds(100, 2)
+        assertTrue("Level 51 must not reuse level 50 timing", level51 > level50)
+        assertTrue(level100 >= 16f)
+        assertTrue(GameRules.timeLimitSeconds(100, 2) > level100)
+    }
+
+    @Test
     fun invalidMaximumDoesNotCrashScoring() {
         assertEquals(1, GameRules.starsEarned(0, 0, 1))
     }

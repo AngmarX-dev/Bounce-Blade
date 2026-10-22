@@ -38,7 +38,7 @@ But the Grid was not alone. From the edges of the void came the **Corruption**�
 
 For eons, the balance held. But the Corruption learned. It poisoned the Blade, filling it with wild, uncontrollable momentum. Now, when the Blade is launched, it does not simply return—it rebounds with the force of every impact, a runaway star that can shatter the Grid if it escapes.
 
-You are the last Guardian. Your shield is the final wall between order and oblivion. Across five worlds—the **Neon Grid** of logic, the **Crimson Circuit** of passion, the **Azure Vault** of memory, the **Magenta Maze** of chaos, and the **Golden Core** of creation itself—you must guide the Blade. Destroy the Corruption. Catch the light. If the Blade slips past you, the darkness wins.
+You are the last Guardian. Your shield is the final wall between order and oblivion. Across ten worlds—the **Neon Grid** of logic, the **Crimson Circuit** of passion, the **Azure Vault** of memory, the **Magenta Maze** of chaos, the **Golden Core** of creation, the **Obsidian Rift**, the **Solar Flare**, the **Quantum Abyss**, the **Storm Citadel**, and the **Celestial Forge**—you must guide the Blade. Destroy the Corruption. Catch the light. If the Blade slips past you, the darkness wins.
 
 But you are not alone. The Blade remembers its purpose. Every enemy it strikes, every ricochet, every perfect catch strengthens the bond between you. The Grid whispers in light and sound, and the music of the spheres becomes your battle hymn. Catch the Blade. Save the light. Become the legend.
 
@@ -46,7 +46,7 @@ But you are not alone. The Blade remembers its purpose. Every enemy it strikes, 
 
 ## Gameplay Features
 
-- **50 handcrafted stages** across five worlds: Neon Grid, Crimson Circuit, Azure Vault, Magenta Maze, and Golden Core.
+- **100 handcrafted stages** across ten worlds: Neon Grid, Crimson Circuit, Azure Vault, Magenta Maze, Golden Core, Obsidian Rift, Solar Flare, Quantum Abyss, Storm Citadel, and Celestial Forge.
 - **Linear campaign progression** with local save data.
 - **Automatic blade launch:** each stage begins with the blade flying into the arena.
 - **Ricochet physics:** enemy impacts reverse the blade’s horizontal direction, sending it back toward the player.
@@ -68,7 +68,12 @@ But you are not alone. The Blade remembers its purpose. Every enemy it strikes, 
 | Crimson Circuit | Red / industrial | 11–20 | Faster blade, tighter catches |
 | Azure Vault | Blue / icy | 21–30 | Multi-hit enemies appear |
 | Magenta Maze | Purple / chaotic | 31–40 | Dense waves and mixed hazards |
-| Golden Core | Gold / endgame | 41–50 | Toughest formations and final challenges |
+| Golden Core | Gold / endgame | 41–50 | Tough formations and boss challenges |
+| Obsidian Rift | Dark / spectral | 51–60 | More complex enemy patterns |
+| Solar Flare | Orange / solar | 61–70 | Heat and movement pressure |
+| Quantum Abyss | Blue / quantum | 71–80 | Distorted motion and spatial hazards |
+| Storm Citadel | Blue / storm | 81–90 | Stronger mixed enemy waves |
+| Celestial Forge | Gold / cosmic | 91–100 | Final campaign challenges |
 
 - **Linear unlocking:** complete a stage to unlock the next.
 - **Local saves:** campaign progress, score stars, and settings are stored on-device.
@@ -101,7 +106,7 @@ But you are not alone. The Blade remembers its purpose. Every enemy it strikes, 
 
 ## Progression & Customization
 
-- **Three selectable color themes:** Cyan, Green, Violet.
+- **Six selectable color themes:** Cyan, Green, Violet, Crimson, Solar, and Ocean.
 - **Saved campaign progress.**
 - **Score stars.**
 - **Sound settings** control music and effects.

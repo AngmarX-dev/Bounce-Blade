@@ -177,6 +177,7 @@ private class GameView(context: Context) : View(context) {
     private var lastImpactX = 0f
     private var lastImpactY = 0f
     private var impactUntil = 0L
+    private var lastImpactTier = 1
     private val bladeSpinAsset = "Core Gameplay SFX/Blade Idle Spin.wav"
     private var bladeLoopStreamId = 0
     private val soundAssets = listOf(
@@ -280,6 +281,10 @@ private class GameView(context: Context) : View(context) {
     private var levelId = 1
     private var level = levels.first()
     private var enemies = mutableListOf<EnemyState>()
+    private val pendingWallGuardSpawns = ArrayList<EnemyState>(4)
+    private val collectibleHazardTypes = setOf("power_up", "breakable_wall", "switch", "key", "door")
+    private val spikePath = Path()
+    private val maxParticleCount = 480
     private var crates = mutableListOf<CrateState>()
     private var bladeX = 0.14f
     private var bladeY = 0.80f
@@ -479,8 +484,10 @@ private class GameView(context: Context) : View(context) {
         val rawDt = ((now - lastFrame) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.025f)
         lastFrame = now
         animationTime += rawDt
+        val timeScale = if (screen == GameScreen.PLAYING &&
+            ((slowMotion && slowMeter > 0f) || (activeEffects["slow_time"] ?: 0f) > 0f)) 0.28f else 1f
         enemies.forEach { enemy ->
-            enemy.bladeHitCooldown = (enemy.bladeHitCooldown - rawDt).coerceAtLeast(0f)
+            enemy.bladeHitCooldown = (enemy.bladeHitCooldown - rawDt * timeScale).coerceAtLeast(0f)
         }
         if (screen == GameScreen.PLAYING) {
             traceTimer += rawDt
@@ -505,8 +512,8 @@ private class GameView(context: Context) : View(context) {
             if (comboWindow <= 0f) comboCount = 0
             teleportCooldown = (teleportCooldown - rawDt).coerceAtLeast(0f)
             novaCooldownRemaining = (novaCooldownRemaining - rawDt).coerceAtLeast(0f)
-            if (wallGuardMode) updateHostileEnemies(rawDt)
-            if (screen == GameScreen.PLAYING) updatePlayerMiniguns(rawDt)
+            if (wallGuardMode) updateHostileEnemies(rawDt * timeScale)
+            if (screen == GameScreen.PLAYING) updatePlayerMiniguns(rawDt * timeScale)
             if (!wallGuardMode) {
                 val timeLeft = GameRules.timeLimitSeconds(levelId, difficulty) - levelElapsedSeconds
                 if (timeLeft <= 5f && timeLeft > 0f && !timerWarningPlayed) {
@@ -514,12 +521,11 @@ private class GameView(context: Context) : View(context) {
                     playSfx("UI & Feedback SFX/Timer Warning.wav", ToneGenerator.TONE_PROP_BEEP)
                 }
                 if (levelElapsedSeconds > GameRules.timeLimitSeconds(levelId, difficulty)) { fail("TIME UP"); return }
-                updateTurrets(rawDt)
-                updateTurretProjectiles(rawDt)
+                updateTurrets(rawDt * timeScale)
+                updateTurretProjectiles(rawDt * timeScale)
             }
         }
         if (screen == GameScreen.PLAYING && flying) {
-            val timeScale = if ((slowMotion && slowMeter > 0f) || (activeEffects["slow_time"] ?: 0f) > 0f) 0.28f else 1f
             val dt = rawDt * timeScale
             if (slowMotion && slowMeter > 0f) slowMeter = (slowMeter - rawDt * 0.20f).coerceAtLeast(0f)
             else slowMeter = (slowMeter + rawDt * 0.075f).coerceAtMost(1f)
@@ -584,6 +590,7 @@ private class GameView(context: Context) : View(context) {
         val multiplier = (if ((activeEffects["score_multiplier"] ?: 0f) > 0f) 2 else 1) * (if (comboCount >= 5) 2 else 1)
         score += points * comboCount * multiplier
         lastImpactX = x; lastImpactY = y; impactUntil = System.nanoTime() + 320_000_000L
+        lastImpactTier = when { points >= 500 || comboCount >= 8 -> 3; points >= 160 || comboCount >= 3 -> 2; else -> 1 }
         addBurst(x, y, color, if (comboCount >= 3) 20 else 13)
         if (comboCount >= 2) { showMessage("COMBO x" + comboCount); playSfx("UI & Feedback SFX/Combo - Streak.wav") }
     }
@@ -643,7 +650,8 @@ private class GameView(context: Context) : View(context) {
      */
     private fun updateHostileEnemies(dt: Float) {
         if (screen != GameScreen.PLAYING || !wallGuardMode || dt <= 0f) return
-        val breachX = 0.108f
+        val breachX = if (leftHandedMode) 0.892f else 0.108f
+        val advanceDirection = if (leftHandedMode) 1f else -1f
         val targetY = guardPaddleY.coerceIn(0.18f, 0.82f)
         val adaptiveScale = if (dynamicDifficulty) 1f + min(prefs.getInt("total_clears", 0), 60) * 0.0025f else 1f
         val difficultyScale = (1f + (difficulty - 1) * 0.18f) * adaptiveScale
@@ -655,7 +663,7 @@ private class GameView(context: Context) : View(context) {
                     // Drones fly directly toward the player's shield and adjust
                     // their flight path to follow its current height.
                     val droneSpeed = (0.022f + min(levelId, 20) * 0.00045f) * difficultyScale
-                    enemy.x -= droneSpeed * dt
+                    enemy.x += advanceDirection * droneSpeed * dt
                     val verticalStep = droneSpeed * 0.78f * dt
                     enemy.y += (targetY - enemy.y).coerceIn(-verticalStep, verticalStep)
                 }
@@ -670,7 +678,7 @@ private class GameView(context: Context) : View(context) {
                     }
                     if (enemy.jumpTime > 0f) {
                         val jumpSpeed = (0.19f + min(levelId, 40) * 0.001f) * difficultyScale
-                        enemy.x -= jumpSpeed * dt
+                        enemy.x += advanceDirection * jumpSpeed * dt
                         val verticalStep = jumpSpeed * 0.72f * dt
                         enemy.y += (targetY - enemy.y).coerceIn(-verticalStep, verticalStep)
                         enemy.jumpTime = (enemy.jumpTime - dt).coerceAtLeast(0f)
@@ -679,7 +687,7 @@ private class GameView(context: Context) : View(context) {
                 1, 3, 7, 8, 9 -> {
                     // Turrets, snipers and armored guards trade speed for durability.
                     val turretSpeed = when (enemy.kind) { 1 -> 0.014f; 7 -> 0.008f; 8 -> 0.0075f; 9 -> 0.012f; else -> 0.011f }
-                    enemy.x -= turretSpeed * difficultyScale * dt
+                    enemy.x += advanceDirection * turretSpeed * difficultyScale * dt
                     val verticalStep = turretSpeed * (if (enemy.kind == 7) 1.2f else 0.52f) * dt
                     if (enemy.kind == 7) {
                         enemy.y += sin(animationTime * 1.6f + index) * 0.012f * dt
@@ -687,13 +695,22 @@ private class GameView(context: Context) : View(context) {
                 }
                 4 -> {
                     // Healers move slowly and periodically restore a nearby ally.
-                    enemy.x -= 0.009f * difficultyScale * dt
+                    enemy.x += advanceDirection * 0.009f * difficultyScale * dt
                     enemy.y += (targetY - enemy.y).coerceIn(-0.01f * dt, 0.01f * dt)
                     enemy.fireCooldown -= dt
                     if (enemy.fireCooldown <= 0f) {
-                        val ally = enemies.filter { it.alive && it !== enemy }
-                            .minByOrNull { distanceSquared(it.x, it.y, enemy.x, enemy.y) }
-                        if (ally != null && distanceSquared(ally.x, ally.y, enemy.x, enemy.y) < 0.18f * 0.18f) {
+                        var nearestAlly: EnemyState? = null
+                        var nearestAllyDistance = Float.MAX_VALUE
+                        for (candidate in enemies) {
+                            if (!candidate.alive || candidate === enemy) continue
+                            val candidateDistance = distanceSquared(candidate.x, candidate.y, enemy.x, enemy.y)
+                            if (candidateDistance < nearestAllyDistance) {
+                                nearestAllyDistance = candidateDistance
+                                nearestAlly = candidate
+                            }
+                        }
+                        val ally = nearestAlly
+                        if (ally != null && nearestAllyDistance < 0.18f * 0.18f) {
                             ally.health = min(ally.health + 1, if (ally.kind == 0) 3 else 8)
                             ally.maxHealth = if (ally.kind == 0) 3 else max(ally.maxHealth, ally.health)
                             addBurst(ally.x * viewW, ally.y * viewH, Color.rgb(90, 255, 150), 5)
@@ -704,7 +721,7 @@ private class GameView(context: Context) : View(context) {
                 }
                 5 -> {
                     // Explosive enemies make a fast, direct approach to the shield.
-                    enemy.x -= 0.026f * difficultyScale * dt
+                    enemy.x += advanceDirection * 0.026f * difficultyScale * dt
                     val verticalStep = 0.025f * difficultyScale * dt
                     enemy.y += (targetY - enemy.y).coerceIn(-verticalStep, verticalStep)
                 }
@@ -717,12 +734,12 @@ private class GameView(context: Context) : View(context) {
                         enemy.fireCooldown = 2.1f
                         addBurst(enemy.x * viewW, enemy.y * viewH, cyan, 8)
                     }
-                    enemy.x -= 0.010f * difficultyScale * dt
+                    enemy.x += advanceDirection * 0.010f * difficultyScale * dt
                     enemy.y += (targetY - enemy.y).coerceIn(-0.009f * dt, 0.009f * dt)
                 }
             }
 
-            if (enemy.x <= breachX) {
+            if ((!leftHandedMode && enemy.x <= breachX) || (leftHandedMode && enemy.x >= breachX)) {
                 enemy.x = breachX
                 enemy.alive = false
                 val impactX = enemy.x * viewW
@@ -819,7 +836,7 @@ private class GameView(context: Context) : View(context) {
         }
 
         val pendingSlimes = mutableListOf<EnemyState>()
-        for ((index, enemy) in enemies.toList().withIndex()) {
+        for ((index, enemy) in enemies.withIndex()) {
             if (!enemy.alive || enemy.bladeHitCooldown > 0f) continue
             val c = enemyCenter(enemy, index); val ex = c.x * viewW; val ey = c.y * viewH
             val dx = px - ex; val dy = py - ey
@@ -975,8 +992,7 @@ private class GameView(context: Context) : View(context) {
         }
 
         for ((hazardIndex, hazard) in level.hazards.withIndex()) {
-            if (hazardIndex in collectedPowerUps &&
-                hazard.type in setOf("power_up", "breakable_wall", "switch", "key", "door")) continue
+            if (hazardIndex in collectedPowerUps && hazard.type in collectibleHazardTypes) continue
             val center = hazardCenter(hazard, hazardIndex)
             val hx = center.x * viewW
             val hy = center.y * viewH
@@ -1142,12 +1158,12 @@ private class GameView(context: Context) : View(context) {
             } else {
                 bladeX = px / viewW
                 bladeY = py / viewH
-                fail("THE BLADE PASSED THE LEFT WALL")
+                fail(if (leftHandedMode) "THE BLADE PASSED THE RIGHT WALL" else "THE BLADE PASSED THE LEFT WALL")
                 return
             }
         }
 
-        val pendingSpawns = mutableListOf<EnemyState>()
+        val pendingSpawns = pendingWallGuardSpawns.apply { clear() }
         for ((index, enemy) in enemies.withIndex()) {
             if (!enemy.alive || enemy.bladeHitCooldown > 0f) continue
             val center = enemyCenter(enemy, index)
@@ -1271,10 +1287,10 @@ private class GameView(context: Context) : View(context) {
 
     private fun launchWallGuardBlade() {
         guardPaddleY = clampGuardPaddleY(guardPaddleY)
-        bladeX = 0.145f
+        bladeX = if (leftHandedMode) 0.855f else 0.145f
         bladeY = guardPaddleY
         val speed = minDim * (0.50f + difficulty * 0.075f + min(levelId, 30) * 0.003f) * bladeSpeedScale()
-        velocityX = speed
+        velocityX = if (leftHandedMode) -speed else speed
         velocityY = speed * (sin(levelId * 1.37f) * 0.045f)
         flying = true
         aiming = false
@@ -1364,7 +1380,7 @@ private class GameView(context: Context) : View(context) {
         val pendingSlimes = mutableListOf<EnemyState>()
         var hits = 0
 
-        for ((index, enemy) in enemies.toList().withIndex()) {
+        for ((index, enemy) in enemies.withIndex()) {
             if (!enemy.alive) continue
             val center = enemyCenter(enemy, index)
             val ex = center.x * viewW
@@ -1526,10 +1542,10 @@ private class GameView(context: Context) : View(context) {
                 PointN(0.49f + column * 0.115f, y)
             }
             level = level.copy(
-                spawn = PointN(0.145f, 0.5f),
+                spawn = PointN(if (leftHandedMode) 0.855f else 0.145f, 0.5f),
                 enemies = points,
                 crates = emptyList(),
-                hazards = level.hazards,
+                hazards = if (leftHandedMode) level.hazards.map { it.copy(x = (1f - it.x).coerceIn(0f, 1f)) } else level.hazards,
                 requiresAllTargets = true,
                 requiresSwitch = false
             )
@@ -1586,7 +1602,10 @@ private class GameView(context: Context) : View(context) {
             }
             else -> level.enemies
         }
-        enemies = activeEnemyPoints.mapIndexed { index, point ->
+        val orientedEnemyPoints = if (wallGuardMode && leftHandedMode) {
+            activeEnemyPoints.map { point -> point.copy(x = (1f - point.x).coerceIn(0.15f, 0.85f)) }
+        } else activeEnemyPoints
+        enemies = orientedEnemyPoints.mapIndexed { index, point ->
             val bossRush = gameMode == "boss_rush"
             val finalBoss = levelId == levels.size && index == 0
             val kind = if (bossRush || finalBoss) 3 else enemyKindForCampaignLevel(levelId, index)
@@ -1615,7 +1634,7 @@ private class GameView(context: Context) : View(context) {
             pickups.add(PickupState(type, 0.885f, if (i % 2 == 0) 0.22f else 0.79f))
         }
         crates = level.crates.map { CrateState(it.x, it.y) }.toMutableList()
-        bladeX = if (wallGuardMode) 0.145f else level.spawn.x
+        bladeX = if (wallGuardMode) { if (leftHandedMode) 0.855f else 0.145f } else level.spawn.x
         bladeY = if (wallGuardMode) guardPaddleY else level.spawn.y
         velocityX = 0f
         velocityY = 0f
@@ -2044,6 +2063,15 @@ private class GameView(context: Context) : View(context) {
         drawAsset(canvas, "App Icon & Logo/Game Logo.png", RectF(viewW * 0.16f, viewH * 0.13f, viewW * 0.84f, viewH * 0.29f), 255)
         drawText(canvas, "BOUNCE OFF ENEMIES  •  GUARD THE LEFT WALL", 0.5f, 0.322f, 0.018f, muted, Paint.Align.CENTER)
         drawText(canvas, "◈ " + coinBalance(), 0.91f, 0.105f, 0.026f, gold, Paint.Align.RIGHT)
+        val menuPulse = if (reducedMotion) 0.45f else 0.25f + 0.35f * abs(sin(animationTime * 1.6f))
+        paint.style = Paint.Style.FILL
+        paint.color = Color.argb(105, 4, 9, 24)
+        canvas.drawRoundRect(viewW * 0.285f, viewH * 0.315f, viewW * 0.715f, viewH * 0.895f, density * 16f, density * 16f, paint)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = max(1f, density * 1.1f)
+        paint.color = Color.argb((35f + menuPulse * 75f).toInt(), Color.red(cyan), Color.green(cyan), Color.blue(cyan))
+        canvas.drawRoundRect(viewW * 0.285f, viewH * 0.315f, viewW * 0.715f, viewH * 0.895f, density * 16f, density * 16f, paint)
+        paint.style = Paint.Style.FILL
         // Compact centered menu: keep the button artwork at its intended aspect ratio
         // instead of stretching it into full-width neon rails.
         drawButton(canvas, 0.305f, 0.340f, 0.695f, 0.415f, "PLAY CAMPAIGN", if (menuSelection == 0) gold else cyan)
@@ -2369,6 +2397,21 @@ private class GameView(context: Context) : View(context) {
             val y = viewH * (0.135f + 0.1f * i)
             canvas.drawLine(arena.left, y, arena.right, y, paint)
         }
+        val fieldX = viewW * if (leftHandedMode) 0.955f else 0.045f
+        val fieldPulse = if (reducedMotion) 0.65f else 0.35f + 0.65f * abs(sin(animationTime * 4f))
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = density * (2f + fieldPulse * 2f)
+        paint.color = Color.argb((45f + fieldPulse * 85f).toInt(), Color.red(cyan), Color.green(cyan), Color.blue(cyan))
+        paint.setShadowLayer(density * (4f + fieldPulse * 8f), 0f, 0f, cyan)
+        canvas.drawLine(fieldX, arena.top + density * 3f, fieldX, arena.bottom - density * 3f, paint)
+        paint.clearShadowLayer()
+        paint.strokeWidth = max(1f, density * 1.2f)
+        paint.color = Color.argb((80f + fieldPulse * 120f).toInt(), 235, 255, 255)
+        for (i in 0..11) {
+            val phase = (animationTime * 0.45f + i / 12f) % 1f
+            val y = arena.top + phase * arena.height()
+            canvas.drawLine(fieldX - density * 8f, y, fieldX + density * 8f, y, paint)
+        }
         paint.style = Paint.Style.FILL
 
         drawHazards(canvas)
@@ -2377,6 +2420,18 @@ private class GameView(context: Context) : View(context) {
         val now = System.nanoTime()
         if (now < impactUntil) {
             val alpha = ((impactUntil - now) * 255L / 320_000_000L).toInt().coerceIn(0, 255)
+            val impactProgress = 1f - (alpha / 255f)
+            val tierColor = when (lastImpactTier) { 3 -> pink; 2 -> gold; else -> cyan }
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = max(1.5f * density, density * (1f + lastImpactTier * 0.45f))
+            paint.color = Color.argb((alpha * 0.62f).toInt(), Color.red(tierColor), Color.green(tierColor), Color.blue(tierColor))
+            paint.setShadowLayer(density * (5f + lastImpactTier * 2f), 0f, 0f, tierColor)
+            for (ring in 0 until lastImpactTier) {
+                val radius = minDim * (0.022f + ring * 0.018f + impactProgress * 0.025f)
+                canvas.drawCircle(lastImpactX, lastImpactY, radius, paint)
+            }
+            paint.clearShadowLayer()
+            paint.style = Paint.Style.FILL
             drawAssetCentered(canvas, "Effects & Particles/Explosion.png", lastImpactX, lastImpactY, minDim * 0.11f, alpha)
             drawAssetCentered(canvas, "Effects & Particles/Impact Spark.png", lastImpactX, lastImpactY, minDim * 0.09f, alpha)
         }
@@ -2438,7 +2493,7 @@ private class GameView(context: Context) : View(context) {
         canvas.restore()
         drawNovaFlash(canvas)
 
-        drawText(canvas, "DRAG UP OR DOWN TO MOVE THE LEFT SHIELD",
+        drawText(canvas, if (leftHandedMode) "DRAG UP OR DOWN TO MOVE THE RIGHT SHIELD" else "DRAG UP OR DOWN TO MOVE THE LEFT SHIELD",
             0.5f, 0.965f, 0.018f, cyan, Paint.Align.CENTER)
         if (screen == GameScreen.PLAYING) {
             val novaLabel = when {
@@ -2533,7 +2588,7 @@ private class GameView(context: Context) : View(context) {
 
     private fun drawHazards(canvas: Canvas) {
         for((index,hazard) in level.hazards.withIndex()) {
-            if(index in collectedPowerUps && hazard.type in setOf("power_up","breakable_wall","switch","key","door")) continue
+            if(index in collectedPowerUps && hazard.type in collectibleHazardTypes) continue
             val c=hazardCenter(hazard,index);val x=c.x*viewW;val y=c.y*viewH
             val hw=hazard.width*viewW/2f;val h=max(hazard.height*viewH,minDim*0.018f)
             if (hazard.type == "moving_hazard" && !reducedMotion) {
@@ -2561,7 +2616,7 @@ private class GameView(context: Context) : View(context) {
                 "switch"->{paint.style=Paint.Style.STROKE;paint.strokeWidth=max(2f,density*2f);paint.color=gold;canvas.drawCircle(x,y,max(minDim*0.025f,hw),paint);drawAssetCentered(canvas,"Gameplay Sprites/Switch.jpg",x,y,minDim*0.07f)}
                 "key"->{paint.style=Paint.Style.STROKE;paint.strokeWidth=max(2f,density*2f);paint.color=gold;paint.setShadowLayer(density*6f,0f,0f,gold);canvas.drawCircle(x,y,max(minDim*0.015f,hw*0.4f),paint);canvas.drawLine(x+hw*0.3f,y,x+hw*1.8f,y,paint);canvas.drawLine(x+hw*1.25f,y,x+hw*1.25f,y+h,paint);paint.clearShadowLayer()}
                 "door"->{paint.style=Paint.Style.FILL;paint.color=if(hasLevelKey) cyan else Color.rgb(115,65,70);canvas.drawRoundRect(x-hw,y-h*1.6f,x+hw,y+h*1.6f,density*4f,density*4f,paint);paint.color=gold;canvas.drawCircle(x+hw*0.5f,y,density*2f,paint)}
-                else->{paint.style=Paint.Style.FILL;paint.color=when(hazard.type){"sticky_wall"->Color.rgb(95,48,145);"moving_hazard"->Color.rgb(80,65,22);else->Color.rgb(80,22,51)};canvas.drawRoundRect(x-hw,y-h/2f,x+hw,y+h/2f,density*4f,density*4f,paint);paint.style=Paint.Style.STROKE;paint.color=when(hazard.type){"sticky_wall"->Color.rgb(190,105,255);"moving_hazard"->gold;else->pink};paint.strokeWidth=density*when(hazard.type){"laser"->3.5f;"sticky_wall"->4f;else->3f};paint.setShadowLayer(density*7f,0f,0f,paint.color);canvas.drawLine(x-hw,y,x+hw,y,paint);paint.clearShadowLayer();if(hazard.type.contains("spike")){paint.style=Paint.Style.FILL;paint.color=pink;val count=max(4,(hazard.width*22f).toInt());for(i in 0 until count){val sx=x-hw+2f*hw*i/count;val nx=min(x+hw,sx+max(density*6f,2f*hw/count));val p=Path();p.moveTo(sx,y+h/2f);p.lineTo((sx+nx)/2f,y-h/2f);p.lineTo(nx,y+h/2f);p.close();canvas.drawPath(p,paint)}}else if(hazard.type=="moving_hazard"){paint.style=Paint.Style.FILL;paint.color=gold;canvas.drawCircle(x,y,density*5f,paint)}}
+                else->{paint.style=Paint.Style.FILL;paint.color=when(hazard.type){"sticky_wall"->Color.rgb(95,48,145);"moving_hazard"->Color.rgb(80,65,22);else->Color.rgb(80,22,51)};canvas.drawRoundRect(x-hw,y-h/2f,x+hw,y+h/2f,density*4f,density*4f,paint);paint.style=Paint.Style.STROKE;paint.color=when(hazard.type){"sticky_wall"->Color.rgb(190,105,255);"moving_hazard"->gold;else->pink};paint.strokeWidth=density*when(hazard.type){"laser"->3.5f;"sticky_wall"->4f;else->3f};paint.setShadowLayer(density*7f,0f,0f,paint.color);canvas.drawLine(x-hw,y,x+hw,y,paint);paint.clearShadowLayer();if(hazard.type.contains("spike")){paint.style=Paint.Style.FILL;paint.color=pink;val count=max(4,(hazard.width*22f).toInt());for(i in 0 until count){val sx=x-hw+2f*hw*i/count;val nx=min(x+hw,sx+max(density*6f,2f*hw/count));spikePath.reset();spikePath.moveTo(sx,y+h/2f);spikePath.lineTo((sx+nx)/2f,y-h/2f);spikePath.lineTo(nx,y+h/2f);spikePath.close();canvas.drawPath(spikePath,paint)}}else if(hazard.type=="moving_hazard"){paint.style=Paint.Style.FILL;paint.color=gold;canvas.drawCircle(x,y,density*5f,paint)}}
             }
         }
         paint.style=Paint.Style.FILL
@@ -2640,7 +2695,7 @@ private class GameView(context: Context) : View(context) {
         val assignedTargets = mutableSetOf<Int>()
         playerMiniguns.forEachIndexed { gunIndex, gun ->
             gun.muzzleFlash = (gun.muzzleFlash - dt).coerceAtLeast(0f)
-            val turretX = viewW * 0.125f
+            val turretX = viewW * if (leftHandedMode) 0.875f else 0.125f
             val turretY = viewH * if (gunIndex == 0) 0.235f else 0.815f
             val availableTargets = aliveTargets.filter { it.value.alive && it.index !in assignedTargets }
             val target = (availableTargets.ifEmpty { aliveTargets.filter { it.value.alive } })
@@ -2731,7 +2786,7 @@ private class GameView(context: Context) : View(context) {
 
     private fun drawPlayerMiniguns(canvas: Canvas) {
         playerMiniguns.forEachIndexed { index, gun ->
-            val centerX = viewW * 0.125f
+            val centerX = viewW * if (leftHandedMode) 0.875f else 0.125f
             val centerY = viewH * if (index == 0) 0.235f else 0.815f
             val gunHeight = minDim * 0.115f
             val gunWidth = minDim * 0.19f
@@ -2821,6 +2876,16 @@ private class GameView(context: Context) : View(context) {
         if (isTurret && !reducedMotion) canvas.rotate(sin(animationTime * 0.8f + index) * 4.5f, x, y)
         drawAssetCentered(canvas, path, x, y, animatedSize)
         canvas.restore()
+        if (enemy.bladeHitCooldown > 0f) {
+            val hitAlpha = (255f * (enemy.bladeHitCooldown / 0.32f).coerceIn(0f, 1f)).toInt()
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = max(2f, density * 2.2f)
+            paint.color = Color.argb(hitAlpha, 255, 244, 205)
+            paint.setShadowLayer(density * 8f, 0f, 0f, gold)
+            canvas.drawCircle(x, y, animatedSize * (0.72f + (1f - hitAlpha / 255f) * 0.18f), paint)
+            paint.clearShadowLayer()
+            paint.style = Paint.Style.FILL
+        }
         drawEnemyHealthBar(canvas, enemy, x, y, drawSize)
         if (isTurret) drawText(
             canvas,
@@ -2966,13 +3031,26 @@ private class GameView(context: Context) : View(context) {
     }
 
     private fun drawBladeTrail(canvas: Canvas) {
-        if (bladeTrail.size < 2) return
+        val trailSize = bladeTrail.size
+        if (trailSize < 2) return
         paint.style = Paint.Style.STROKE
         paint.strokeCap = Paint.Cap.ROUND
-        for (i in 1 until bladeTrail.size) {
-            val alpha = (35 + 175 * i / bladeTrail.size).coerceIn(0, 210)
+        paint.setShadowLayer(density * 7f, 0f, 0f, cyan)
+        for (i in 1 until trailSize) {
+            val strength = i.toFloat() / (trailSize - 1).coerceAtLeast(1)
+            val alpha = (28f + 72f * strength).toInt().coerceIn(20, 110)
             paint.color = Color.argb(alpha, Color.red(cyan), Color.green(cyan), Color.blue(cyan))
-            paint.strokeWidth = density * (1f + 4f * i / bladeTrail.size)
+            paint.strokeWidth = density * (3f + 8f * strength)
+            val a = bladeTrail[i - 1]
+            val b = bladeTrail[i]
+            canvas.drawLine(a.x, a.y, b.x, b.y, paint)
+        }
+        paint.clearShadowLayer()
+        for (i in 1 until trailSize) {
+            val strength = i.toFloat() / (trailSize - 1).coerceAtLeast(1)
+            val alpha = (70f + 175f * strength).toInt().coerceIn(70, 245)
+            paint.color = Color.argb(alpha, Color.red(cyan), Color.green(cyan), Color.blue(cyan))
+            paint.strokeWidth = density * (0.8f + 2.2f * strength)
             val a = bladeTrail[i - 1]
             val b = bladeTrail[i]
             canvas.drawLine(a.x, a.y, b.x, b.y, paint)
@@ -3718,8 +3796,9 @@ private class GameView(context: Context) : View(context) {
         paint.textSize = (size * minDim * (if (largeUi) 1.16f else 1f)).coerceAtLeast(8f * density)
         paint.typeface = TypefaceFactory.bold
         if (maxWidth > 0f) {
-            while (paint.measureText(renderedText) > maxWidth && paint.textSize > 8f * density) {
-                paint.textSize = (paint.textSize * 0.92f).coerceAtLeast(8f * density)
+            val measuredWidth = paint.measureText(renderedText)
+            if (measuredWidth > maxWidth && measuredWidth > 0f) {
+                paint.textSize = (paint.textSize * maxWidth / measuredWidth).coerceAtLeast(8f * density)
             }
         }
         paint.textAlign = align
@@ -3793,7 +3872,10 @@ private class GameView(context: Context) : View(context) {
 
     private fun addBurst(x: Float, y: Float, color: Int, count: Int) {
         val seed = (x.toInt() * 31 + y.toInt() * 17 + count * 13)
-        val particleCount = if (reducedMotion) (count / 4).coerceAtLeast(1) else count
+        val requestedParticleCount = if (reducedMotion) (count / 4).coerceAtLeast(1) else count
+        val availableParticleSlots = (maxParticleCount - particles.size).coerceAtLeast(0)
+        val particleCount = min(requestedParticleCount, availableParticleSlots)
+        if (particleCount == 0) return
         for (i in 0 until particleCount) {
             val angle = ((i * 137 + seed) % 360) * Math.PI.toFloat() / 180f
             val speed = density * (35f + (i % 5) * 16f)
@@ -3938,12 +4020,12 @@ private class GameView(context: Context) : View(context) {
                 when (screen) {
                     GameScreen.MENU -> {
                         when {
-                            inRect(nx, ny, 0.055f, 0.340f, 0.945f, 0.425f) -> screen = GameScreen.DIFFICULTY
-                            inRect(nx, ny, 0.055f, 0.438f, 0.945f, 0.523f) -> screen = GameScreen.WORLDS
-                            inRect(nx, ny, 0.055f, 0.536f, 0.945f, 0.621f) -> screen = GameScreen.FEATURES
-                            inRect(nx, ny, 0.055f, 0.634f, 0.945f, 0.719f) -> openShop(GameScreen.MENU)
-                            inRect(nx, ny, 0.055f, 0.732f, 0.945f, 0.817f) -> screen = GameScreen.SETTINGS
-                            inRect(nx, ny, 0.055f, 0.925f, 0.945f, 1.015f) -> { storyPage = 0; screen = GameScreen.STORY }
+                            inRect(nx, ny, 0.305f, 0.340f, 0.695f, 0.415f) -> screen = GameScreen.DIFFICULTY
+                            inRect(nx, ny, 0.305f, 0.430f, 0.695f, 0.505f) -> screen = GameScreen.WORLDS
+                            inRect(nx, ny, 0.305f, 0.520f, 0.695f, 0.595f) -> screen = GameScreen.FEATURES
+                            inRect(nx, ny, 0.305f, 0.610f, 0.695f, 0.685f) -> openShop(GameScreen.MENU)
+                            inRect(nx, ny, 0.305f, 0.700f, 0.695f, 0.775f) -> screen = GameScreen.SETTINGS
+                            inRect(nx, ny, 0.355f, 0.805f, 0.645f, 0.880f) -> { storyPage = 0; screen = GameScreen.STORY }
                         }
                         invalidate()
                         return true
@@ -4253,7 +4335,7 @@ private class GameView(context: Context) : View(context) {
                                 prefs.edit().putBoolean("vibration_enabled", vibrationEnabled).apply()
                             }
                             inRect(nx, ny, 0.12f, 0.570f, 0.88f, 0.655f) -> {
-                                themeId = (themeId + 1) % 3
+                                themeId = (themeId + 1) % 6
                                 prefs.edit().putInt("theme_id", themeId).apply()
                                 applyTheme()
                             }
