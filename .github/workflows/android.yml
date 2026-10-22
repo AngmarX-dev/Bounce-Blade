@@ -54,9 +54,9 @@ jobs:
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: bounce-blade-kotlin-${{ github.run_number }}
-          name: Bounce Blade Kotlin APK (build ${{ github.run_number }})
-          body: Native Kotlin Android edition of Bounce Blade using SurfaceView, a Canvas render loop, landscape immersive display, 50 campaign stages, touch shield controls, hazards, power-ups, progression saves, and procedural sound effects. Install `app-debug.apk` on an Android device.
+          tag_name: bounce-blade-surfaceview-v1
+          name: Bounce Blade Kotlin SurfaceView APK v1
+          body: Native Kotlin Android edition based on the supplied SurfaceView/Canvas approach. Features landscape fullscreen play, a dedicated render loop, 50 campaign stages, touch shield controls, hazards, power-ups, save progression, and synthesized retro sound effects. Install `app-debug.apk` on Android 7.0+.
           files: app/build/outputs/apk/debug/app-debug.apk
           draft: false
           prerelease: true
