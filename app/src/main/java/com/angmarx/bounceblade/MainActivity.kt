@@ -3853,7 +3853,7 @@ private class GameView(context: Context) : View(context) {
         val buttonBitmap = bitmapAsset("UI Elements/Button.png")
         val visualRect = buttonBitmap?.let { fitAssetRect(it, hitRect) } ?: hitRect
         // Copy geometry to primitives: fittedAssetBounds is reused by later icon draws.
-        val visualLeft = visualLeft
+        val visualLeft = visualRect.left
         val visualTop = visualRect.top
         val visualRight = visualRect.right
         val visualBottom = visualRect.bottom
