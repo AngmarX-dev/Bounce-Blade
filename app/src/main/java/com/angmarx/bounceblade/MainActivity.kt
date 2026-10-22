@@ -2044,18 +2044,20 @@ private class GameView(context: Context) : View(context) {
         drawAsset(canvas, "App Icon & Logo/Game Logo.png", RectF(viewW * 0.16f, viewH * 0.13f, viewW * 0.84f, viewH * 0.29f), 255)
         drawText(canvas, "BOUNCE OFF ENEMIES  •  GUARD THE LEFT WALL", 0.5f, 0.322f, 0.018f, muted, Paint.Align.CENTER)
         drawText(canvas, "◈ " + coinBalance(), 0.91f, 0.105f, 0.026f, gold, Paint.Align.RIGHT)
-        // Larger touch targets; lower items intentionally require vertical scrolling.
-        drawButton(canvas, 0.055f, 0.340f, 0.945f, 0.425f, "PLAY CAMPAIGN", if (menuSelection == 0) gold else cyan)
-        drawButton(canvas, 0.055f, 0.438f, 0.945f, 0.523f, "LEVEL SELECT", if (menuSelection == 1) pink else gold)
-        drawButton(canvas, 0.055f, 0.536f, 0.945f, 0.621f, "MORE FEATURES", if (menuSelection == 2) cyan else pink)
-        drawButton(canvas, 0.055f, 0.634f, 0.945f, 0.719f, "BLADE SHOP", if (menuSelection == 3) pink else gold)
-        drawButton(canvas, 0.055f, 0.732f, 0.945f, 0.817f, "SETTINGS", if (menuSelection == 4) gold else cyan)
-        drawButton(canvas, 0.055f, 0.925f, 0.945f, 1.015f, "THE STORY", cyan)
+        // Compact centered menu: keep the button artwork at its intended aspect ratio
+        // instead of stretching it into full-width neon rails.
+        drawButton(canvas, 0.305f, 0.340f, 0.695f, 0.415f, "PLAY CAMPAIGN", if (menuSelection == 0) gold else cyan)
+        drawButton(canvas, 0.305f, 0.430f, 0.695f, 0.505f, "LEVEL SELECT", if (menuSelection == 1) pink else gold)
+        drawButton(canvas, 0.305f, 0.520f, 0.695f, 0.595f, "MORE FEATURES", if (menuSelection == 2) cyan else pink)
+        drawButton(canvas, 0.305f, 0.610f, 0.695f, 0.685f, "BLADE SHOP", if (menuSelection == 3) pink else gold)
+        drawButton(canvas, 0.305f, 0.700f, 0.695f, 0.775f, "SETTINGS", if (menuSelection == 4) gold else cyan)
+        drawButton(canvas, 0.355f, 0.805f, 0.645f, 0.880f, "THE STORY", cyan)
         val unlocked = prefs.getInt("unlocked_level", 1).coerceIn(1, levels.size)
         val bestTotal = totalBestStarsAfter(0, 0)
-        drawText(canvas, "UNLOCKED  " + unlocked + "/" + levels.size + "     BEST STARS  " + bestTotal + "/" + (levels.size * 3),
-            0.5f, 1.065f, 0.017f, muted, Paint.Align.CENTER)
-        drawText(canvas, "COLLECT COINS • UPGRADE YOUR BLADE • SURVIVE EVERY WAVE", 0.5f, 1.135f, 0.014f, muted, Paint.Align.CENTER)
+        drawText(canvas, "LEVEL  " + unlocked + "/" + levels.size + "     ★  " + bestTotal + "/" + (levels.size * 3),
+            0.5f, 0.925f, 0.019f, muted, Paint.Align.CENTER)
+        drawText(canvas, "COLLECT COINS  •  UPGRADE YOUR BLADE  •  SURVIVE EVERY WAVE",
+            0.5f, 0.970f, 0.014f, muted, Paint.Align.CENTER)
     }
 
     private fun drawStory(canvas: Canvas) {
