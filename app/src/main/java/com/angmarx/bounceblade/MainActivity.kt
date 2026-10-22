@@ -155,6 +155,30 @@ private class GameView(context: Context) : View(context) {
     private var muted = Color.rgb(94, 120, 150)
     private var grid = Color.rgb(22, 35, 58)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val fittedAssetBounds = RectF()
+    private val centeredAssetBounds = RectF()
+    private val buttonHitBounds = RectF()
+    private val minigunAssetBounds = RectF()
+    private val crateAssetBounds = RectF()
+    private val backgroundCoverBounds = RectF()
+    private val coverTargetBounds = RectF()
+    private val enemyHealthBarBounds = RectF()
+    private val enemyHealthFillBounds = RectF()
+    private val gameplayArenaBounds = RectF()
+    private val gameplayPanelBounds = RectF()
+    private val timerIconBounds = RectF()
+    private val comboIconBounds = RectF()
+    private val comboTextBounds = RectF()
+    private val gameplayBladeBounds = RectF()
+    private val wallGuardArenaBounds = RectF()
+    private val wallGuardPanelBounds = RectF()
+    private val shieldBounds = RectF()
+    private val shieldHighlightBounds = RectF()
+    private val secondShieldBounds = RectF()
+    private val wallGuardBladeBounds = RectF()
+    private val bladePath = Path()
+    private val assignedMinigunTargets = HashSet<Int>()
+    private val minigunTargetCenter = PointF()
     private val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 20)
     private val soundPool = SoundPool.Builder()
         .setMaxStreams(10)
@@ -470,8 +494,12 @@ private class GameView(context: Context) : View(context) {
             }
         }
         canvas.restore()
-        postInvalidateDelayed(frameDelayMillis())
+        if (shouldAnimateContinuously()) postInvalidateDelayed(frameDelayMillis())
     }
+
+    private fun shouldAnimateContinuously(): Boolean =
+        screen == GameScreen.PLAYING || screen == GameScreen.MENU || screen == GameScreen.SHOP ||
+            particles.isNotEmpty() || System.nanoTime() < impactUntil
 
     private fun frameDelayMillis(): Long {
         if (batterySaver) return 33L
@@ -625,21 +653,39 @@ private class GameView(context: Context) : View(context) {
     private fun droneHitDamage(enemy: EnemyState): Int =
         ((enemy.maxHealth.coerceAtLeast(1) + 2) / 3).coerceAtLeast(1)
 
-    private fun enemyCenter(enemy: EnemyState, index: Int): PointF {
-        val d = when (enemy.kind) {
-            0 -> PointF(sin(animationTime * 1.7f + index * 1.2f) * 0.014f, cos(animationTime * 1.3f + index) * 0.012f)
-            2 -> PointF(sin(animationTime * 1.25f + index * 1.4f) * if (enemy.canSplit) 0.035f else 0.02f, cos(animationTime * 1.8f + index) * 0.02f)
-            3 -> PointF(sin(animationTime * 0.75f + index) * 0.009f, 0f)
-            else -> PointF(0f, 0f)
+    private fun enemyCenter(enemy: EnemyState, index: Int): PointF =
+        enemyCenterInto(enemy, index, PointF())
+
+    private fun enemyCenterInto(enemy: EnemyState, index: Int, out: PointF): PointF {
+        val dx: Float
+        val dy: Float
+        when (enemy.kind) {
+            0 -> {
+                dx = sin(animationTime * 1.7f + index * 1.2f) * 0.014f
+                dy = cos(animationTime * 1.3f + index) * 0.012f
+            }
+            2 -> {
+                dx = sin(animationTime * 1.25f + index * 1.4f) * if (enemy.canSplit) 0.035f else 0.02f
+                dy = cos(animationTime * 1.8f + index) * 0.02f
+            }
+            3 -> {
+                dx = sin(animationTime * 0.75f + index) * 0.009f
+                dy = 0f
+            }
+            else -> {
+                dx = 0f
+                dy = 0f
+            }
         }
-        val jumpProgress = if (enemy.kind == 2 && enemy.jumpTime > 0f)
-            (1f - enemy.jumpTime / 0.58f).coerceIn(0f, 1f) else 0f
-        val jumpArc = if (enemy.kind == 2 && enemy.jumpTime > 0f)
-            -sin(jumpProgress * 3.1415926f) * 0.075f else 0f
-        return PointF(
-            (enemy.x + d.x).coerceIn(0.1f, 0.9f),
-            (enemy.y + d.y + jumpArc).coerceIn(0.17f, 0.84f)
+        val jumpArc = if (enemy.kind == 2 && enemy.jumpTime > 0f) {
+            val jumpProgress = (1f - enemy.jumpTime / 0.58f).coerceIn(0f, 1f)
+            -sin(jumpProgress * 3.1415926f) * 0.075f
+        } else 0f
+        out.set(
+            (enemy.x + dx).coerceIn(0.1f, 0.9f),
+            (enemy.y + dy + jumpArc).coerceIn(0.17f, 0.84f)
         )
+        return out
     }
 
     /**
@@ -728,8 +774,10 @@ private class GameView(context: Context) : View(context) {
                 6 -> {
                     // Teleporters periodically blink between arena coordinates.
                     enemy.fireCooldown -= dt
-                    if (enemy.fireCooldown <= 0f && enemy.x < 0.84f) {
-                        enemy.x = (0.52f + ((index * 17 + levelId * 3) % 31) / 100f).coerceIn(0.52f, 0.83f)
+                    if (enemy.fireCooldown <= 0f && ((!leftHandedMode && enemy.x < 0.84f) || (leftHandedMode && enemy.x > 0.16f))) {
+                        val teleportOffset = ((index * 17 + levelId * 3) % 31) / 100f
+                        enemy.x = if (leftHandedMode) (0.48f - teleportOffset).coerceIn(0.17f, 0.48f)
+                            else (0.52f + teleportOffset).coerceIn(0.52f, 0.83f)
                         enemy.y = (0.22f + ((index * 11 + levelId) % 56) / 100f).coerceIn(0.22f, 0.78f)
                         enemy.fireCooldown = 2.1f
                         addBurst(enemy.x * viewW, enemy.y * viewH, cyan, 8)
@@ -1866,17 +1914,19 @@ private class GameView(context: Context) : View(context) {
     // inside their layout bounds, never stretched to fill them.
     private fun fitAssetRect(bitmap: Bitmap, bounds: RectF): RectF {
         if (bitmap.width <= 0 || bitmap.height <= 0 || bounds.width() <= 0f || bounds.height() <= 0f) {
-            return RectF(bounds)
+            fittedAssetBounds.set(bounds)
+            return fittedAssetBounds
         }
         val scale = min(bounds.width() / bitmap.width.toFloat(), bounds.height() / bitmap.height.toFloat())
         val fittedWidth = bitmap.width * scale
         val fittedHeight = bitmap.height * scale
-        return RectF(
+        fittedAssetBounds.set(
             bounds.centerX() - fittedWidth / 2f,
             bounds.centerY() - fittedHeight / 2f,
             bounds.centerX() + fittedWidth / 2f,
             bounds.centerY() + fittedHeight / 2f
         )
+        return fittedAssetBounds
     }
 
     private fun drawAsset(canvas: Canvas, path: String, rect: RectF, alpha: Int = 255) {
@@ -1901,12 +1951,13 @@ private class GameView(context: Context) : View(context) {
         val scale = max(rect.width() / bitmap.width.toFloat(), rect.height() / bitmap.height.toFloat())
         val scaledWidth = bitmap.width * scale
         val scaledHeight = bitmap.height * scale
-        val target = RectF(
+        coverTargetBounds.set(
             rect.centerX() - scaledWidth / 2f,
             rect.centerY() - scaledHeight / 2f,
             rect.centerX() + scaledWidth / 2f,
             rect.centerY() + scaledHeight / 2f
         )
+        val target = coverTargetBounds
         val oldAlpha = paint.alpha
         val oldFilter = paint.isFilterBitmap
         val oldStyle = paint.style
@@ -1923,7 +1974,8 @@ private class GameView(context: Context) : View(context) {
     }
 
     private fun drawAssetCentered(canvas: Canvas, path: String, x: Float, y: Float, size: Float, alpha: Int = 255) {
-        drawAsset(canvas, path, RectF(x - size / 2f, y - size / 2f, x + size / 2f, y + size / 2f), alpha)
+        centeredAssetBounds.set(x - size / 2f, y - size / 2f, x + size / 2f, y + size / 2f)
+        drawAsset(canvas, path, centeredAssetBounds, alpha)
     }
 
     private fun playTone(toneType: Int) {
@@ -2052,7 +2104,8 @@ private class GameView(context: Context) : View(context) {
         drawBackground(canvas)
         val image = if (screen == GameScreen.MENU) "UI Elements/Main Menu Background.png"
             else "Backgrounds & Environments/Menu Background.png"
-        drawAssetCover(canvas, image, RectF(0f, 0f, viewW, viewH), 235)
+        backgroundCoverBounds.set(0f, 0f, viewW, viewH)
+        drawAssetCover(canvas, image, backgroundCoverBounds, 235)
         paint.style = Paint.Style.FILL
         paint.color = Color.argb(62, 3, 6, 18)
         canvas.drawRect(0f, 0f, viewW, viewH, paint)
@@ -2278,12 +2331,16 @@ private class GameView(context: Context) : View(context) {
         val timeLeft=GameRules.timeLimitSeconds(levelId,difficulty)-levelElapsedSeconds
         drawText(canvas,"SCORE "+score,0.07f,0.092f,0.018f,gold)
         drawText(canvas,"TIME "+formatTime(timeLeft),0.47f,0.092f,0.018f,if(levelElapsedSeconds<=GameRules.targetTimeSeconds(levelId,difficulty)) cyan else pink,Paint.Align.CENTER)
-        drawAsset(canvas, "UI Elements/Timer Icon.png", RectF(viewW * 0.365f, viewH * 0.077f, viewW * 0.405f, viewH * 0.11f), 240)
+        timerIconBounds.set(viewW * 0.365f, viewH * 0.077f, viewW * 0.405f, viewH * 0.11f)
+        drawAsset(canvas, "UI Elements/Timer Icon.png", timerIconBounds, 240)
         drawText(canvas,"COMBO x"+comboCount,0.775f,0.092f,0.018f,pink,Paint.Align.RIGHT)
-        drawAsset(canvas, "UI Elements/Combo Icon.png", RectF(viewW * 0.785f, viewH * 0.077f, viewW * 0.815f, viewH * 0.11f), 240)
-        val rect = RectF(viewW * 0.05f, viewH * 0.13f, viewW * 0.95f, viewH * 0.94f)
+        comboIconBounds.set(viewW * 0.785f, viewH * 0.077f, viewW * 0.815f, viewH * 0.11f)
+        drawAsset(canvas, "UI Elements/Combo Icon.png", comboIconBounds, 240)
+        gameplayArenaBounds.set(viewW * 0.05f, viewH * 0.13f, viewW * 0.95f, viewH * 0.94f)
+        val rect = gameplayArenaBounds
         drawAssetCover(canvas, "Backgrounds & Environments/Gameplay Background.png", rect, 220)
-        drawAsset(canvas, "UI Elements/UI Panel.png", RectF(viewW * 0.03f, viewH * 0.012f, viewW * 0.97f, viewH * 0.125f), 105)
+        gameplayPanelBounds.set(viewW * 0.03f, viewH * 0.012f, viewW * 0.97f, viewH * 0.125f)
+        drawAsset(canvas, "UI Elements/UI Panel.png", gameplayPanelBounds, 105)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(2f, density * 2f)
         paint.color = cyan
@@ -2310,7 +2367,8 @@ private class GameView(context: Context) : View(context) {
             drawAssetCentered(canvas, "Effects & Particles/Impact Spark.png", lastImpactX, lastImpactY, minDim * 0.09f, alpha)
         }
         if (comboCount >= 2 && comboWindow > 0f) {
-            drawAsset(canvas, "Effects & Particles/Combo Text.png", RectF(viewW * 0.34f, viewH * 0.82f, viewW * 0.66f, viewH * 0.89f), 240)
+            comboTextBounds.set(viewW * 0.34f, viewH * 0.82f, viewW * 0.66f, viewH * 0.89f)
+            drawAsset(canvas, "Effects & Particles/Combo Text.png", comboTextBounds, 240)
         }
         if (aiming && !flying) drawAim(canvas)
         for (pickup in pickups) if (pickup.active) {
@@ -2344,8 +2402,9 @@ private class GameView(context: Context) : View(context) {
         canvas.save()
         canvas.rotate(angle, bladePx, bladePy)
         val bladeSize = minDim * 0.078f * bladePulse
-        drawAsset(canvas, if (flying) "Gameplay Sprites/Blade.png" else "Gameplay Sprites/Blade Idle.png",
-            RectF(bladePx - bladeSize / 2f, bladePy - bladeSize / 2f, bladePx + bladeSize / 2f, bladePy + bladeSize / 2f), 255)
+        gameplayBladeBounds.set(bladePx - bladeSize / 2f, bladePy - bladeSize / 2f,
+            bladePx + bladeSize / 2f, bladePy + bladeSize / 2f)
+        drawAsset(canvas, if (flying) "Gameplay Sprites/Blade.png" else "Gameplay Sprites/Blade Idle.png", gameplayBladeBounds, 255)
         canvas.restore()
 
         val targetsLeft = enemies.count { it.alive } + crates.count { it.alive }
@@ -2376,10 +2435,11 @@ private class GameView(context: Context) : View(context) {
         drawText(canvas, "TARGETS " + enemies.count { it.alive }, 0.50f, 0.092f, 0.019f, pink, Paint.Align.CENTER)
         drawText(canvas, "SAVE STREAK $comboCount", 0.78f, 0.092f, 0.016f, cyan, Paint.Align.RIGHT)
 
-        val arena = RectF(viewW * 0.035f, viewH * 0.135f, viewW * 0.965f, viewH * 0.94f)
+        wallGuardArenaBounds.set(viewW * 0.035f, viewH * 0.135f, viewW * 0.965f, viewH * 0.94f)
+        val arena = wallGuardArenaBounds
         drawAssetCover(canvas, "Backgrounds & Environments/Gameplay Background.png", arena, 230)
-        drawAsset(canvas, "UI Elements/UI Panel.png",
-            RectF(viewW * 0.025f, viewH * 0.012f, viewW * 0.975f, viewH * 0.125f), 115)
+        wallGuardPanelBounds.set(viewW * 0.025f, viewH * 0.012f, viewW * 0.975f, viewH * 0.125f)
+        drawAsset(canvas, "UI Elements/UI Panel.png", wallGuardPanelBounds, 115)
         drawEnvironmentEffects(canvas)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(2f, density * 2f)
@@ -2441,11 +2501,12 @@ private class GameView(context: Context) : View(context) {
         // Player-controlled barrier occupying a short segment of the left wall.
         val paddleHalf = guardPaddleHalf()
         val paddleCenter = guardPaddleY * viewH
-        val paddle = if (leftHandedMode) RectF(
+        if (leftHandedMode) shieldBounds.set(
             viewW * 0.902f, paddleCenter - paddleHalf, viewW * 0.957f, paddleCenter + paddleHalf
-        ) else RectF(
+        ) else shieldBounds.set(
             viewW * 0.043f, paddleCenter - paddleHalf, viewW * 0.098f, paddleCenter + paddleHalf
         )
+        val paddle = shieldBounds
         paint.style = Paint.Style.FILL
         val shieldColor = shieldSkinColor()
         paint.color = Color.argb(105, Color.red(shieldColor), Color.green(shieldColor), Color.blue(shieldColor))
@@ -2458,16 +2519,15 @@ private class GameView(context: Context) : View(context) {
         canvas.drawRoundRect(paddle, density * 8f, density * 8f, paint)
         paint.style = Paint.Style.FILL
         paint.color = Color.WHITE
-        canvas.drawRoundRect(
-            RectF(paddle.centerX() - density, paddle.top + density * 7f,
-                paddle.centerX() + density, paddle.bottom - density * 7f),
-            density, density, paint
-        )
+        shieldHighlightBounds.set(paddle.centerX() - density, paddle.top + density * 7f,
+            paddle.centerX() + density, paddle.bottom - density * 7f)
+        canvas.drawRoundRect(shieldHighlightBounds, density, density, paint)
         if (gameMode == "local_coop") {
             val secondCenter = secondGuardPaddleY * viewH
-            val secondPaddle = if (leftHandedMode) RectF(viewW * 0.902f, secondCenter - paddleHalf,
+            if (leftHandedMode) secondShieldBounds.set(viewW * 0.902f, secondCenter - paddleHalf,
                 viewW * 0.957f, secondCenter + paddleHalf)
-            else RectF(viewW * 0.043f, secondCenter - paddleHalf, viewW * 0.098f, secondCenter + paddleHalf)
+            else secondShieldBounds.set(viewW * 0.043f, secondCenter - paddleHalf, viewW * 0.098f, secondCenter + paddleHalf)
+            val secondPaddle = secondShieldBounds
             paint.style = Paint.Style.FILL
             paint.color = Color.argb(if (secondPointerId >= 0) 145 else 70, Color.red(pink), Color.green(pink), Color.blue(pink))
             paint.setShadowLayer(density * 9f, 0f, 0f, pink)
@@ -2487,9 +2547,9 @@ private class GameView(context: Context) : View(context) {
         canvas.save()
         canvas.rotate(angle, bladePx, bladePy)
         val bladeSize = minDim * 0.078f
-        drawAsset(canvas, if (flying) "Gameplay Sprites/Blade.png" else "Gameplay Sprites/Blade Idle.png",
-            RectF(bladePx - bladeSize / 2f, bladePy - bladeSize / 2f,
-                bladePx + bladeSize / 2f, bladePy + bladeSize / 2f), 255)
+        wallGuardBladeBounds.set(bladePx - bladeSize / 2f, bladePy - bladeSize / 2f,
+            bladePx + bladeSize / 2f, bladePy + bladeSize / 2f)
+        drawAsset(canvas, if (flying) "Gameplay Sprites/Blade.png" else "Gameplay Sprites/Blade Idle.png", wallGuardBladeBounds, 255)
         canvas.restore()
         drawNovaFlash(canvas)
 
@@ -2683,41 +2743,51 @@ private class GameView(context: Context) : View(context) {
 
     private fun updatePlayerMiniguns(dt: Float) {
         if (screen != GameScreen.PLAYING || dt <= 0f) return
-        val aliveTargets = enemies.withIndex().filter { it.value.alive }
-        if (aliveTargets.isEmpty()) {
-            playerMiniguns.forEach { gun ->
-                gun.targetIndex = -1
-                gun.muzzleFlash = (gun.muzzleFlash - dt).coerceAtLeast(0f)
-            }
-            return
-        }
+        assignedMinigunTargets.clear()
 
-        val assignedTargets = mutableSetOf<Int>()
-        playerMiniguns.forEachIndexed { gunIndex, gun ->
+        for (gunIndex in playerMiniguns.indices) {
+            val gun = playerMiniguns[gunIndex]
             gun.muzzleFlash = (gun.muzzleFlash - dt).coerceAtLeast(0f)
             val turretX = viewW * if (leftHandedMode) 0.875f else 0.125f
             val turretY = viewH * if (gunIndex == 0) 0.235f else 0.815f
-            val availableTargets = aliveTargets.filter { it.value.alive && it.index !in assignedTargets }
-            val target = (availableTargets.ifEmpty { aliveTargets.filter { it.value.alive } })
-                .minByOrNull { entry ->
-                    val center = enemyCenter(entry.value, entry.index)
-                    distanceSquared(turretX, turretY, center.x * viewW, center.y * viewH)
-                }
 
-            if (target == null) {
-                gun.targetIndex = -1
-                return@forEachIndexed
+            var nearestAvailableIndex = -1
+            var nearestAvailableDistance = Float.MAX_VALUE
+            var nearestAliveIndex = -1
+            var nearestAliveDistance = Float.MAX_VALUE
+            for (candidateIndex in enemies.indices) {
+                val candidate = enemies[candidateIndex]
+                if (!candidate.alive) continue
+                enemyCenterInto(candidate, candidateIndex, minigunTargetCenter)
+                val targetX = minigunTargetCenter.x * viewW
+                val targetY = minigunTargetCenter.y * viewH
+                val distance = distanceSquared(turretX, turretY, targetX, targetY)
+                if (distance < nearestAliveDistance) {
+                    nearestAliveDistance = distance
+                    nearestAliveIndex = candidateIndex
+                }
+                if (candidateIndex !in assignedMinigunTargets && distance < nearestAvailableDistance) {
+                    nearestAvailableDistance = distance
+                    nearestAvailableIndex = candidateIndex
+                }
             }
-            if (target.value.alive) assignedTargets.add(target.index)
-            gun.targetIndex = target.index
-            val center = enemyCenter(target.value, target.index)
-            val targetX = center.x * viewW
-            val targetY = center.y * viewH
+
+            val targetIndex = if (nearestAvailableIndex >= 0) nearestAvailableIndex else nearestAliveIndex
+            if (targetIndex < 0) {
+                gun.targetIndex = -1
+                continue
+            }
+            assignedMinigunTargets.add(targetIndex)
+            gun.targetIndex = targetIndex
+            val target = enemies[targetIndex]
+            enemyCenterInto(target, targetIndex, minigunTargetCenter)
+            val targetX = minigunTargetCenter.x * viewW
+            val targetY = minigunTargetCenter.y * viewH
             gun.targetX = targetX
             gun.targetY = targetY
 
             val bearing = Math.toDegrees(atan2((targetY - turretY).toDouble(), (targetX - turretX).toDouble())).toFloat()
-            // The original sprites point LEFT, so rotation is relative to a 180-degree heading.
+            // The minigun artwork faces LEFT in both layouts, including the mirrored wall.
             val desiredOffset = normalizedAngle(bearing - 180f)
             val turnDelta = normalizedAngle(desiredOffset - gun.rotationOffset).coerceIn(-300f * dt, 300f * dt)
             gun.rotationOffset = normalizedAngle(gun.rotationOffset + turnDelta)
@@ -2728,10 +2798,10 @@ private class GameView(context: Context) : View(context) {
 
             gun.fireCooldown = (gun.fireCooldown - dt).coerceAtLeast(0f)
             val angularError = abs(normalizedAngle(bearing - 180f - gun.rotationOffset))
-            if (gun.fireCooldown <= 0f && angularError <= 17f && target.value.alive) {
+            if (gun.fireCooldown <= 0f && angularError <= 17f && target.alive) {
                 gun.fireCooldown = 5.0f
                 gun.muzzleFlash = 0.12f
-                applyPlayerMinigunDamage(target.index, targetX, targetY)
+                applyPlayerMinigunDamage(targetIndex, targetX, targetY)
             }
         }
     }
@@ -2807,9 +2877,9 @@ private class GameView(context: Context) : View(context) {
 
             canvas.save()
             canvas.rotate(gun.rotationOffset, centerX, centerY)
-            drawAsset(canvas, playerMinigunAssetPath(effectivePlayerMinigunIndex(), menu = false),
-                RectF(centerX - gunWidth / 2f, centerY - gunHeight / 2f,
-                    centerX + gunWidth / 2f, centerY + gunHeight / 2f), 255)
+            minigunAssetBounds.set(centerX - gunWidth / 2f, centerY - gunHeight / 2f,
+                centerX + gunWidth / 2f, centerY + gunHeight / 2f)
+            drawAsset(canvas, playerMinigunAssetPath(effectivePlayerMinigunIndex(), menu = false), minigunAssetBounds, 255)
             canvas.restore()
         }
         paint.style = Paint.Style.FILL
@@ -2907,7 +2977,8 @@ private class GameView(context: Context) : View(context) {
         val barBottom = y - drawSize * 0.62f - density * 3f
         val barLeft = x - barWidth / 2f
         val barTop = barBottom - barHeight
-        val barRect = RectF(barLeft, barTop, barLeft + barWidth, barBottom)
+        enemyHealthBarBounds.set(barLeft, barTop, barLeft + barWidth, barBottom)
+        val barRect = enemyHealthBarBounds
         val inset = max(1f, density)
 
         paint.style = Paint.Style.FILL
@@ -2922,10 +2993,8 @@ private class GameView(context: Context) : View(context) {
         val fillRight = barLeft + inset + (barWidth - inset * 2f) * healthRatio
         if (fillRight > barLeft + inset) {
             paint.color = fillColor
-            canvas.drawRoundRect(
-                RectF(barLeft + inset, barTop + inset, fillRight, barBottom - inset),
-                barHeight / 2f, barHeight / 2f, paint
-            )
+            enemyHealthFillBounds.set(barLeft + inset, barTop + inset, fillRight, barBottom - inset)
+            canvas.drawRoundRect(enemyHealthFillBounds, barHeight / 2f, barHeight / 2f, paint)
         }
 
         paint.style = Paint.Style.STROKE
@@ -2938,21 +3007,22 @@ private class GameView(context: Context) : View(context) {
     private fun drawCrate(canvas: Canvas, crate: CrateState) {
         val x = crate.x * viewW; val y = crate.y * viewH
         val r = minDim * 0.034f
-        drawAsset(canvas, "Gameplay Sprites/Crate.png", RectF(x - r * 1.18f, y - r * 1.18f, x + r * 1.18f, y + r * 1.18f), 255)
+        crateAssetBounds.set(x - r * 1.18f, y - r * 1.18f, x + r * 1.18f, y + r * 1.18f)
+        drawAsset(canvas, "Gameplay Sprites/Crate.png", crateAssetBounds, 255)
     }
 
     private fun drawBladeAt(canvas: Canvas, x: Float, y: Float, radius: Float) {
-        val path = Path()
-        path.moveTo(x - radius * 0.72f, y + radius * 0.63f)
-        path.lineTo(x + radius * 0.88f, y - radius * 0.88f)
-        path.lineTo(x + radius * 0.40f, y + radius * 0.05f)
-        path.lineTo(x + radius * 1.12f, y + radius * 0.22f)
-        path.lineTo(x - radius * 0.36f, y + radius * 0.90f)
-        path.close()
+        bladePath.reset()
+        bladePath.moveTo(x - radius * 0.72f, y + radius * 0.63f)
+        bladePath.lineTo(x + radius * 0.88f, y - radius * 0.88f)
+        bladePath.lineTo(x + radius * 0.40f, y + radius * 0.05f)
+        bladePath.lineTo(x + radius * 1.12f, y + radius * 0.22f)
+        bladePath.lineTo(x - radius * 0.36f, y + radius * 0.90f)
+        bladePath.close()
         paint.style = Paint.Style.FILL
         paint.color = bladeSkinColor()
         paint.setShadowLayer(density * 15f, 0f, 0f, bladeSkinColor())
-        canvas.drawPath(path, paint)
+        canvas.drawPath(bladePath, paint)
         paint.clearShadowLayer()
         paint.color = Color.WHITE
         canvas.drawCircle(x, y, max(1.5f, radius * 0.12f), paint)
@@ -3817,9 +3887,19 @@ private class GameView(context: Context) : View(context) {
     ) {
         // The artwork stays strictly inside the same normalized rectangle used by
         // touch handling. This prevents neighboring buttons from visually colliding.
-        val hitRect = RectF(left * viewW, (top - 0.0025f) * viewH, right * viewW, (bottom + 0.0025f) * viewH)
+        buttonHitBounds.set(left * viewW, (top - 0.0025f) * viewH, right * viewW, (bottom + 0.0025f) * viewH)
+        val hitRect = buttonHitBounds
         val buttonBitmap = bitmapAsset("UI Elements/Button.png")
         val visualRect = buttonBitmap?.let { fitAssetRect(it, hitRect) } ?: hitRect
+        // Copy geometry to primitives: fittedAssetBounds is reused by later icon draws.
+        val visualLeft = visualRect.left
+        val visualTop = visualRect.top
+        val visualRight = visualRect.right
+        val visualBottom = visualRect.bottom
+        val visualWidth = visualRight - visualLeft
+        val visualHeight = visualBottom - visualTop
+        val visualCenterX = (visualLeft + visualRight) / 2f
+        val visualCenterY = (visualTop + visualBottom) / 2f
         drawAsset(canvas, "UI Elements/Button.png", hitRect, if (enabled) 255 else 125)
         if (enabled && !reducedMotion) {
             val pulse = 0.5f + 0.5f * sin(animationTime * 3.2f + top * 17f + left * 9f)
@@ -3847,22 +3927,22 @@ private class GameView(context: Context) : View(context) {
             else -> null
         }
         if (label == "Ⅱ" && iconPath != null) {
-            val iconSize = min(visualRect.height() * 0.68f, minDim * 0.075f)
-            drawAssetCentered(canvas, iconPath, visualRect.centerX(), visualRect.centerY(), iconSize, if (enabled) 255 else 120)
+            val iconSize = min(visualHeight * 0.68f, minDim * 0.075f)
+            drawAssetCentered(canvas, iconPath, visualCenterX, visualCenterY, iconSize, if (enabled) 255 else 120)
             return
         }
-        val iconSize = if (iconPath == null) 0f else min(visualRect.height() * 0.62f, minDim * 0.060f)
+        val iconSize = if (iconPath == null) 0f else min(visualHeight * 0.62f, minDim * 0.060f)
         if (iconPath != null) {
-            drawAssetCentered(canvas, iconPath, visualRect.left + iconSize * 0.95f, visualRect.centerY(), iconSize, if (enabled) 255 else 120)
+            drawAssetCentered(canvas, iconPath, visualLeft + iconSize * 0.95f, visualCenterY, iconSize, if (enabled) 255 else 120)
         }
         val horizontalPadding = minDim * 0.018f
-        val availableTextWidth = (visualRect.width() - horizontalPadding * 2f - if (iconPath == null) 0f else iconSize * 1.55f).coerceAtLeast(8f * density)
-        val textCenterX = visualRect.centerX() + if (iconPath == null) 0f else iconSize * 0.42f
+        val availableTextWidth = (visualWidth - horizontalPadding * 2f - if (iconPath == null) 0f else iconSize * 1.55f).coerceAtLeast(8f * density)
+        val textCenterX = visualCenterX + if (iconPath == null) 0f else iconSize * 0.42f
         drawText(
             canvas,
             localizeButtonLabel(label),
             textCenterX / viewW,
-            visualRect.centerY() / viewH + 0.008f,
+            visualCenterY / viewH + 0.008f,
             if (label.length > 18) 0.041f else 0.047f,
             if (enabled) color else muted,
             Paint.Align.CENTER,

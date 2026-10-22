@@ -296,7 +296,7 @@ jobs:
               "val turretX = viewW * if (leftHandedMode) 0.875f else 0.125f",
               "val turretY = viewH * if (gunIndex == 0) 0.235f else 0.815f",
               "val desiredOffset = normalizedAngle(bearing - 180f)",
-              "if (gun.fireCooldown <= 0f && angularError <= 17f && target.value.alive)",
+              "if (gun.fireCooldown <= 0f && angularError <= 17f && target.alive)",
               "gun.fireCooldown = 5.0f",
               "putBoolean(\"player_minigun_unlocked_\" + minigunRewardIndex, true)",
               "GameScreen.MINIGUNS -> drawMinigunArmory(canvas)",
@@ -317,7 +317,8 @@ jobs:
 
           source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
           required = [
-              "val hitRect = RectF(left * viewW, (top - 0.0025f) * viewH, right * viewW, (bottom + 0.0025f) * viewH)",
+              "buttonHitBounds.set(left * viewW, (top - 0.0025f) * viewH, right * viewW, (bottom + 0.0025f) * viewH)",
+              "val hitRect = buttonHitBounds",
               "val visualRect = buttonBitmap?.let { fitAssetRect(it, hitRect) } ?: hitRect",
               "drawAsset(canvas, \"UI Elements/Button.png\", hitRect, if (enabled) 255 else 125)",
               "availableTextWidth",
@@ -452,11 +453,25 @@ jobs:
               "private val maxParticleCount = 480",
               "val measuredWidth = paint.measureText(renderedText)",
               "lastImpactTier = when {",
+              "private fun shouldAnimateContinuously(): Boolean",
+              "if (shouldAnimateContinuously()) postInvalidateDelayed(frameDelayMillis())",
+              "private val fittedAssetBounds = RectF()",
+              "private val centeredAssetBounds = RectF()",
+              "private val bladePath = Path()",
+              "bladePath.reset()",
+              "private val assignedMinigunTargets = HashSet<Int>()",
+              "private val minigunTargetCenter = PointF()",
+              "private fun enemyCenterInto(enemy: EnemyState, index: Int, out: PointF): PointF",
+              "enemyHealthFillBounds.set(barLeft + inset, barTop + inset, fillRight, barBottom - inset)",
+              "private val wallGuardArenaBounds = RectF()",
+              "private val shieldHighlightBounds = RectF()",
+              "gameplayArenaBounds.set(",
+              "wallGuardBladeBounds.set(",
           ]
           missing = [marker for marker in required if marker not in source]
           if missing:
               sys.exit("Missing gameplay/performance fixes: " + ", ".join(missing))
-          print("Verified synchronized slow motion, handed controls, and bounded Canvas effects.")
+          print("Verified synchronized timing, mirrored controls, bounded Canvas effects, and idle-frame/allocation optimizations.")
           PY
 
       - name: Run unit tests and build debug APK
