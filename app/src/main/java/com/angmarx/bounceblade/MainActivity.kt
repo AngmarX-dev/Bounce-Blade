@@ -8,7 +8,8 @@ import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Bundle
 import android.view.MotionEvent
-import android.view.View
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import java.util.Random
 import kotlin.math.*
 
@@ -18,8 +19,8 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        window.decorView.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_FULLSCREEN or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+            android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
         game = BladeView(this)
         setContentView(game)
     }
@@ -58,7 +59,7 @@ private data class Hazard(
 private data class Particle(var x: Float, var y: Float, var vx: Float, var vy: Float, var life: Float, val max: Float, val r: Float, val color: Int)
 private data class Floater(var x: Float, var y: Float, val label: String, val color: Int, var life: Float)
 
-private class BladeView(ctx: Context) : View(ctx) {
+private class BladeView(ctx: Context) : SurfaceView(ctx), SurfaceHolder.Callback, Runnable {
     companion object {
         private const val CYAN = 0xFF00FFFF.toInt()
         private const val MAGENTA = 0xFFFF00D8.toInt()
@@ -114,20 +115,67 @@ private class BladeView(ctx: Context) : View(ctx) {
     private var toast = ""
     private var toastLeft = 0f
     private var lastFrame = 0L
+    @Volatile private var renderRunning = false
+    private var renderThread: Thread? = null
     private var sx = 1f
     private var ox = 0f
     private var oy = 0f
     private val W = 1280f
     private val H = 720f
 
-    init { isFocusable = true; isClickable = true; keepScreenOn = true }
-    fun pauseFrames() { lastFrame = 0L }
-    fun resumeFrames() { lastFrame = 0L; invalidate() }
+    init {
+        isFocusable = true
+        isClickable = true
+        keepScreenOn = true
+        holder.addCallback(this)
+    }
+
+    override fun surfaceCreated(holder: SurfaceHolder) { resumeFrames() }
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) { lastFrame = 0L }
+    override fun surfaceDestroyed(holder: SurfaceHolder) { stopRenderThread() }
+
+    fun pauseFrames() { lastFrame = 0L; stopRenderThread() }
+    fun resumeFrames() {
+        lastFrame = 0L
+        if (holder.surface.isValid && !renderRunning) {
+            renderRunning = true
+            renderThread = Thread(this, "BounceBlade-Render").also { it.start() }
+        }
+    }
+
+    private fun stopRenderThread() {
+        renderRunning = false
+        val t = renderThread
+        if (t != null && t !== Thread.currentThread()) {
+            try { t.join(800L) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
+        }
+        renderThread = null
+    }
+
+    override fun run() {
+        while (renderRunning) {
+            var canvas: Canvas? = null
+            try {
+                if (holder.surface.isValid) {
+                    canvas = holder.lockCanvas()
+                    if (canvas != null) drawFrame(canvas)
+                }
+            } catch (_: IllegalArgumentException) {
+                // The surface may be recreated while the activity is changing state.
+            } catch (_: IllegalStateException) {
+                // The surface is no longer available.
+            } finally {
+                if (canvas != null) {
+                    try { holder.unlockCanvasAndPost(canvas) } catch (_: IllegalArgumentException) { } catch (_: IllegalStateException) { }
+                }
+            }
+            try { Thread.sleep(8L) } catch (_: InterruptedException) { Thread.currentThread().interrupt(); break }
+        }
+    }
     fun close() { tone?.release() }
     fun back() { page = when (page) { 3 -> 4; 4 -> 3; 0 -> { (context as? Activity)?.finish(); 0 }; else -> 0 }; lastFrame = 0L; invalidate() }
 
-    override fun onDraw(c: Canvas) {
-        super.onDraw(c)
+    private fun drawFrame(c: Canvas) {
         if (width <= 0 || height <= 0) return
         sx = min(width / W, height / H); ox = (width - W * sx) / 2f; oy = (height - H * sx) / 2f
         c.drawColor(0xFF03040A.toInt())
@@ -146,7 +194,6 @@ private class BladeView(ctx: Context) : View(ctx) {
             6 -> drawLose(c)
         }
         c.restoreToCount(save)
-        if (page == 0 || page == 3) postInvalidateOnAnimation()
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
