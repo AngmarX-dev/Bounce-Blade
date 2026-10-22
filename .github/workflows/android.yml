@@ -296,7 +296,7 @@ jobs:
               "val turretY = viewH * if (gunIndex == 0) 0.235f else 0.815f",
               "val desiredOffset = normalizedAngle(bearing - 180f)",
               "if (gun.fireCooldown <= 0f && angularError <= 17f && target.value.alive)",
-              "gun.fireCooldown = 1.10f",
+              "gun.fireCooldown = 5.0f",
               "putBoolean(\"player_minigun_unlocked_\" + minigunRewardIndex, true)",
               "GameScreen.MINIGUNS -> drawMinigunArmory(canvas)",
               "selectedPlayerMinigun = selectedCard",
@@ -316,7 +316,7 @@ jobs:
 
           source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
           required = [
-              "val hitRect = RectF(left * viewW, top * viewH, right * viewW, bottom * viewH)",
+              "val hitRect = RectF(left * viewW, (top - 0.0025f) * viewH, right * viewW, (bottom + 0.0025f) * viewH)",
               "val visualRect = buttonBitmap?.let { fitAssetRect(it, hitRect) } ?: hitRect",
               "drawAsset(canvas, \"UI Elements/Button.png\", hitRect, if (enabled) 255 else 125)",
               "availableTextWidth",
