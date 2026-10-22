@@ -982,6 +982,26 @@ private class GameView(context: Context) : View(context) {
             }
             if (!hit) continue
             when (hazard.type) {
+                "moving_hazard" -> {
+                    if (worldIndex == 1) {
+                        // Crimson Circuit's gold circuit rails are deflectors, not instant-kill walls.
+                        // Push the blade clear of the rail and kick it away so it cannot fail on spawn.
+                        if (py <= hy) {
+                            py = hy - halfH - radius
+                            velocityY = -abs(velocityY).coerceAtLeast(minDim * 0.16f)
+                        } else {
+                            py = hy + halfH + radius
+                            velocityY = abs(velocityY).coerceAtLeast(minDim * 0.16f)
+                        }
+                        velocityX *= 0.94f
+                        addBurst(px, py, gold, 12)
+                        showMessage("CIRCUIT RAIL DEFLECTED")
+                        playNextRicochet()
+                    } else {
+                        fail("MOVING HAZARD HIT")
+                        return
+                    }
+                }
                 "teleporter" -> {
                     if (teleportCooldown <= 0f) {
                         val destination = level.hazards.withIndex().firstOrNull {
@@ -1977,15 +1997,31 @@ private class GameView(context: Context) : View(context) {
     private fun drawBackground(canvas: Canvas) {
         canvas.drawColor(dark)
         paint.style = Paint.Style.FILL
-        for (star in stars) {
-            paint.color = if ((star.x * 1000f).toInt() % 3 == 0) cyan else muted
-            canvas.drawCircle(star.x * viewW, star.y * viewH, density * 1.1f, paint)
+        for ((index, star) in stars.withIndex()) {
+            val twinkle = 0.55f + 0.45f * abs(sin(animationTime * (1.8f + index % 4) + index * 0.7f))
+            val sx = ((star.x + sin(animationTime * 0.035f + index) * 0.003f + 1f) % 1f) * viewW
+            val sy = ((star.y + animationTime * (0.0015f + (index % 3) * 0.0006f)) % 1f) * viewH
+            paint.color = Color.argb((90f + 165f * twinkle).toInt(), if (index % 3 == 0) 45 else 94,
+                if (index % 3 == 0) 235 else 120, if (index % 3 == 0) 255 else 150)
+            canvas.drawCircle(sx, sy, density * (0.7f + twinkle * 1.25f), paint)
+            if (index % 11 == 0 && !reducedMotion) {
+                paint.color = Color.argb((70f * twinkle).toInt(), Color.red(cyan), Color.green(cyan), Color.blue(cyan))
+                canvas.drawCircle(sx, sy, density * (3f + twinkle * 3f), paint)
+            }
         }
         paint.color = grid
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(1f, density * 0.6f)
         for (i in 1..5) canvas.drawLine(viewW * i / 6f, viewH * 0.02f, viewW * i / 6f, viewH * 0.98f, paint)
         for (i in 1..12) canvas.drawLine(viewW * 0.02f, viewH * i / 13f, viewW * 0.98f, viewH * i / 13f, paint)
+        if (!reducedMotion) {
+            val scanY = ((animationTime * 0.18f) % 1f) * viewH
+            paint.color = Color.argb(28, Color.red(cyan), Color.green(cyan), Color.blue(cyan))
+            paint.strokeWidth = max(2f, density * 2f)
+            canvas.drawLine(0f, scanY, viewW, scanY, paint)
+            paint.color = Color.argb(13, Color.red(pink), Color.green(pink), Color.blue(pink))
+            canvas.drawRect(0f, scanY - viewH * 0.035f, viewW, scanY + viewH * 0.035f, paint)
+        }
         paint.style = Paint.Style.FILL
     }
 
@@ -1997,6 +2033,24 @@ private class GameView(context: Context) : View(context) {
         paint.style = Paint.Style.FILL
         paint.color = Color.argb(62, 3, 6, 18)
         canvas.drawRect(0f, 0f, viewW, viewH, paint)
+        if (!reducedMotion) {
+            paint.style = Paint.Style.STROKE
+            paint.strokeCap = Paint.Cap.ROUND
+            for (i in 0..8) {
+                val phase = (animationTime * (0.10f + (i % 3) * 0.025f) + i * 0.137f) % 1f
+                val x = phase * viewW
+                val y = viewH * (0.18f + (i % 6) * 0.125f)
+                val streak = minDim * (0.018f + (i % 3) * 0.009f)
+                paint.strokeWidth = max(1f, density * (if (i % 3 == 0) 2f else 1f))
+                paint.color = Color.argb((28 + (abs(sin(animationTime * 2f + i)) * 36f)).toInt(),
+                    if (i % 2 == 0) Color.red(cyan) else Color.red(pink),
+                    if (i % 2 == 0) Color.green(cyan) else Color.green(pink),
+                    if (i % 2 == 0) Color.blue(cyan) else Color.blue(pink))
+                canvas.drawLine(x, y, x - streak, y + streak * 0.45f, paint)
+            }
+            paint.strokeCap = Paint.Cap.BUTT
+            paint.style = Paint.Style.FILL
+        }
     }
 
     private fun drawMenu(canvas: Canvas) {
@@ -2080,13 +2134,14 @@ private class GameView(context: Context) : View(context) {
             val left = slot[0]; val top = slot[1]; val right = slot[2]; val bottom = slot[3]
             val rect = RectF(left * viewW, top * viewH, right * viewW, bottom * viewH)
             val accent = accents[index]
+            val cardPulse = 0.5f + 0.5f * sin(animationTime * 2.4f + index * 1.1f)
             paint.style = Paint.Style.FILL
             paint.color = Color.argb(205, 7, 17, 35)
             canvas.drawRoundRect(rect, density * 12f, density * 12f, paint)
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = max(1.5f, density * 1.5f)
-            paint.color = Color.argb(235, Color.red(accent), Color.green(accent), Color.blue(accent))
-            paint.setShadowLayer(density * 7f, 0f, 0f, accent)
+            paint.color = Color.argb((170f + cardPulse * 85f).toInt(), Color.red(accent), Color.green(accent), Color.blue(accent))
+            paint.setShadowLayer(density * (5f + cardPulse * 9f), 0f, 0f, accent)
             canvas.drawRoundRect(rect, density * 12f, density * 12f, paint)
             paint.clearShadowLayer()
             paint.style = Paint.Style.FILL
@@ -2094,7 +2149,9 @@ private class GameView(context: Context) : View(context) {
             val current = upgradeLevel(item.id).coerceAtMost(item.maxLevel)
             val lockedByNova = item.id == "pulse_core" && upgradeLevel("nova") == 0
             drawText(canvas, item.title, (left + right) / 2f, top + 0.047f, 0.020f, Color.WHITE, Paint.Align.CENTER)
-            drawAssetCentered(canvas, item.iconPath, rect.centerX(), viewH * (top + 0.096f), minDim * 0.052f, if (lockedByNova) 105 else 255)
+            val iconBob = if (reducedMotion) 0f else sin(animationTime * 3.0f + index * 0.9f) * minDim * 0.006f
+            drawAssetCentered(canvas, item.iconPath, rect.centerX(), viewH * (top + 0.096f) + iconBob,
+                minDim * (0.050f + cardPulse * 0.006f), if (lockedByNova) 105 else 255)
             drawText(canvas, item.description, (left + right) / 2f, top + 0.142f, 0.014f, muted, Paint.Align.CENTER)
 
             val status = when {
@@ -2146,8 +2203,20 @@ private class GameView(context: Context) : View(context) {
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = max(1.5f * density, minDim * 0.0015f)
             paint.color = if (!available) muted else if (w == selectedWorld) gold else cyan
+            if (available) {
+                val pulse = 0.5f + 0.5f * sin(animationTime * 2.8f + w * 0.72f)
+                paint.strokeWidth = max(1.5f * density, minDim * (0.0015f + pulse * 0.0018f))
+                paint.setShadowLayer(density * (3f + pulse * 8f), 0f, 0f, if (w == selectedWorld) gold else cyan)
+            }
             canvas.drawRoundRect(rect, density * 10f, density * 10f, paint)
+            paint.clearShadowLayer()
             paint.style = Paint.Style.FILL
+            if (available && !reducedMotion) {
+                val beamX = rect.left + ((animationTime * 0.12f + w * 0.17f) % 1f) * rect.width()
+                paint.color = Color.argb(24, 255, 255, 255)
+                canvas.drawRoundRect(beamX - rect.width() * 0.025f, rect.top,
+                    beamX + rect.width() * 0.025f, rect.bottom, density * 5f, density * 5f, paint)
+            }
             val label = (w + 1).toString().padStart(2, '0') + "  " + CampaignWorlds.worldName(w)
             drawText(canvas, label, (left + right) / 2f, top + 0.047f, 0.026f,
                 if (available) Color.WHITE else muted, Paint.Align.CENTER, rect.width() * 0.90f)
@@ -2246,9 +2315,19 @@ private class GameView(context: Context) : View(context) {
         }
         val bladePx = bladeX * viewW
         val bladePy = bladeY * viewH
+        val bladePulse = if (reducedMotion) 1f else 1f + sin(animationTime * 7f) * 0.07f
+        if (flying) {
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = max(2f, density * 2f)
+            paint.color = Color.argb((75f + 70f * abs(sin(animationTime * 8f))).toInt(), 65, 235, 255)
+            paint.setShadowLayer(density * 12f, 0f, 0f, cyan)
+            canvas.drawCircle(bladePx, bladePy, minDim * 0.048f * bladePulse, paint)
+            paint.clearShadowLayer()
+            paint.style = Paint.Style.FILL
+        }
         canvas.save()
         canvas.rotate(angle, bladePx, bladePy)
-        val bladeSize = minDim * 0.078f
+        val bladeSize = minDim * 0.078f * bladePulse
         drawAsset(canvas, if (flying) "Gameplay Sprites/Blade.png" else "Gameplay Sprites/Blade Idle.png",
             RectF(bladePx - bladeSize / 2f, bladePy - bladeSize / 2f, bladePx + bladeSize / 2f, bladePy + bladeSize / 2f), 255)
         canvas.restore()
@@ -2398,6 +2477,22 @@ private class GameView(context: Context) : View(context) {
         val world = CampaignWorlds.indexForLevel(levelId)
         paint.style = Paint.Style.FILL
         when (world) {
+            1 -> {
+                // Crimson Circuit: animated gold circuit rails and red data pulses.
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = max(1f, density * 1.4f)
+                for (i in 0..6) {
+                    val phase = (animationTime * (0.14f + i * 0.012f) + i * 0.19f) % 1f
+                    val y = viewH * (0.20f + i * 0.095f)
+                    paint.color = Color.argb((22f + 42f * abs(sin(animationTime * 2.4f + i))).toInt(), 255, 176, 50)
+                    canvas.drawLine(viewW * 0.05f, y, viewW * (0.18f + phase * 0.76f), y, paint)
+                    val pulseX = viewW * (0.08f + phase * 0.84f)
+                    paint.style = Paint.Style.FILL
+                    paint.color = Color.argb(130, 255, 196, 70)
+                    canvas.drawCircle(pulseX, y, density * (1.8f + abs(sin(animationTime * 4f + i)) * 2.5f), paint)
+                    paint.style = Paint.Style.STROKE
+                }
+            }
             5 -> {
                 paint.color = Color.argb(22, 100, 38, 150)
                 canvas.drawRect(viewW * 0.035f, viewH * 0.135f, viewW * 0.965f, viewH * 0.94f, paint)
@@ -2465,6 +2560,22 @@ private class GameView(context: Context) : View(context) {
             if(index in collectedPowerUps && hazard.type in setOf("power_up","breakable_wall","switch","key","door")) continue
             val c=hazardCenter(hazard,index);val x=c.x*viewW;val y=c.y*viewH
             val hw=hazard.width*viewW/2f;val h=max(hazard.height*viewH,minDim*0.018f)
+            if (hazard.type == "moving_hazard" && !reducedMotion) {
+                val pulse = 0.5f + 0.5f * sin(animationTime * 5f + index)
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = max(2f, density * (2f + pulse * 2f))
+                paint.color = Color.argb((65f + pulse * 85f).toInt(), 255, 193, 58)
+                paint.setShadowLayer(density * (6f + pulse * 9f), 0f, 0f, gold)
+                canvas.drawRoundRect(x-hw-density*3f, y-h/2f-density*3f, x+hw+density*3f, y+h/2f+density*3f,
+                    density*7f, density*7f, paint)
+                paint.clearShadowLayer()
+                paint.style = Paint.Style.FILL
+                for (spark in 0..4) {
+                    val sx = x - hw + ((animationTime * 0.38f + spark * 0.23f) % 1f) * hw * 2f
+                    paint.color = Color.argb((100f + pulse * 120f).toInt(), 255, 226, 120)
+                    canvas.drawCircle(sx, y + sin(animationTime * 4f + spark) * h * 0.55f, density * (1.2f + pulse), paint)
+                }
+            }
             when(hazard.type){
                 "teleporter"->{paint.style=Paint.Style.STROKE;paint.strokeWidth=max(2f,density*2f);paint.color=cyan;paint.setShadowLayer(density*10f,0f,0f,cyan);canvas.drawCircle(x,y,max(minDim*0.025f,hw),paint);canvas.drawCircle(x,y,max(minDim*0.014f,hw*0.55f),paint);paint.clearShadowLayer();drawAssetCentered(canvas,"Gameplay Sprites/Portal.png",x,y,max(minDim*0.075f,hw*2.0f))}
                 "power_up"->{paint.style=Paint.Style.FILL;paint.color=gold;paint.setShadowLayer(density*9f,0f,0f,gold);canvas.drawCircle(x,y,max(h,hw)*1.18f,paint);paint.clearShadowLayer();drawAssetCentered(canvas,"UI Elements/Star Icon.png",x,y,max(h,hw)*2.2f)}
@@ -2720,8 +2831,21 @@ private class GameView(context: Context) : View(context) {
             canvas.drawCircle(x, y, drawSize * 0.61f, paint)
             paint.clearShadowLayer()
         }
-        drawAssetCentered(canvas, path, x, y, drawSize)
-        drawEnemyHealthBar(canvas, enemy, x, y, drawSize)
+        val enemyPulse = if (reducedMotion) 1f else 1f + sin(animationTime * (3.2f + enemy.kind * 0.17f) + index * 0.8f) * 0.045f
+        val animatedSize = drawSize * enemyPulse
+        if (!reducedMotion) {
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = max(1f, density * 1.2f)
+            val ringAlpha = (35f + 55f * (0.5f + 0.5f * sin(animationTime * 4f + index))).toInt()
+            val ringColor = if (enemy.health <= max(1, enemy.maxHealth / 3)) pink else if (isTurret) gold else cyan
+            paint.color = Color.argb(ringAlpha, Color.red(ringColor), Color.green(ringColor), Color.blue(ringColor))
+            canvas.drawCircle(x, y, animatedSize * (0.78f + 0.08f * abs(sin(animationTime * 2.2f + index))), paint)
+        }
+        canvas.save()
+        if (isTurret && !reducedMotion) canvas.rotate(sin(animationTime * 0.8f + index) * 4.5f, x, y)
+        drawAssetCentered(canvas, path, x, y, animatedSize)
+        canvas.restore()
+        drawEnemyHealthBar(canvas, enemy, x, y, animatedSize)
         if (isTurret) drawText(
             canvas,
             enemy.health.toString(),
@@ -2902,9 +3026,19 @@ private class GameView(context: Context) : View(context) {
     private fun drawParticles(canvas: Canvas) {
         paint.style = Paint.Style.FILL
         for (particle in particles) {
-            val alpha = (255f * (particle.life / 0.55f).coerceIn(0f, 1f)).toInt()
+            val lifeRatio = (particle.life / 0.55f).coerceIn(0.1f, 1f)
+            val alpha = (255f * lifeRatio).toInt()
             paint.color = Color.argb(alpha, Color.red(particle.color), Color.green(particle.color), Color.blue(particle.color))
-            canvas.drawCircle(particle.x, particle.y, particle.radius * (particle.life / 0.55f).coerceIn(0.1f, 1f), paint)
+            paint.setShadowLayer(density * 3f * lifeRatio, 0f, 0f, particle.color)
+            canvas.drawCircle(particle.x, particle.y, particle.radius * lifeRatio, paint)
+            paint.clearShadowLayer()
+            if (!reducedMotion && particle.life > 0.12f) {
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = max(1f, density * 1.1f)
+                canvas.drawLine(particle.x, particle.y,
+                    particle.x - particle.vx * 0.035f, particle.y - particle.vy * 0.035f, paint)
+                paint.style = Paint.Style.FILL
+            }
         }
     }
 
@@ -3632,6 +3766,21 @@ private class GameView(context: Context) : View(context) {
         val buttonBitmap = bitmapAsset("UI Elements/Button.png")
         val visualRect = buttonBitmap?.let { fitAssetRect(it, hitRect) } ?: hitRect
         drawAsset(canvas, "UI Elements/Button.png", hitRect, if (enabled) 255 else 125)
+        if (enabled && !reducedMotion) {
+            val pulse = 0.5f + 0.5f * sin(animationTime * 3.2f + top * 17f + left * 9f)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = max(1f, density * (1.1f + pulse * 1.4f))
+            paint.color = Color.argb((35f + pulse * 70f).toInt(),
+                Color.red(color), Color.green(color), Color.blue(color))
+            paint.setShadowLayer(density * (3f + pulse * 5f), 0f, 0f, color)
+            canvas.drawRoundRect(hitRect, density * 12f, density * 12f, paint)
+            paint.clearShadowLayer()
+            paint.style = Paint.Style.FILL
+            val shimmerX = hitRect.left + ((animationTime * 0.20f + top * 3f) % 1f) * hitRect.width()
+            paint.color = Color.argb((22f + pulse * 22f).toInt(), 255, 255, 255)
+            canvas.drawRoundRect(shimmerX - density * 1.5f, hitRect.top + density * 5f,
+                shimmerX + density * 1.5f, hitRect.bottom - density * 5f, density * 2f, density * 2f, paint)
+        }
 
         val iconPath = when {
             label == "Ⅱ" -> "UI Elements/Pause Icon.png"
