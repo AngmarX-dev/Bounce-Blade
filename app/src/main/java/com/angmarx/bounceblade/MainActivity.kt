@@ -2748,17 +2748,17 @@ private class GameView(context: Context) : View(context) {
             gun.targetY = targetY
 
             val bearing = Math.toDegrees(atan2((targetY - turretY).toDouble(), (targetX - turretX).toDouble())).toFloat()
-            val desiredHeading = if (leftHandedMode) 0f else 180f
-            val desiredOffset = normalizedAngle(bearing - desiredHeading)
+            // The minigun artwork faces LEFT in both layouts, including the mirrored wall.
+            val desiredOffset = normalizedAngle(bearing - 180f)
             val turnDelta = normalizedAngle(desiredOffset - gun.rotationOffset).coerceIn(-300f * dt, 300f * dt)
             gun.rotationOffset = normalizedAngle(gun.rotationOffset + turnDelta)
 
-            val muzzleBearing = Math.toRadians((desiredHeading + gun.rotationOffset).toDouble())
+            val muzzleBearing = Math.toRadians((180f + gun.rotationOffset).toDouble())
             gun.muzzleX = turretX + kotlin.math.cos(muzzleBearing).toFloat() * minDim * 0.075f
             gun.muzzleY = turretY + kotlin.math.sin(muzzleBearing).toFloat() * minDim * 0.075f
 
             gun.fireCooldown = (gun.fireCooldown - dt).coerceAtLeast(0f)
-            val angularError = abs(normalizedAngle(bearing - desiredHeading - gun.rotationOffset))
+            val angularError = abs(normalizedAngle(bearing - 180f - gun.rotationOffset))
             if (gun.fireCooldown <= 0f && angularError <= 17f && target.alive) {
                 gun.fireCooldown = 5.0f
                 gun.muzzleFlash = 0.12f
