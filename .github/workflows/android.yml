@@ -317,7 +317,8 @@ jobs:
 
           source = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
           required = [
-              "val hitRect = RectF(left * viewW, (top - 0.0025f) * viewH, right * viewW, (bottom + 0.0025f) * viewH)",
+              "buttonHitBounds.set(left * viewW, (top - 0.0025f) * viewH, right * viewW, (bottom + 0.0025f) * viewH)",
+              "val hitRect = buttonHitBounds",
               "val visualRect = buttonBitmap?.let { fitAssetRect(it, hitRect) } ?: hitRect",
               "drawAsset(canvas, \"UI Elements/Button.png\", hitRect, if (enabled) 255 else 125)",
               "availableTextWidth",
