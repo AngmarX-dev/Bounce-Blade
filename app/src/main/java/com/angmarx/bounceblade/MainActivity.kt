@@ -59,6 +59,14 @@ private data class Particle(var x: Float, var y: Float, var vx: Float, var vy: F
 private data class Floater(var x: Float, var y: Float, val label: String, val color: Int, var life: Float)
 
 private class BladeView(ctx: Context) : View(ctx) {
+    companion object {
+        private const val CYAN = 0xFF00FFFF.toInt()
+        private const val MAGENTA = 0xFFFF00D8.toInt()
+        private const val GOLD = 0xFFFFDD00.toInt()
+        private const val WHITE = 0xFFF5FCFF.toInt()
+        private const val MUTED = 0xFF9DB8CA.toInt()
+        private const val BG = 0xFF03040A.toInt()
+    }
     private val prefs = ctx.getSharedPreferences("bounceblade_save_v1", Context.MODE_PRIVATE)
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2f }
