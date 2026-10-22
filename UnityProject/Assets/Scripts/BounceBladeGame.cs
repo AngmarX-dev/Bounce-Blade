@@ -138,8 +138,8 @@ public sealed class BounceBladeGame : MonoBehaviour
         ClearArena(); BuildArena(); SpawnStage(); Show(Page.Game); PlayMusic("Music & Ambience/Gameplay Background"); PlaySfx("Core Gameplay SFX/Blade Launch");
     }
 
-    private float ShieldDifficulty(){int d=PlayerPrefs.GetInt("bb.difficulty",1);return d==0?1.3f:d==2?.74f:1f;}
-    private float BladeDifficulty(){int d=PlayerPrefs.GetInt("bb.difficulty",1);return (d==0?.9f:d==2?1.22f:1f)*(1f+bladeLevel*.08f);}
+    private float ShieldDifficulty(){int d=PlayerPrefs.GetInt("bb.difficulty",1);return d == 0 ? 1.3f : d == 2 ? 0.74f : 1f;}
+    private float BladeDifficulty(){int d=PlayerPrefs.GetInt("bb.difficulty",1);return (d == 0 ? 0.9f : d == 2 ? 1.22f : 1f) * (1f + bladeLevel * 0.08f);}
 
     private void ClearArena()
     {
@@ -204,7 +204,7 @@ public sealed class BounceBladeGame : MonoBehaviour
     private void AddTarget(Kind k,Vector3 pos,int idx)
     {
         int hp=k==Kind.Boss?12+world*2:k==Kind.Turret?6+stage/12:k==Kind.Slime?4+stage/20:k==Kind.Crate?3+world/2:3+stage/25;
-        float r=k==Kind.Boss?.62f:k==Kind.Turret?.4f:k==Kind.Slime?.34f:k==Kind.Crate?.38f:.31f;
+        float r = k == Kind.Boss ? 0.62f : k == Kind.Turret ? 0.4f : k == Kind.Slime ? 0.34f : k == Kind.Crate ? 0.38f : 0.31f;
         string art=k==Kind.Turret||k==Kind.Boss?"Enemy Turret":k==Kind.Slime?"Enemy Slime":k==Kind.Crate?"Crate":"Enemy Drone";
         GameObject go=WorldSprite(k+" "+idx,"BounceBlade/Images/Gameplay Sprites/"+art,pos,new Vector2(2*r,2*r),8,Color.white);
         Target t=new Target{kind=k,go=go,sr=go.GetComponent<SpriteRenderer>(),origin=pos,hp=hp,maxHp=hp,radius=r,phase=UnityEngine.Random.Range(0,6.28f),speed=UnityEngine.Random.Range(.45f,1.2f)+stage*.008f};
@@ -234,11 +234,11 @@ public sealed class BounceBladeGame : MonoBehaviour
 
     private void TickGame(float unscaled)
     {
-        float dt=unscaled*(slowTime>0&&slowMeter>0?.38f:1f);stageTime+=dt;
+        float dt = unscaled * (slowTime > 0 && slowMeter > 0 ? 0.38f : 1f); stageTime += dt;
         doubleTime=Mathf.Max(0,doubleTime-dt);expandTime=Mathf.Max(0,expandTime-dt);stickyTime=Mathf.Max(0,stickyTime-dt);hazardLock=Mathf.Max(0,hazardLock-dt);powerTime=Mathf.Max(0,powerTime-dt);
         if(powerTime<=0)powerLabel="";
         if(slowTime<=0)slowMeter=Mathf.Min(4f+slowLevel*1.4f,slowMeter+dt*.32f);
-        float sh=shieldH+(expandTime>0?.7f:0);shieldY=Mathf.Clamp(shieldY,B+sh*.5f,T-sh*.5f);
+        float sh = shieldH + (expandTime > 0 ? 0.7f : 0f); shieldY = Mathf.Clamp(shieldY, B + sh * 0.5f, T - sh * 0.5f);
         if(shield!=null){shield.transform.position=new Vector3(SX,shieldY,0);Fit(shield,new Vector2(.18f,sh));shield.color=expandTime>0?WorldColor[4]:Accent;}
         if(bladeTrail!=null){bladeTrail.startColor=Accent;bladeTrail.endColor=new Color(Accent.r,Accent.g,Accent.b,0f);}
         TickTargets(dt);TickHazards(dt);TickGuns(dt);TickBolts(dt);TickBlade(dt);
@@ -302,7 +302,7 @@ public sealed class BounceBladeGame : MonoBehaviour
     private void TickBlade(float dt)
     {
         if(blade==null)return;if(held){launchIn-=dt;blade.transform.position=new Vector3(SX+.44f,shieldY,0);bladeAngle+=dt*260;blade.transform.rotation=Quaternion.Euler(0,0,bladeAngle);if(launchIn<=0)Launch();return;}
-        if(!flying)return;Vector3 p=blade.transform.position;p+=(Vector3)(direction*(bladeSpeed*BladeDifficulty()*(stickyTime>0?.46f:1f))*dt);bladeAngle+=dt*900;blade.transform.rotation=Quaternion.Euler(0,0,bladeAngle);
+        if(!flying)return;Vector3 p=blade.transform.position;p+=(Vector3)(direction * (bladeSpeed * BladeDifficulty() * (stickyTime > 0 ? 0.46f : 1f)) * dt);bladeAngle+=dt*900;blade.transform.rotation=Quaternion.Euler(0,0,bladeAngle);
         if(p.y>=T){p.y=T;direction.y=-Mathf.Abs(direction.y);WallFx(p);}if(p.y<=B){p.y=B;direction.y=Mathf.Abs(direction.y);WallFx(p);}if(p.x>=R){p.x=R;direction.x=-Mathf.Abs(direction.x);WallFx(p);}
         CheckHazards(ref p);if(page!=Page.Game)return;
         foreach(Target t in targets){if(!t.alive||t.go==null||t.hitDelay>0)continue;Vector3 ep=t.go.transform.position;Vector2 v=p-ep;float rr=t.radius+BladeRadius;if(v.sqrMagnitude>rr*rr)continue;
@@ -311,7 +311,7 @@ public sealed class BounceBladeGame : MonoBehaviour
             FxAt(ep,"BounceBlade/Images/Effects & Particles/Impact Spark",.6f,.28f);if(t.kind!=Kind.Crate)FxAt(ep,"BounceBlade/Images/Effects & Particles/Slice Effect",.72f,.35f);
             PlaySfx("Core Gameplay SFX/Enemy Slice (Variation 1)");shake=.08f;shakeTime=.1f;if(vibrateOn)Handheld.Vibrate();break;}
         blade.transform.position=p;if(Pickup(p))return;
-        if(direction.x<0&&p.x<=SX+.45f){if(Mathf.Abs(p.y-shieldY)<=(shieldH+(expandTime>0?.7f:0))*.5f+BladeRadius)Catch();else if(p.x<L-.18f)Miss();}
+        if(direction.x<0&&p.x<=SX+.45f){if(Mathf.Abs(p.y-shieldY)<=(shieldH + (expandTime > 0 ? 0.7f : 0f)) * 0.5f + BladeRadius)Catch();else if(p.x<L-.18f)Miss();}
         if(p.x<L-.6f)Miss();
     }
 
@@ -358,7 +358,7 @@ public sealed class BounceBladeGame : MonoBehaviour
                 if(Vector2.Distance(p,h.exitPos)<.48f){p=hp+new Vector3(.5f,0,0);blade.transform.position=p;hazardLock=.45f;PlaySfx("Core Gameplay SFX/Portal Enter");return;}
             }
             if(h.kind==HazardKind.Switch&&Vector2.Distance(p,hp)<.42f){h.active=false;h.go.SetActive(false);score+=150;PlaySfx("Core Gameplay SFX/Switch Activation");foreach(Hazard other in hazards)if(other.kind==HazardKind.Laser){other.active=false;other.go.SetActive(false);}FxAt(hp,"BounceBlade/Images/Effects & Particles/Impact Spark",.7f,.3f);return;}
-            float dist=h.kind==HazardKind.Sticky?.6f:h.kind==HazardKind.Spikes?.5f:h.kind==HazardKind.Laser?.24f:h.kind==HazardKind.Mover?.48f:.2f;
+            float dist = h.kind == HazardKind.Sticky ? 0.6f : h.kind == HazardKind.Spikes ? 0.5f : h.kind == HazardKind.Laser ? 0.24f : h.kind == HazardKind.Mover ? 0.48f : 0.2f;
             if(Vector2.Distance(p,hp)>dist||h.kind==HazardKind.Power||h.kind==HazardKind.Switch)continue;hazardLock=.35f;
             if(h.kind==HazardKind.Sticky){stickyTime=1.2f;direction*=.7f;}else{direction.x=p.x<hp.x?-Mathf.Abs(direction.x):Mathf.Abs(direction.x);direction.y=Mathf.Clamp(direction.y+UnityEngine.Random.Range(-.35f,.35f),-.9f,.9f);PlaySfx("Core Gameplay SFX/Wall Ricochet (Variation 2)");}
             FxAt(p,"BounceBlade/Images/Effects & Particles/Impact Spark",.45f,.22f);return;
