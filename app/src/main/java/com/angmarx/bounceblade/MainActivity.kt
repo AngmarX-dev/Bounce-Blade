@@ -2845,7 +2845,7 @@ private class GameView(context: Context) : View(context) {
         if (isTurret && !reducedMotion) canvas.rotate(sin(animationTime * 0.8f + index) * 4.5f, x, y)
         drawAssetCentered(canvas, path, x, y, animatedSize)
         canvas.restore()
-        drawEnemyHealthBar(canvas, enemy, x, y, animatedSize)
+        drawEnemyHealthBar(canvas, enemy, x, y, drawSize)
         if (isTurret) drawText(
             canvas,
             enemy.health.toString(),
