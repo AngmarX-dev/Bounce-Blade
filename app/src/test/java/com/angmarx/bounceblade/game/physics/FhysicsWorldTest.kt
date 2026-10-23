@@ -91,6 +91,18 @@ class FhysicsWorldTest {
     }
 
     @Test
+    fun appliedForceChangesVelocityAccordingToMass() {
+        val world = FhysicsWorld(linearDamping = 0f, angularDamping = 0f)
+        val body = FhysicsBody(FhysicsVector2(), radius = 0.5f, mass = 2f)
+        body.applyForce(FhysicsVector2(10f, 0f))
+
+        val result = world.stepBody(body, 0.2f)
+
+        assertEquals(1f, result.velocity.x, 0.001f)
+        assertEquals(0f, body.force.x, 0.0001f)
+    }
+
+    @Test
     fun angularMotionAdvancesInRadians() {
         val world = FhysicsWorld(linearDamping = 0f, angularDamping = 0f)
         val body = FhysicsBody(FhysicsVector2(), radius = 1f)
