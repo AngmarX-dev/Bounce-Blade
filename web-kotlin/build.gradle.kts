@@ -2,17 +2,11 @@ plugins {
     kotlin("js") version "2.1.0"
 }
 
-repositories {
-    mavenCentral()
-}
+repositories { mavenCentral() }
 
 kotlin {
     js(IR) {
-        browser {
-            commonWebpackConfig {
-                outputFileName = "bounce-blade.js"
-            }
-        }
+        browser { commonWebpackConfig { outputFileName = "bounce-blade.js" } }
         binaries.executable()
     }
 }
@@ -34,12 +28,14 @@ tasks.register("copyKotlinBundle") {
             buildRoot.resolve("webpack/bin/main/productionExecutable/bounce-blade.js"),
             buildRoot.resolve("webpack/bin/main/productionExecutable/web-kotlin.js")
         )
-        val bundle = known.firstOrNull { it.isFile } ?: buildRoot.walkTopDown()
-            .filter { it.isFile && it.extension == "js" && !it.path.contains("node_modules") && !it.name.endsWith(".test.js") }
+        val bundle = known.firstOrNull { it.isFile && it.length() > 0L } ?: buildRoot.walkTopDown()
+            .onEnter { it.name != "node_modules" && it.name != ".gradle" }
+            .filter { it.isFile && it.extension == "js" && !it.name.endsWith(".test.js") }
             .maxByOrNull { it.length() }
         if (bundle == null || !bundle.isFile || bundle.length() == 0L) {
-            val found = buildRoot.walkTopDown().filter { it.isFile && it.extension == "js" }
-                .take(40).joinToString("\\n") { it.relativeTo(buildRoot).path }
+            val found = buildRoot.walkTopDown().onEnter { it.name != "node_modules" && it.name != ".gradle" }
+                .filter { it.isFile && it.extension == "js" }.take(40)
+                .joinToString("\\n") { it.relativeTo(buildRoot).path }
             throw GradleException("Kotlin/JS webpack output not found. JS files under build: $found")
         }
         val destination = layout.projectDirectory.dir("site/kotlin").asFile
