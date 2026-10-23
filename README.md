@@ -21,6 +21,7 @@
 - [Controls](#controls)
 - [Difficulty Levels](#difficulty-levels)
 - [Visuals & Audio](#visuals--audio)
+- [Physics Runtime](#physics-runtime)
 - [Art and Audio Assets](#art-and-audio-assets)
 - [Build & CI](#build--ci)
 - [Project Layout](#project-layout)
