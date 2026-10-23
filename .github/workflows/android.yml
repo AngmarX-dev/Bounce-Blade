@@ -498,6 +498,7 @@ jobs:
               "class FhysicsWorld(",
               "fun stepBody(",
               "fun resolveCircleContact(",
+              "fun resolveCircleRectangle(",
               "private fun bounceFromBoundary(",
               "maxSubstepSeconds",
               "staticFriction",
@@ -507,6 +508,7 @@ jobs:
               "solidBoundaryReflectsBladeWithConfiguredRestitution",
               "openPlayerSideDoesNotBounceWhenTheBladeMisses",
               "circleContactResolvesOverlapAndReversesApproachingBodies",
+              "circleRectangleContactSeparatesBodyAndReflectsIt",
               "separatedCirclesDoNotCreateContact",
               "angularMotionAdvancesInRadians",
           ]
