@@ -1007,3 +1007,180 @@ fun StageSelectOverlay(onClose: () -> Unit, onPick: (Int) -> Unit) {
                             index = index,
                             locked = locked,
                             modifier = Modifier.weight(1f)
+                        ) {
+                            if (!locked) onPick(index)
+                        }
+                    }
+                }
+                if (row == 0) Spacer(Modifier.height(8.dp))
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            ModalButton("CLOSE", modifier = Modifier.fillMaxWidth()) { onClose() }
+        }
+    }
+}
+
+@Composable
+fun StageCard(index: Int, locked: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val shape = CutCornerShape(8.dp)
+    val accent = if (locked) Orange else Cyan
+
+    Box(
+        modifier
+            .height(88.dp)
+            .clip(shape)
+            .background(accent.copy(alpha = 0.06f))
+            .border(1.dp, accent.copy(alpha = 0.7f), shape)
+            .clickable { onClick() }
+    ) {
+        Text(
+            index.toString(),
+            color = if (locked) Orange else TextMuted,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(6.dp)
+        )
+        Column(
+            Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                if (locked) "🔒" else "▶",
+                color = accent,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+            if (!locked) {
+                Text("★★★", color = Orange, fontSize = 8.sp, letterSpacing = 1.sp)
+            }
+        }
+    }
+}
+
+/* ============================================================
+   PAUSE
+   ============================================================ */
+@Composable
+fun PauseOverlay(onResume: () -> Unit, onRestart: () -> Unit, onQuit: () -> Unit) {
+    OverlayBox {
+        ModalCard {
+            Text(
+                "PAUSE",
+                color = Cyan,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 4.sp
+            )
+            Spacer(Modifier.height(24.dp))
+            ModalButton("RESUME", modifier = Modifier.fillMaxWidth()) { onResume() }
+            Spacer(Modifier.height(12.dp))
+            ModalButton("RESTART", modifier = Modifier.fillMaxWidth()) { onRestart() }
+            Spacer(Modifier.height(12.dp))
+            ModalButton("QUIT", color = Red, modifier = Modifier.fillMaxWidth()) { onQuit() }
+        }
+    }
+}
+
+/* ============================================================
+   SETTINGS
+   ============================================================ */
+@Composable
+fun SettingsOverlay(onClose: () -> Unit) {
+    OverlayBox {
+        ModalCard {
+            Text(
+                "SETTINGS",
+                color = Cyan,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 3.sp
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "SYSTEM CONFIGURATION\nALL SYSTEMS NOMINAL",
+                color = TextMuted,
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp
+            )
+            Spacer(Modifier.height(24.dp))
+            ModalButton("CLOSE", modifier = Modifier.fillMaxWidth()) { onClose() }
+        }
+    }
+}
+
+/* ============================================================
+   VICTORY / DEFEAT
+   ============================================================ */
+@Composable
+fun VictoryOverlay(engine: GameEngine, onRestart: () -> Unit, onNext: () -> Unit) {
+    OverlayBox {
+        ModalCard {
+            Text("★★★", color = Orange, fontSize = 32.sp, letterSpacing = 8.sp)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "VICTORY",
+                color = Cyan,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 4.sp
+            )
+            Spacer(Modifier.height(20.dp))
+            StatRow("Kills", engine.kills.toString(), Cyan)
+            StatRow("Score", engine.score.toString(), Cyan)
+            StatRow("Best Score", maxOf(23100, engine.score).toString(), Cyan)
+            Spacer(Modifier.height(24.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ModalButton("RESTART", modifier = Modifier.weight(1f)) { onRestart() }
+                ModalButton("NEXT", modifier = Modifier.weight(1f)) { onNext() }
+            }
+        }
+    }
+}
+
+@Composable
+fun DefeatOverlay(engine: GameEngine, onRestart: () -> Unit, onMenu: () -> Unit) {
+    OverlayBox {
+        ModalCard(borderColor = Red) {
+            Text("★★☆", color = Red, fontSize = 32.sp, letterSpacing = 8.sp)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "DEFEAT",
+                color = Red,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 4.sp
+            )
+            Spacer(Modifier.height(20.dp))
+            StatRow("Kills", engine.kills.toString(), Red)
+            StatRow("Score", engine.score.toString(), Red)
+            val m = (engine.timeElapsed / 60).toInt()
+            val s = (engine.timeElapsed % 60).toInt()
+            StatRow("Clear Time", "$m'${s.toString().padStart(2, '0')}\"", Red)
+            Spacer(Modifier.height(24.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ModalButton("RESTART", color = Red, modifier = Modifier.weight(1f)) { onRestart() }
+                ModalButton("MENU", color = Red, modifier = Modifier.weight(1f)) { onMenu() }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatRow(label: String, value: String, accent: Color) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 5.dp)
+            .background(accent.copy(alpha = 0.10f))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, color = TextMain, fontSize = 14.sp)
+        Text(value, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+    }
+}
