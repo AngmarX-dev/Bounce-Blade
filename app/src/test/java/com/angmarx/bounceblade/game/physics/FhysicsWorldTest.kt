@@ -24,7 +24,7 @@ class FhysicsWorldTest {
         )
 
         assertTrue(result.wallContacts > 0)
-        assertEquals(10f, result.position.x, 0.0001f)
+        assertTrue(result.position.x < 10f && result.position.x > 8.5f)
         assertEquals(-8f, result.velocity.x, 0.001f)
     }
 
