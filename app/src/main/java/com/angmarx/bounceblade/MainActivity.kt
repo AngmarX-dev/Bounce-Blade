@@ -31,6 +31,11 @@ import android.view.View
 import com.angmarx.bounceblade.game.session.GameRules
 import com.angmarx.bounceblade.game.level.LevelRepository
 import com.angmarx.bounceblade.game.level.CampaignWorlds
+import com.angmarx.bounceblade.game.physics.FhysicsBody
+import com.angmarx.bounceblade.game.physics.FhysicsBounds
+import com.angmarx.bounceblade.game.physics.FhysicsMaterial
+import com.angmarx.bounceblade.game.physics.FhysicsVector2
+import com.angmarx.bounceblade.game.physics.FhysicsWorld
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -139,6 +144,23 @@ private data class ShopItem(
 private class GameView(context: Context) : View(context) {
     private val prefs = context.getSharedPreferences("bounce_blade_save", Context.MODE_PRIVATE)
     private val density = resources.displayMetrics.density
+    // Fhysics powers the live blade rigid body; game rules remain in GameView.
+    private val fhysicsWorld = FhysicsWorld(
+        gravity = FhysicsVector2(0f, 0f),
+        linearDamping = 0.004f,
+        angularDamping = 0.018f
+    )
+    private val bladePhysicsBody = FhysicsBody(
+        position = FhysicsVector2(),
+        velocity = FhysicsVector2(),
+        radius = 16f,
+        mass = 1f,
+        material = FhysicsMaterial(
+            restitution = 0.96f,
+            staticFriction = 0.28f,
+            dynamicFriction = 0.16f
+        )
+    )
     private val minDim get() = min(viewW, viewH)
     private val wallGuardMode = true
     private var guardPaddleY = 0.5f
@@ -558,7 +580,7 @@ private class GameView(context: Context) : View(context) {
             if (slowMotion && slowMeter > 0f) slowMeter = (slowMeter - rawDt * 0.20f).coerceAtLeast(0f)
             else slowMeter = (slowMeter + rawDt * 0.075f).coerceAtMost(1f)
             flightTime += dt
-            angle = (angle + 1080f * dt) % 360f
+            if (!wallGuardMode) angle = (angle + 1080f * dt) % 360f
             repeat(3) { if (screen == GameScreen.PLAYING && flying) simulateStep(dt / 3f) }
             if (flying && !wallGuardMode &&
                 (sqrt(velocityX * velocityX + velocityY * velocityY) < minDim * 0.055f || flightTime > 12f)) {
@@ -1008,32 +1030,41 @@ private class GameView(context: Context) : View(context) {
                 velocityY *= (1f - 0.025f * dt).coerceAtLeast(0.95f)
             }
         }
-        var px = bladeX * viewW + velocityX * dt
-        var py = bladeY * viewH + velocityY * dt
-        if (worldIndex == 6 && py > viewH * 0.86f && sin(animationTime * 1.2f) > 0.78f) {
+        val projectedY = bladeY * viewH + velocityY * dt
+        if (worldIndex == 6 && projectedY > viewH * 0.86f && sin(animationTime * 1.2f) > 0.78f) {
             fail("LAVA SURGE — STAY ABOVE THE HOT ZONE")
             return
         }
 
-        var wallHit = false
-        if (!leftHandedMode && px > rightWall) {
-            px = rightWall
-            velocityX = -abs(velocityX)
-            wallHit = true
-        } else if (leftHandedMode && px < leftWall) {
-            px = leftWall
-            velocityX = abs(velocityX)
-            wallHit = true
-        }
-        if (py < top) {
-            py = top
-            velocityY = abs(velocityY)
-            wallHit = true
-        } else if (py > bottom) {
-            py = bottom
-            velocityY = -abs(velocityY)
-            wallHit = true
-        }
+        // Fhysics substeps this rigid body, applies material restitution/friction,
+        // advances rotation, and constrains only the arena's solid boundaries.
+        // The player's side remains open so the existing catch/fail rule is unchanged.
+        bladePhysicsBody.radius = radius
+        bladePhysicsBody.position.x = bladeX * viewW
+        bladePhysicsBody.position.y = bladeY * viewH
+        bladePhysicsBody.velocity.x = velocityX
+        bladePhysicsBody.velocity.y = velocityY
+        bladePhysicsBody.angleRadians = angle * 0.01745329252f
+        val physicsStep = fhysicsWorld.stepBody(
+            bladePhysicsBody,
+            dt,
+            FhysicsBounds(
+                left = leftWall,
+                top = top,
+                right = rightWall,
+                bottom = bottom,
+                constrainLeft = leftHandedMode,
+                constrainRight = !leftHandedMode,
+                constrainTop = true,
+                constrainBottom = true
+            )
+        )
+        var px = physicsStep.position.x
+        var py = physicsStep.position.y
+        velocityX = physicsStep.velocity.x
+        velocityY = physicsStep.velocity.y
+        angle = (physicsStep.angleRadians * 57.29578f).let { ((it % 360f) + 360f) % 360f }
+        val wallHit = physicsStep.wallContacts > 0
         if (wallHit) {
             addBurst(px, py, cyan, 7)
             playNextRicochet()
@@ -1060,16 +1091,28 @@ private class GameView(context: Context) : View(context) {
             when (hazard.type) {
                 "moving_hazard" -> {
                     if (worldIndex == 1) {
-                        // Crimson Circuit's gold circuit rails are deflectors, not instant-kill walls.
-                        // Push the blade clear of the rail and kick it away so it cannot fail on spawn.
-                        if (py <= hy) {
-                            py = hy - halfH - radius
-                            velocityY = -abs(velocityY).coerceAtLeast(minDim * 0.16f)
+                        // Let Fhysics resolve the circle/rail rectangle contact, then
+                        // apply the campaign-specific minimum deflection so the rail remains fair.
+                        bladePhysicsBody.position.x = px
+                        bladePhysicsBody.position.y = py
+                        bladePhysicsBody.velocity.x = velocityX
+                        bladePhysicsBody.velocity.y = velocityY
+                        fhysicsWorld.resolveCircleRectangle(
+                            bladePhysicsBody,
+                            FhysicsVector2(hx, hy),
+                            halfW,
+                            halfH,
+                            FhysicsMaterial(restitution = 0.94f, staticFriction = 0.32f, dynamicFriction = 0.20f)
+                        )
+                        px = bladePhysicsBody.position.x
+                        py = bladePhysicsBody.position.y
+                        velocityX = bladePhysicsBody.velocity.x * 0.96f
+                        velocityY = bladePhysicsBody.velocity.y
+                        velocityY = if (py <= hy) {
+                            -abs(velocityY).coerceAtLeast(minDim * 0.16f)
                         } else {
-                            py = hy + halfH + radius
-                            velocityY = abs(velocityY).coerceAtLeast(minDim * 0.16f)
+                            abs(velocityY).coerceAtLeast(minDim * 0.16f)
                         }
-                        velocityX *= 0.94f
                         addBurst(px, py, gold, 12)
                         showMessage("CIRCUIT RAIL DEFLECTED")
                         playNextRicochet()
@@ -1138,12 +1181,15 @@ private class GameView(context: Context) : View(context) {
                     val dx = hx - px
                     val dy = hy - py
                     val distance = sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
-                    velocityX += dx / distance * minDim * 0.20f * dt
-                    velocityY += dy / distance * minDim * 0.20f * dt
+                    bladePhysicsBody.applyForce(
+                        FhysicsVector2(dx / distance * minDim * 0.20f, dy / distance * minDim * 0.20f)
+                    )
                     showMessage("GRAVITY WELL PULL")
                 }
                 "conveyor_belt" -> {
-                    velocityX += (if (px < hx) -1f else 1f) * minDim * 0.05f * dt
+                    bladePhysicsBody.applyForce(
+                        FhysicsVector2((if (px < hx) -1f else 1f) * minDim * 0.05f, 0f)
+                    )
                     showMessage("CONVEYOR BELT")
                 }
                 "rotating_laser" -> {
@@ -1340,6 +1386,9 @@ private class GameView(context: Context) : View(context) {
         val speed = minDim * (0.50f + difficulty * 0.075f + min(levelId, 30) * 0.003f) * bladeSpeedScale()
         velocityX = if (leftHandedMode) -speed else speed
         velocityY = speed * (sin(levelId * 1.37f) * 0.045f)
+        bladePhysicsBody.angularVelocity = 18.849555f // 1080 degrees per second, in radians
+        bladePhysicsBody.force.x = 0f
+        bladePhysicsBody.force.y = 0f
         flying = true
         aiming = false
         shotsUsed = 1

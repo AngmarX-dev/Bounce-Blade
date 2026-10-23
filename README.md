@@ -21,6 +21,7 @@
 - [Controls](#controls)
 - [Difficulty Levels](#difficulty-levels)
 - [Visuals & Audio](#visuals--audio)
+- [Physics Runtime](#physics-runtime)
 - [Art and Audio Assets](#art-and-audio-assets)
 - [Build & CI](#build--ci)
 - [Project Layout](#project-layout)
@@ -139,6 +140,10 @@ But you are not alone. The Blade remembers its purpose. Every enemy it strikes, 
 - **The Sound setting controls music and effects.**
 - **Impact effects:** screen shake, particles, and flashes.
 - **Catch streaks:** visual and audio feedback for consecutive catches.
+
+## Physics Runtime
+
+The gameplay blade is advanced by an Android-safe **Fhysics** rigid-body adapter with substepped motion, material restitution and friction, angular motion, gravity/force support, and circle-contact impulses. The shield side remains open so Bounce Blade's existing catch and fail conditions remain intact. See [Fhysics integration notes](docs/physics-fhysics.md) and [third-party notices](THIRD_PARTY_NOTICES.md) for scope and MIT attribution.
 
 ## Art and Audio Assets
 

@@ -474,6 +474,61 @@ jobs:
           print("Verified synchronized timing, mirrored controls, bounded Canvas effects, and idle-frame/allocation optimizations.")
           PY
 
+      - name: Verify Fhysics runtime is wired into live gameplay
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+
+          activity = Path("app/src/main/java/com/angmarx/bounceblade/MainActivity.kt").read_text(encoding="utf-8")
+          engine = Path("app/src/main/java/com/angmarx/bounceblade/game/physics/FhysicsWorld.kt").read_text(encoding="utf-8")
+          tests = Path("app/src/test/java/com/angmarx/bounceblade/game/physics/FhysicsWorldTest.kt").read_text(encoding="utf-8")
+          activity_markers = [
+              "import com.angmarx.bounceblade.game.physics.FhysicsWorld",
+              "private val fhysicsWorld = FhysicsWorld(",
+              "private val bladePhysicsBody = FhysicsBody(",
+              "fhysicsWorld.stepBody(",
+              "FhysicsBounds(",
+              "constrainLeft = leftHandedMode",
+              "constrainRight = !leftHandedMode",
+              "val wallHit = physicsStep.wallContacts > 0",
+              "bladePhysicsBody.applyForce(",
+              "bladePhysicsBody.angularVelocity = 18.849555f",
+          ]
+          engine_markers = [
+              "class FhysicsWorld(",
+              "fun stepBody(",
+              "fun resolveCircleContact(",
+              "fun resolveCircleRectangle(",
+              "fun applyForce(",
+              "private fun bounceFromBoundary(",
+              "maxSubstepSeconds",
+              "staticFriction",
+              "angularVelocity",
+          ]
+          test_markers = [
+              "solidBoundaryReflectsBladeWithConfiguredRestitution",
+              "openPlayerSideDoesNotBounceWhenTheBladeMisses",
+              "circleContactResolvesOverlapAndReversesApproachingBodies",
+              "circleRectangleContactSeparatesBodyAndReflectsIt",
+              "appliedForceChangesVelocityAccordingToMass",
+              "separatedCirclesDoNotCreateContact",
+              "angularMotionAdvancesInRadians",
+          ]
+          failures = []
+          for label, source, markers in (
+              ("MainActivity integration", activity, activity_markers),
+              ("Fhysics engine", engine, engine_markers),
+              ("Fhysics tests", tests, test_markers),
+          ):
+              missing = [marker for marker in markers if marker not in source]
+              if missing:
+                  failures.append(f"{label}: missing {missing}")
+          if failures:
+              sys.exit("\\n".join(failures))
+          print("Verified Fhysics rigid-body stepping is called by live blade gameplay and has unit coverage.")
+          PY
+
       - name: Run unit tests and build debug APK
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug
 
