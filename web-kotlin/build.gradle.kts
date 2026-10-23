@@ -17,12 +17,19 @@ kotlin {
     }
 }
 
-tasks.register<Copy>("publishSite") {
-    dependsOn("jsBrowserDistribution")
+tasks.register<Copy>("copySiteShell") {
     from(layout.projectDirectory.dir("site-template"))
     into(layout.projectDirectory.dir("site"))
+}
+
+tasks.register<Copy>("copyKotlinBundle") {
+    dependsOn("jsBrowserDistribution")
     from(layout.buildDirectory.dir("distributions")) {
         include("bounce-blade.js")
     }
     into(layout.projectDirectory.dir("site/kotlin"))
+}
+
+tasks.register("publishSite") {
+    dependsOn("copySiteShell", "copyKotlinBundle")
 }
