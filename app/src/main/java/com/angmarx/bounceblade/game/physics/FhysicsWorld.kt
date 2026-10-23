@@ -211,6 +211,71 @@ class FhysicsWorld(
         return true
     }
 
+    /** Resolves a circle against a static axis-aligned rectangle using a contact impulse. */
+    fun resolveCircleRectangle(
+        body: FhysicsBody,
+        center: FhysicsVector2,
+        halfWidth: Float,
+        halfHeight: Float,
+        material: FhysicsMaterial = FhysicsMaterial()
+    ): Boolean {
+        require(halfWidth >= 0f && halfHeight >= 0f) { "rectangle half-extents must not be negative" }
+        val minX = center.x - halfWidth
+        val maxX = center.x + halfWidth
+        val minY = center.y - halfHeight
+        val maxY = center.y + halfHeight
+        val closestX = body.position.x.coerceIn(minX, maxX)
+        val closestY = body.position.y.coerceIn(minY, maxY)
+        var normal = FhysicsVector2(body.position.x - closestX, body.position.y - closestY)
+        var distanceSquared = normal.lengthSquared()
+        if (distanceSquared > body.radius * body.radius) return false
+
+        var penetration: Float
+        if (distanceSquared < 1e-10f) {
+            // Centre is within the rectangle; choose the shallowest escape edge.
+            val options = listOf(
+                Triple(body.position.x - minX, FhysicsVector2(-1f, 0f), 0),
+                Triple(maxX - body.position.x, FhysicsVector2(1f, 0f), 1),
+                Triple(body.position.y - minY, FhysicsVector2(0f, -1f), 2),
+                Triple(maxY - body.position.y, FhysicsVector2(0f, 1f), 3)
+            )
+            val escape = options.minBy { it.first }
+            normal = escape.second
+            penetration = body.radius + escape.first
+        } else {
+            val distance = sqrt(distanceSquared)
+            normal = normal / distance
+            penetration = body.radius - distance
+        }
+        body.position.x += normal.x * penetration
+        body.position.y += normal.y * penetration
+
+        val normalSpeed = body.velocity.dot(normal)
+        if (normalSpeed >= 0f || body.isStatic) return true
+        val restitution = min(body.material.restitution, material.restitution)
+        val normalImpulse = -(1f + restitution) * normalSpeed * body.mass
+        body.velocity.x += normal.x * normalImpulse / body.mass
+        body.velocity.y += normal.y * normalImpulse / body.mass
+
+        val tangent = FhysicsVector2(-normal.y, normal.x)
+        val tangentSpeed = body.velocity.dot(tangent)
+        if (abs(tangentSpeed) > 1e-5f) {
+            val needed = abs(tangentSpeed) * body.mass
+            val staticMu = sqrt(body.material.staticFriction * material.staticFriction)
+            val dynamicMu = sqrt(body.material.dynamicFriction * material.dynamicFriction)
+            val frictionMagnitude = if (needed <= normalImpulse * staticMu) {
+                needed
+            } else {
+                min(needed, normalImpulse * dynamicMu)
+            }
+            val frictionImpulse = tangent * (-kotlin.math.sign(tangentSpeed) * frictionMagnitude)
+            body.velocity.x += frictionImpulse.x / body.mass
+            body.velocity.y += frictionImpulse.y / body.mass
+            body.angularVelocity += (normal * -body.radius).cross(frictionImpulse) * body.inverseInertia
+        }
+        return true
+    }
+
     private fun solveBoundaryContacts(body: FhysicsBody, bounds: FhysicsBounds): Int {
         var contacts = 0
         if (bounds.constrainLeft && body.position.x < bounds.left) {
