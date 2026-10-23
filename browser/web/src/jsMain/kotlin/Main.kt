@@ -46,11 +46,11 @@ private fun clamp(v:Double,a:Double,b:Double)=v.coerceIn(a,b)
 private fun dist2(x1:Double,y1:Double,x2:Double,y2:Double):Double{val dx=x1-x2;val dy=y1-y2;return dx*dx+dy*dy}
 private fun normAngle(deg:Double):Double{var a=(deg+180.0)%360.0;if(a<0)a+=360.0;return a-180.0}
 private fun worldOf(id:Int)=((id.coerceIn(1,TOTAL)-1)/10).coerceIn(0,9)
-private fun starCount(id:Int)=intPref("stars_$"+"$"+"id",0).coerceIn(0,3)
-private fun scoreBest(id:Int)=intPref("score_$"+"$"+"id",0)
-private fun upgradeLevel(id:String)=intPref("upgrade_$"+"$"+"id",0).coerceAtLeast(0)
+private fun starCount(id:Int)=intPref("stars_$id",0).coerceIn(0,3)
+private fun scoreBest(id:Int)=intPref("score_$id",0)
+private fun upgradeLevel(id:String)=intPref("upgrade_$id",0).coerceAtLeast(0)
 private fun cost(item:Upgrade)=item.cost*(upgradeLevel(item.id)+1)
-private fun gunUnlocked(i:Int)=i==0||boolPref("player_minigun_unlocked_$"+"$"+"i",false)
+private fun gunUnlocked(i:Int)=i==0||boolPref("player_minigun_unlocked_$i",false)
 private fun gunIndex()=if(gunUnlocked(selectedGun))selectedGun else 0
 private fun droneDamage(e:Enemy)=((e.maxHp.coerceAtLeast(1)+2)/3).coerceAtLeast(1)
 private fun enemyKind(id:Int,index:Int):Int{if(id<=50)return when(id){in 1..20->0;in 21..30->1;in 31..40->2;else->3};val roster=when(id){in 51..60->listOf(8,4,0,3);in 61..70->listOf(5,0,8,1);in 71..80->listOf(6,0,2,3);in 81..90->listOf(7,1,5,8);else->listOf(8,4,5,6,7,9)};return roster[index%roster.size]}
