@@ -215,19 +215,19 @@ class FhysicsWorld(
         var contacts = 0
         if (bounds.constrainLeft && body.position.x < bounds.left) {
             body.position.x = bounds.left
-            if (body.velocity.x < 0f) contacts += bounceFromBoundary(body, FhysicsVector2(1f, 0f), FhysicsVector2(0f, -body.radius))
+            if (body.velocity.x < 0f) contacts += bounceFromBoundary(body, FhysicsVector2(1f, 0f), FhysicsVector2(-body.radius, 0f))
         }
         if (bounds.constrainRight && body.position.x > bounds.right) {
             body.position.x = bounds.right
-            if (body.velocity.x > 0f) contacts += bounceFromBoundary(body, FhysicsVector2(-1f, 0f), FhysicsVector2(0f, -body.radius))
+            if (body.velocity.x > 0f) contacts += bounceFromBoundary(body, FhysicsVector2(-1f, 0f), FhysicsVector2(body.radius, 0f))
         }
         if (bounds.constrainTop && body.position.y < bounds.top) {
             body.position.y = bounds.top
-            if (body.velocity.y < 0f) contacts += bounceFromBoundary(body, FhysicsVector2(0f, 1f), FhysicsVector2(body.radius, 0f))
+            if (body.velocity.y < 0f) contacts += bounceFromBoundary(body, FhysicsVector2(0f, 1f), FhysicsVector2(0f, -body.radius))
         }
         if (bounds.constrainBottom && body.position.y > bounds.bottom) {
             body.position.y = bounds.bottom
-            if (body.velocity.y > 0f) contacts += bounceFromBoundary(body, FhysicsVector2(0f, -1f), FhysicsVector2(body.radius, 0f))
+            if (body.velocity.y > 0f) contacts += bounceFromBoundary(body, FhysicsVector2(0f, -1f), FhysicsVector2(0f, body.radius))
         }
         return contacts
     }
