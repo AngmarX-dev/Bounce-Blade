@@ -149,7 +149,7 @@ class Enemy(
     var hitFlash = 0f
 }
 
-class Particle(
+class ArcadeParticle(
     var x: Float,
     var y: Float,
     var vx: Float,
@@ -179,7 +179,7 @@ class GameEngine {
     val blade = Blade()
     val shield = Shield()
     val enemies = mutableListOf<Enemy>()
-    val particles = mutableListOf<Particle>()
+    val particles = mutableListOf<ArcadeParticle>()
 
     var pointerY = 0f
 
@@ -382,7 +382,7 @@ class GameEngine {
             val a = Random.nextFloat() * Math.PI.toFloat() * 2f
             val sp = 100f + Random.nextFloat() * 200f
             particles.add(
-                Particle(
+                ArcadeParticle(
                     x = x,
                     y = y,
                     vx = cos(a) * sp,
