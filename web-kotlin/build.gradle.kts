@@ -23,7 +23,7 @@ tasks.register<Copy>("copySiteShell") {
 }
 
 tasks.register<Copy>("copyKotlinBundle") {
-    dependsOn("jsBrowserDistribution")
+    dependsOn("browserProductionWebpack")
     from(layout.buildDirectory.dir("distributions")) {
         include("bounce-blade.js")
     }
