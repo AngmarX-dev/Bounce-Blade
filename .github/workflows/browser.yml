@@ -18,12 +18,13 @@ jobs:
         run: gradle -p browser :web:jsBrowserDevelopmentWebpack --stacktrace
       - name: Inspect generated website
         run: |
-          find browser/web/build -maxdepth 7 -type f | sort | tail -80
-          test -f browser/web/build/dist/js/developmentExecutable/index.html
+          find browser/web/build -type f \( -name 'index.html' -o -name 'web.js' \) -print
+          test -f browser/web/build/distributions/index.html
+          test -f browser/web/build/distributions/web.js
       - name: Upload browser edition
         uses: actions/upload-artifact@v4
         with:
           name: bounce-blade-kotlin-browser
-          path: browser/web/build/dist/js/developmentExecutable
+          path: browser/web/build/distributions
           if-no-files-found: error
           retention-days: 14
