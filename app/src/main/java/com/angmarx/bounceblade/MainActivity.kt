@@ -1181,12 +1181,15 @@ private class GameView(context: Context) : View(context) {
                     val dx = hx - px
                     val dy = hy - py
                     val distance = sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
-                    velocityX += dx / distance * minDim * 0.20f * dt
-                    velocityY += dy / distance * minDim * 0.20f * dt
+                    bladePhysicsBody.applyForce(
+                        FhysicsVector2(dx / distance * minDim * 0.20f, dy / distance * minDim * 0.20f)
+                    )
                     showMessage("GRAVITY WELL PULL")
                 }
                 "conveyor_belt" -> {
-                    velocityX += (if (px < hx) -1f else 1f) * minDim * 0.05f * dt
+                    bladePhysicsBody.applyForce(
+                        FhysicsVector2((if (px < hx) -1f else 1f) * minDim * 0.05f, 0f)
+                    )
                     showMessage("CONVEYOR BELT")
                 }
                 "rotating_laser" -> {
@@ -1384,6 +1387,8 @@ private class GameView(context: Context) : View(context) {
         velocityX = if (leftHandedMode) -speed else speed
         velocityY = speed * (sin(levelId * 1.37f) * 0.045f)
         bladePhysicsBody.angularVelocity = 18.849555f // 1080 degrees per second, in radians
+        bladePhysicsBody.force.x = 0f
+        bladePhysicsBody.force.y = 0f
         flying = true
         aiming = false
         shotsUsed = 1
