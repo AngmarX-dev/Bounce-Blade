@@ -25,7 +25,8 @@ tasks.register<Copy>("copySiteShell") {
 tasks.register<Copy>("copyKotlinBundle") {
     dependsOn("browserProductionWebpack")
     from(layout.buildDirectory.dir("distributions")) {
-        include("bounce-blade.js")
+        include("*.js")
+        rename { "bounce-blade.js" }
     }
     into(layout.projectDirectory.dir("site/kotlin"))
 }
