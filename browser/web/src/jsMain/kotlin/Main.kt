@@ -26,8 +26,8 @@ private fun resetLevel() {
 private fun label(s:String,x:Double,y:Double,size:Int=18,color:String="#f4f7ff") { g.font="bold ${size}px system-ui"; g.fillStyle=color; g.fillText(s,x,y) }
 private fun circle(x:Double,y:Double,r:Double,c:String) { g.beginPath();g.arc(x,y,r,0.0,PI*2);g.fillStyle=c;g.fill() }
 private fun button(s:String,x:Double,y:Double,bw:Double,bh:Double,accent:String="#19e6cf") {
- g.fillStyle="#101b2c";g.strokeStyle=accent;g.lineWidth=2.0;g.beginPath();g.roundRect(x,y,bw,bh,12.0);g.fill();g.stroke()
- g.font="bold 18px system-ui";g.fillStyle="#f4f7ff";g.textAlign="center";g.fillText(s,x+bw/2,y+bh/2+6);g.textAlign="left"
+ g.fillStyle="#101b2c";g.strokeStyle=accent;g.lineWidth=2.0;g.beginPath();g.asDynamic().roundRect(x,y,bw,bh,12.0);g.fill();g.stroke()
+ g.font="bold 18px system-ui";g.fillStyle="#f4f7ff";g.asDynamic().textAlign="center";g.fillText(s,x+bw/2,y+bh/2+6);g.asDynamic().textAlign="left"
 }
 private fun blade(x:Double,y:Double,a:Double) {
  g.save();g.translate(x,y);g.rotate(a);g.shadowColor="#23f5df";g.shadowBlur=18.0;g.fillStyle="#e8ffff";g.beginPath()
@@ -44,7 +44,7 @@ private fun draw() {
  for(x in 0..(w/40).toInt()){g.beginPath();g.moveTo(x*40.0,0.0);g.lineTo(x*40.0,h);g.stroke()}
  for(y in 0..(h/40).toInt()){g.beginPath();g.moveTo(0.0,y*40.0);g.lineTo(w,y*40.0);g.stroke()}
  g.fillStyle="#20344b";g.fillRect(0.0,0.0,18.0,h);g.shadowColor="#20e9d0";g.shadowBlur=15.0;g.fillStyle="#1be4cf";g.fillRect(18.0,0.0,3.0,h);g.shadowBlur=0.0
- g.fillStyle="#172b3c";g.beginPath();g.roundRect(28.0,h/2-44,60.0,88.0,14.0);g.fill();circle(58.0,h/2-25,8.0,"#24f2d8");circle(58.0,h/2+25,8.0,"#24f2d8")
+ g.fillStyle="#172b3c";g.beginPath();g.asDynamic().roundRect(28.0,h/2-44,60.0,88.0,14.0);g.fill();circle(58.0,h/2-25,8.0,"#24f2d8");circle(58.0,h/2+25,8.0,"#24f2d8")
  label("BOUNCE",30.0,28.0,12,"#20e9d0")
  if(screen=="menu"){label("BOUNCE BLADE",w/2-145,140.0,38);label("A neon ricochet arena",w/2-104,174.0,17,"#a5b5ca");blade(w/2,225.0,-0.2);button("PLAY",w/2-100,290.0,200.0,54.0);button("SHOP  •  $money",w/2-100,360.0,200.0,48.0,"#bd7bff");label("Drag to aim • Release to launch • Hold to slow time",w/2-222,445.0,14,"#9eb0c7");return}
  if(screen=="shop"){label("BLADE SHOP",w/2-100,105.0,32);label("Coins: $money",w/2-55,150.0,20,"#ffcf66");button("UPGRADE BLADE  •  20",w/2-150,210.0,300.0,52.0,"#bd7bff");button("BACK",w/2-100,300.0,200.0,48.0);label("Browser edition demo shop",w/2-130,390.0,14,"#9eb0c7");return}
@@ -52,7 +52,7 @@ private fun draw() {
  g.fillStyle="#29354a";g.fillRect(w-185,46.0,150.0,7.0);g.fillStyle="#bd7bff";g.fillRect(w-185,46.0,150.0*slowMeter/100.0,7.0)
  enemies.filter{it.alive}.forEach{drawEnemy(it)};shots.forEach{circle(it.x,it.y,3.0,"#ffd166")};particles.forEach{circle(it.x,it.y,2.0+it.life*4,"#21f2dc")}
  if(flying||returning||!gameOver)blade(bladeX,bladeY,atan2(bladeVy,bladeVx))
- if(aiming&&!flying&&!gameOver){g.setLineDash(doubleArrayOf(6.0,6.0));g.strokeStyle="#b9c7d8";g.lineWidth=2.0;g.beginPath();g.moveTo(76.0,h/2);g.lineTo(lastPointerX,lastPointerY);g.stroke();g.setLineDash(doubleArrayOf());circle(lastPointerX,lastPointerY,7.0,"#20e9d0")}
+ if(aiming&&!flying&&!gameOver){g.setLineDash(arrayOf(6.0,6.0));g.strokeStyle="#b9c7d8";g.lineWidth=2.0;g.beginPath();g.moveTo(76.0,h/2);g.lineTo(lastPointerX,lastPointerY);g.stroke();g.setLineDash(emptyArray<Double>());circle(lastPointerX,lastPointerY,7.0,"#20e9d0")}
  if(gameOver||won){g.fillStyle="rgba(4,8,16,0.78)";g.fillRect(0.0,0.0,w,h);label(if(won)"LEVEL CLEARED!" else "BLADE LOST",w/2-125,h/2-48,32,if(won)"#5cffbd" else "#ff557d");label(if(won)"Reward: +${10+level*2} coins" else "Try another angle and save your bounces",w/2-155,h/2-12,15,"#c3d0e0");button(if(won)"NEXT LEVEL" else "RETRY",w/2-100,h/2+25,200.0,48.0);button("MENU",w/2-100,h/2+85,200.0,42.0,"#bd7bff")}
 }
 private fun update() {
