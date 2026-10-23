@@ -15,7 +15,7 @@ jobs:
         with:
           gradle-version: '8.10'
       - name: Build Kotlin/JS browser game
-        run: gradle -p browser :web:browserDevelopmentWebpack
+        run: gradle -p browser :web:jsBrowserDevelopmentWebpack
       - name: Inspect generated website
         run: |
           find browser/web/build -maxdepth 7 -type f | sort | tail -80
