@@ -1091,16 +1091,28 @@ private class GameView(context: Context) : View(context) {
             when (hazard.type) {
                 "moving_hazard" -> {
                     if (worldIndex == 1) {
-                        // Crimson Circuit's gold circuit rails are deflectors, not instant-kill walls.
-                        // Push the blade clear of the rail and kick it away so it cannot fail on spawn.
-                        if (py <= hy) {
-                            py = hy - halfH - radius
-                            velocityY = -abs(velocityY).coerceAtLeast(minDim * 0.16f)
+                        // Let Fhysics resolve the circle/rail rectangle contact, then
+                        // apply the campaign-specific minimum deflection so the rail remains fair.
+                        bladePhysicsBody.position.x = px
+                        bladePhysicsBody.position.y = py
+                        bladePhysicsBody.velocity.x = velocityX
+                        bladePhysicsBody.velocity.y = velocityY
+                        fhysicsWorld.resolveCircleRectangle(
+                            bladePhysicsBody,
+                            FhysicsVector2(hx, hy),
+                            halfW,
+                            halfH,
+                            FhysicsMaterial(restitution = 0.94f, staticFriction = 0.32f, dynamicFriction = 0.20f)
+                        )
+                        px = bladePhysicsBody.position.x
+                        py = bladePhysicsBody.position.y
+                        velocityX = bladePhysicsBody.velocity.x * 0.96f
+                        velocityY = bladePhysicsBody.velocity.y
+                        velocityY = if (py <= hy) {
+                            -abs(velocityY).coerceAtLeast(minDim * 0.16f)
                         } else {
-                            py = hy + halfH + radius
-                            velocityY = abs(velocityY).coerceAtLeast(minDim * 0.16f)
+                            abs(velocityY).coerceAtLeast(minDim * 0.16f)
                         }
-                        velocityX *= 0.94f
                         addBurst(px, py, gold, 12)
                         showMessage("CIRCUIT RAIL DEFLECTED")
                         playNextRicochet()
