@@ -16,14 +16,34 @@ jobs:
           gradle-version: '8.10'
       - name: Build Kotlin/JS browser game
         run: gradle -p browser :web:jsBrowserDevelopmentWebpack --stacktrace
-      - name: Assemble browser website
+      - name: Assemble the original game and its assets
         run: |
-          mkdir -p browser/web/build/browser-dist
+          mkdir -p browser/web/build/browser-dist/assets
           cp -R browser/web/build/processedResources/js/main/. browser/web/build/browser-dist/
           cp -R browser/web/build/kotlin-webpack/js/developmentExecutable/. browser/web/build/browser-dist/
+          cp -R Images browser/web/build/browser-dist/assets/Images
+          cp -R SoundTrack browser/web/build/browser-dist/assets/SoundTrack
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import re
+          files = sorted(pathlib.Path("app/src/main/assets/levels").glob("level_*.json"))
+          stages = []
+          for path in files:
+              if re.fullmatch(r"level_\d{3}\.json", path.name):
+                  stages.append(json.loads(path.read_text(encoding="utf-8")))
+          if len(stages) != 100:
+              raise SystemExit(f"Expected 100 original stages, found {len(stages)}")
+          out = pathlib.Path("browser/web/build/browser-dist/assets/levels-data.js")
+          out.write_text("window.LEVEL_DATA = " + json.dumps(stages, ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")
+          print(f"Packaged {len(stages)} original level definitions into {out}")
+          PY
           test -s browser/web/build/browser-dist/index.html
           test -s browser/web/build/browser-dist/web.js
-          find browser/web/build/browser-dist -maxdepth 3 -type f -print
+          test -s "browser/web/build/browser-dist/assets/Images/Gameplay Sprites/Blade.png"
+          test -s "browser/web/build/browser-dist/assets/SoundTrack/Core Gameplay SFX/Blade Launch.wav"
+          test -s browser/web/build/browser-dist/assets/levels-data.js
+          find browser/web/build/browser-dist -maxdepth 3 -type f -print | head -100
       - name: Upload browser edition
         uses: actions/upload-artifact@v4
         with:
