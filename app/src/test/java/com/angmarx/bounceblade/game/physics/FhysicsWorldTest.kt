@@ -60,6 +60,29 @@ class FhysicsWorldTest {
     }
 
     @Test
+    fun circleRectangleContactSeparatesBodyAndReflectsIt() {
+        val world = FhysicsWorld(linearDamping = 0f, angularDamping = 0f)
+        val body = FhysicsBody(
+            position = FhysicsVector2(5f, 4.2f),
+            velocity = FhysicsVector2(0f, 10f),
+            radius = 0.5f,
+            material = FhysicsMaterial(restitution = 0.8f, staticFriction = 0f, dynamicFriction = 0f)
+        )
+
+        val hit = world.resolveCircleRectangle(
+            body,
+            center = FhysicsVector2(5f, 5f),
+            halfWidth = 1f,
+            halfHeight = 0.5f,
+            material = FhysicsMaterial(restitution = 0.8f, staticFriction = 0f, dynamicFriction = 0f)
+        )
+
+        assertTrue(hit)
+        assertTrue(body.position.y <= 4.0001f)
+        assertTrue(body.velocity.y < 0f)
+    }
+
+    @Test
     fun separatedCirclesDoNotCreateContact() {
         val world = FhysicsWorld()
         val first = FhysicsBody(FhysicsVector2(0f, 0f), radius = 1f)
