@@ -1,0 +1,49 @@
+name: Kotlin Browser Game
+
+on:
+  push:
+    branches: ["feature/kotlin-browser-site"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Kotlin browser game
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Compile Kotlin/JS and assemble website
+        working-directory: web-kotlin
+        run: gradle --no-daemon --stacktrace publishSite
+
+      - name: Verify generated Kotlin bundle and site
+        run: |
+          test -s web-kotlin/site/index.html
+          test -s web-kotlin/site/style.css
+          test -s web-kotlin/site/kotlin/bounce-blade.js
+          grep -q 'Kotlin/JS' web-kotlin/site/index.html
+          echo "Kotlin/JS bundle and HTML site were generated."
+
+      - name: Deploy static site to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./web-kotlin/site
+          publish_branch: gh-pages
+          force_orphan: true
+          commit_message: "Deploy Kotlin browser game from ${{ github.sha }}"
