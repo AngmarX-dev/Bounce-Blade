@@ -492,6 +492,7 @@ jobs:
               "constrainLeft = leftHandedMode",
               "constrainRight = !leftHandedMode",
               "val wallHit = physicsStep.wallContacts > 0",
+              "bladePhysicsBody.applyForce(",
               "bladePhysicsBody.angularVelocity = 18.849555f",
           ]
           engine_markers = [
@@ -499,6 +500,7 @@ jobs:
               "fun stepBody(",
               "fun resolveCircleContact(",
               "fun resolveCircleRectangle(",
+              "body.applyForce(",
               "private fun bounceFromBoundary(",
               "maxSubstepSeconds",
               "staticFriction",
@@ -509,6 +511,7 @@ jobs:
               "openPlayerSideDoesNotBounceWhenTheBladeMisses",
               "circleContactResolvesOverlapAndReversesApproachingBodies",
               "circleRectangleContactSeparatesBodyAndReflectsIt",
+              "appliedForceChangesVelocityAccordingToMass",
               "separatedCirclesDoNotCreateContact",
               "angularMotionAdvancesInRadians",
           ]
