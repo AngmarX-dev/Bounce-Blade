@@ -11,22 +11,17 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: github-pages
+  group: bounce-blade-browser-publish
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
-  build:
+  build-and-publish:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
     steps:
       - uses: actions/checkout@v4
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - uses: gradle/actions/setup-gradle@v4
         with:
@@ -35,7 +30,7 @@ jobs:
       - name: Build Kotlin/JS browser game
         run: gradle -p browser :web:jsBrowserDevelopmentWebpack --stacktrace
 
-      - name: Assemble the original game and its assets
+      - name: Assemble the original game, artwork, sounds, and 100 levels
         run: |
           mkdir -p browser/web/build/browser-dist/assets
           cp -R browser/web/build/processedResources/js/main/. browser/web/build/browser-dist/
@@ -54,7 +49,7 @@ jobs:
           if len(stages) != 100:
               raise SystemExit(f"Expected 100 original stages, found {len(stages)}")
           out = pathlib.Path("browser/web/build/browser-dist/assets/levels-data.js")
-          out.write_text("window.LEVEL_DATA = " + json.dumps(stages, ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")
+          out.write_text("window.LEVEL_DATA = " + json.dumps(stages, ensure_ascii=False, separators=(",", ":")) + ";", encoding="utf-8")
           print(f"Packaged {len(stages)} original level definitions into {out}")
           PY
           test -s browser/web/build/browser-dist/index.html
@@ -62,14 +57,10 @@ jobs:
           test -s "browser/web/build/browser-dist/assets/Images/Gameplay Sprites/Blade.png"
           test -s "browser/web/build/browser-dist/assets/SoundTrack/Core Gameplay SFX/Blade Launch.wav"
           test -s browser/web/build/browser-dist/assets/levels-data.js
+          test "$(grep -o '"id"' browser/web/build/browser-dist/assets/levels-data.js | wc -l)" -ge 100
           find browser/web/build/browser-dist -maxdepth 3 -type f -print | head -100
 
-      - name: Upload website artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: browser/web/build/browser-dist
-
-      - name: Keep a downloadable build
+      - name: Upload downloadable browser build
         uses: actions/upload-artifact@v4
         with:
           name: bounce-blade-kotlin-browser
@@ -77,17 +68,11 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-      contents: read
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Publish site files to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: browser/web/build/browser-dist
+          publish_branch: gh-pages
+          force_orphan: true
+          enable_jekyll: false
