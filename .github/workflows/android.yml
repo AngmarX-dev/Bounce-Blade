@@ -78,6 +78,48 @@ jobs:
           print("Verified landscape orientation in the manifest and Activity.")
           PY
 
+      - name: Verify alternate Jetpack Compose arcade launcher
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+
+          manifest = Path("app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
+          source = Path("app/src/main/java/com/angmarx/bounceblade/ComposeArcadeActivity.kt").read_text(encoding="utf-8")
+          app_gradle = Path("app/build.gradle.kts").read_text(encoding="utf-8")
+          root_gradle = Path("build.gradle.kts").read_text(encoding="utf-8")
+          required = {
+              "manifest launcher": 'android:name=".ComposeArcadeActivity"',
+              "Compose Activity": "class ComposeArcadeActivity : ComponentActivity()",
+              "Compose game root": "fun BounceBladeApp()",
+              "game engine": "class GameEngine",
+              "frame-clock game loop": "withFrameNanos",
+              "touch-driven shield": "pointerY = it.position.y",
+              "enemy generation": "val count = 5 + stage * 2",
+              "blade catching rule": "b.x - b.r < s.x + 20f",
+              "Compose enabled": "compose = true",
+              "Compose BOM": "androidx.compose:compose-bom:2024.12.01",
+              "Compose compiler plugin": 'id("org.jetbrains.kotlin.plugin.compose")',
+          }
+          combined = {
+              "manifest launcher": manifest,
+              "Compose Activity": source,
+              "Compose game root": source,
+              "game engine": source,
+              "frame-clock game loop": source,
+              "touch-driven shield": source,
+              "enemy generation": source,
+              "blade catching rule": source,
+              "Compose enabled": app_gradle,
+              "Compose BOM": app_gradle,
+              "Compose compiler plugin": app_gradle + root_gradle,
+          }
+          missing = [label for label, marker in required.items() if marker not in combined[label]]
+          if missing:
+              sys.exit("Missing alternate Compose game wiring: " + ", ".join(missing))
+          print("Verified the alternate Compose arcade implementation is the installed launcher.")
+          PY
+
       - name: Verify left-wall guard gameplay
         run: |
           python3 - <<'PY'
