@@ -140,6 +140,10 @@ But you are not alone. The Blade remembers its purpose. Every enemy it strikes, 
 - **Impact effects:** screen shake, particles, and flashes.
 - **Catch streaks:** visual and audio feedback for consecutive catches.
 
+## Physics Runtime
+
+The gameplay blade is advanced by an Android-safe **Fhysics** rigid-body adapter with substepped motion, material restitution and friction, angular motion, gravity/force support, and circle-contact impulses. The shield side remains open so Bounce Blade's existing catch and fail conditions remain intact. See [Fhysics integration notes](docs/physics-fhysics.md) and [third-party notices](THIRD_PARTY_NOTICES.md) for scope and MIT attribution.
+
 ## Art and Audio Assets
 
 The build includes the original repository-level `Images/` and `SoundTrack/` folders through the Android asset source sets. Do not rename these folders or the filenames referenced by `MainActivity.kt`. The provided `Images/App Icon & Logo/App Icon.png` is copied to generated `mipmap-nodpi/ic_launcher.png` during the Gradle build and is used as the installed app icon.
