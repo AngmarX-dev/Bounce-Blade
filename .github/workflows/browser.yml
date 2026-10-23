@@ -16,15 +16,18 @@ jobs:
           gradle-version: '8.10'
       - name: Build Kotlin/JS browser game
         run: gradle -p browser :web:jsBrowserDevelopmentWebpack --stacktrace
-      - name: Inspect generated website
+      - name: Assemble browser website
         run: |
-          find browser/web/build -type f \( -name 'index.html' -o -name 'web.js' \) -print
-          test -f browser/web/build/distributions/index.html
-          test -f browser/web/build/distributions/web.js
+          mkdir -p browser/web/build/browser-dist
+          cp -R browser/web/build/processedResources/js/main/. browser/web/build/browser-dist/
+          cp -R browser/web/build/kotlin-webpack/js/developmentExecutable/. browser/web/build/browser-dist/
+          test -s browser/web/build/browser-dist/index.html
+          test -s browser/web/build/browser-dist/web.js
+          find browser/web/build/browser-dist -maxdepth 3 -type f -print
       - name: Upload browser edition
         uses: actions/upload-artifact@v4
         with:
           name: bounce-blade-kotlin-browser
-          path: browser/web/build/distributions
+          path: browser/web/build/browser-dist
           if-no-files-found: error
           retention-days: 14
