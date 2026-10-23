@@ -54,7 +54,7 @@ jobs:
           if len(stages) != 100:
               raise SystemExit(f"Expected 100 original stages, found {len(stages)}")
           out = pathlib.Path("browser/web/build/browser-dist/assets/levels-data.js")
-          out.write_text("window.LEVEL_DATA = " + json.dumps(stages, ensure_ascii=False, separators=(",", ":")) + ";\\n", encoding="utf-8")
+          out.write_text("window.LEVEL_DATA = " + json.dumps(stages, ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")
           print(f"Packaged {len(stages)} original level definitions into {out}")
           PY
           test -s browser/web/build/browser-dist/index.html
